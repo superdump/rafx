@@ -193,7 +193,7 @@ pub fn build_render_graph(
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
             // Get the color image from before
-            let sample_image = args.graph_context.image(sample_image).unwrap();
+            let sample_image = args.graph_context.image(sample_image);
 
             // Get the pipeline
             let pipeline = args
@@ -216,7 +216,9 @@ pub fn build_render_graph(
                 &pipeline.get_raw().pipeline_layout.get_raw().descriptor_sets;
             let bloom_extract_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
                 &descriptor_set_layouts[shaders::bloom_extract_frag::TEX_DESCRIPTOR_SET_INDEX],
-                shaders::bloom_extract_frag::DescriptorSet0Args { tex: sample_image },
+                shaders::bloom_extract_frag::DescriptorSet0Args {
+                    tex: sample_image.as_ref().unwrap(),
+                },
             )?;
 
             // Explicit flush since we're going to use the descriptors immediately
@@ -282,7 +284,7 @@ pub fn build_render_graph(
             let bloom_blur_material_pass = bloom_blur_material_pass.clone();
             graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
                 // Get the color image from before
-                let sample_image = args.graph_context.image(sample_image).unwrap();
+                let sample_image = args.graph_context.image(sample_image);
 
                 // Get the pipeline
                 let pipeline = args
@@ -307,7 +309,7 @@ pub fn build_render_graph(
                 let bloom_blur_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
                     &descriptor_set_layouts[shaders::bloom_blur_frag::TEX_DESCRIPTOR_SET_INDEX],
                     shaders::bloom_blur_frag::DescriptorSet0Args {
-                        tex: sample_image.clone(),
+                        tex: sample_image.as_ref().unwrap(),
                         config: &shaders::bloom_blur_frag::ConfigUniform {
                             horizontal: blur_pass_index % 2,
                             ..Default::default()
@@ -403,8 +405,8 @@ pub fn build_render_graph(
             let bloom_combine_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
                 &descriptor_set_layouts[shaders::bloom_combine_frag::IN_COLOR_DESCRIPTOR_SET_INDEX],
                 shaders::bloom_combine_frag::DescriptorSet0Args {
-                    in_color: sdr_image,
-                    in_blur: hdr_image,
+                    in_color: &sdr_image,
+                    in_blur: &hdr_image,
                 },
             )?;
 

@@ -105,14 +105,18 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
                         },
                     );
 
+                    let mut shadow_map_images = [None; 48];
+                    for image in &mut shadow_map_images {
+                        *image = Some(&self.shadow_map_image);
+                    }
+
+                    let args = shaders::mesh_frag::DescriptorSet0Args {
+                        per_frame_data: &per_view_frag_data,
+                        shadow_map_images: &shadow_map_images,
+                    };
+
                     // Set up params for the fragment shader
-                    shaders::mesh_frag::DescriptorSet0::set_args_static(
-                        &mut descriptor_set,
-                        shaders::mesh_frag::DescriptorSet0Args {
-                            per_frame_data: &per_view_frag_data,
-                            shadow_map_image: self.shadow_map_image.clone(),
-                        },
-                    );
+                    shaders::mesh_frag::DescriptorSet0::set_args_static(&mut descriptor_set, args);
 
                     descriptor_set.flush(&mut descriptor_set_allocator).unwrap();
 

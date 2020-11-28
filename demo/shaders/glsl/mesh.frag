@@ -15,6 +15,12 @@
 
 const float PI = 3.14159265359;
 
+//TODO: Shader processor can't handle consts
+//const int MAX_POINT_LIGHTS = 16;
+//const int MAX_DIRECTIONAL_LIGHTS = 16;
+//const int MAX_SPOT_LIGHTS = 16;
+//const int MAX_SHADOWS = MAX_DIRECTIONAL_LIGHTS * MAX_POINT_LIGHTS * MAX_SPOT_LIGHTS;
+
 //
 // Per-Frame Pass
 //
@@ -44,6 +50,11 @@ struct SpotLight {
     float intensity;
 };
 
+struct Shadow {
+    vec4 shadow_map_pos;
+    vec3 shadow_map_light_dir_vs;
+};
+
 // @[export]
 // @[internal_buffer]
 layout (set = 0, binding = 0) uniform PerViewData {
@@ -54,6 +65,7 @@ layout (set = 0, binding = 0) uniform PerViewData {
     PointLight point_lights[16];
     DirectionalLight directional_lights[16];
     SpotLight spot_lights[16];
+    Shadow shadows[48];
 } per_frame_data;
 
 
@@ -101,7 +113,7 @@ layout (set = 0, binding = 1) uniform sampler smp;
 // @[export]
 layout (set = 0, binding = 2) uniform sampler smp_depth;
 // @[export]
-layout (set = 0, binding = 3) uniform texture2D shadow_map_image;
+layout (set = 0, binding = 3) uniform texture2D shadow_map_images[48];
 
 //
 // Per-Material Bindings
@@ -650,7 +662,7 @@ vec4 pbr_path(
     //return vec4(mapped, base_color.a);
 }
 
-float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
+float calculate_percent_lit_single(vec4 shadow_map_pos, vec3 normal, vec3 light_dir, int index) {
     // homogenous coordinate normalization
     vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
 
@@ -668,7 +680,7 @@ float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
     /*
     float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
     // float bias = 0.0005;
-    float distance_from_closest_object_to_light = texture(sampler2D(shadow_map_image, smp_depth), sample_location, 0.5).r;
+    float distance_from_closest_object_to_light = texture(sampler2D(shadow_map_images[index], smp_depth), sample_location, 0.5).r;
     float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
     */
 
@@ -676,7 +688,7 @@ float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
     /*
     float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
     float shadow = texture(
-        sampler2DShadow(shadow_map_image, smp_depth),
+        sampler2DShadow(shadow_map_images[index], smp_depth),
         vec3(
             sample_location,
             distance_from_light + bias
@@ -687,14 +699,14 @@ float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
     // PCF reasonable sample count
     /*
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_image, smp_depth), 0);
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
     float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
     for(int x = -1; x <= 1; ++x)
     {
         for(int y = -1; y <= 1; ++y)
         {
             shadow += texture(
-                sampler2DShadow(shadow_map_image, smp_depth),
+                sampler2DShadow(shadow_map_images[index], smp_depth),
                 vec3(
                     sample_location + vec2(x, y) * texelSize,
                     distance_from_light + bias
@@ -707,14 +719,14 @@ float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
 
     // PCF probably too many samples
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_image, smp_depth), 0);
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
     float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
     for(int x = -2; x <= 2; ++x)
     {
         for(int y = -2; y <= 2; ++y)
         {
             shadow += texture(
-                sampler2DShadow(shadow_map_image, smp_depth),
+                sampler2DShadow(shadow_map_images[index], smp_depth),
                 vec3(
                     sample_location + vec2(x, y) * texelSize,
                     distance_from_light + bias
@@ -725,6 +737,10 @@ float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
     shadow /= 25.0;
 
     return shadow;
+}
+
+float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
+    return calculate_percent_lit_single(shadow_map_pos, normal, light_dir, 0);
 }
 
 void main() {
