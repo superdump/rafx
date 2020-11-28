@@ -29,93 +29,8 @@ impl Default for PerObjectDataStd140 {
 
 pub type PerObjectDataUniform = PerObjectDataStd140;
 
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct PerViewDataVSStd140 {
-    pub shadow_map_view_proj: [[f32; 4]; 4], // +0 (size: 64)
-    pub shadow_map_light_dir: [f32; 3],      // +64 (size: 12)
-    pub _padding0: [u8; 4],                  // +76 (size: 4)
-} // 80 bytes
-
-impl Default for PerViewDataVSStd140 {
-    fn default() -> Self {
-        PerViewDataVSStd140 {
-            shadow_map_view_proj: <[[f32; 4]; 4]>::default(),
-            shadow_map_light_dir: <[f32; 3]>::default(),
-            _padding0: [u8::default(); 4],
-        }
-    }
-}
-
-pub type PerViewDataVSUniform = PerViewDataVSStd140;
-
-pub const PER_VIEW_DATA_DESCRIPTOR_SET_INDEX: usize = 0;
-pub const PER_VIEW_DATA_DESCRIPTOR_BINDING_INDEX: usize = 4;
 pub const PER_OBJECT_DATA_DESCRIPTOR_SET_INDEX: usize = 2;
 pub const PER_OBJECT_DATA_DESCRIPTOR_BINDING_INDEX: usize = 0;
-
-pub struct DescriptorSet0Args<'a> {
-    pub per_view_data: &'a PerViewDataVSUniform,
-}
-
-impl<'a> DescriptorSetInitializer<'a> for DescriptorSet0Args<'a> {
-    type Output = DescriptorSet0;
-
-    fn create_dyn_descriptor_set(
-        descriptor_set: DynDescriptorSet,
-        args: Self,
-    ) -> Self::Output {
-        let mut descriptor = DescriptorSet0(descriptor_set);
-        descriptor.set_args(args);
-        descriptor
-    }
-
-    fn create_descriptor_set(
-        descriptor_set_allocator: &mut DescriptorSetAllocator,
-        descriptor_set: DynDescriptorSet,
-        args: Self,
-    ) -> VkResult<DescriptorSetArc> {
-        let mut descriptor = Self::create_dyn_descriptor_set(descriptor_set, args);
-        descriptor.0.flush(descriptor_set_allocator)?;
-        Ok(descriptor.0.descriptor_set().clone())
-    }
-}
-
-pub struct DescriptorSet0(pub DynDescriptorSet);
-
-impl DescriptorSet0 {
-    pub fn set_args_static(
-        descriptor_set: &mut DynDescriptorSet,
-        args: DescriptorSet0Args,
-    ) {
-        descriptor_set.set_buffer_data(
-            PER_VIEW_DATA_DESCRIPTOR_BINDING_INDEX as u32,
-            args.per_view_data,
-        );
-    }
-
-    pub fn set_args(
-        &mut self,
-        args: DescriptorSet0Args,
-    ) {
-        self.set_per_view_data(args.per_view_data);
-    }
-
-    pub fn set_per_view_data(
-        &mut self,
-        per_view_data: &PerViewDataVSUniform,
-    ) {
-        self.0
-            .set_buffer_data(PER_VIEW_DATA_DESCRIPTOR_BINDING_INDEX as u32, per_view_data);
-    }
-
-    pub fn flush(
-        &mut self,
-        descriptor_set_allocator: &mut DescriptorSetAllocator,
-    ) -> VkResult<()> {
-        self.0.flush(descriptor_set_allocator)
-    }
-}
 
 pub struct DescriptorSet2Args<'a> {
     pub per_object_data: &'a PerObjectDataUniform,
@@ -201,25 +116,5 @@ mod test {
             memoffset::offset_of!(PerObjectDataStd140, model_view_proj),
             128
         );
-    }
-
-    #[test]
-    fn test_struct_per_view_data_vs_std140() {
-        assert_eq!(std::mem::size_of::<PerViewDataVSStd140>(), 80);
-        assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
-        assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
-        assert_eq!(
-            memoffset::offset_of!(PerViewDataVSStd140, shadow_map_view_proj),
-            0
-        );
-        assert_eq!(std::mem::size_of::<[f32; 3]>(), 12);
-        assert_eq!(std::mem::align_of::<[f32; 3]>(), 4);
-        assert_eq!(
-            memoffset::offset_of!(PerViewDataVSStd140, shadow_map_light_dir),
-            64
-        );
-        assert_eq!(std::mem::size_of::<[u8; 4]>(), 4);
-        assert_eq!(std::mem::align_of::<[u8; 4]>(), 1);
-        assert_eq!(memoffset::offset_of!(PerViewDataVSStd140, _padding0), 76);
     }
 }

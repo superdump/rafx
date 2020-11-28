@@ -198,6 +198,7 @@ fn add_type_alignment_info<T>(
 #[rustfmt::skip]
 fn create_builtin_type_lookup() -> FnvHashMap<String, TypeAlignmentInfo> {
     let mut builtin_types = FnvHashMap::<String, TypeAlignmentInfo>::default();
+    add_type_alignment_info::<u32>(&mut builtin_types, "int", "i32");
     add_type_alignment_info::<u32>(&mut builtin_types, "uint", "u32");
     // treating a boolean as a u32 is the most straightworward solution
     add_type_alignment_info::<u32>(&mut builtin_types, "bool", "u32");
@@ -1222,7 +1223,7 @@ fn determine_size_of_member_in_rust(
     } else if user_types.contains_key(query_type) {
         gpu_layout
     } else {
-        return Err(format!("Could not find type {}", query_type));
+        return Err(format!("Could not find type {}. Is this a built in type that needs to be added to create_builtin_type_lookup()?", query_type));
     };
 
     determine_size(
@@ -1322,7 +1323,7 @@ fn determine_size(
         // offset = (offset + alignment - 1) / alignment * alignment;
         Ok(offset)
     } else {
-        return Err(format!("Could not find type {}", query_type));
+        return Err(format!("Could not find type {}. Is this a built in type that needs to be added to create_builtin_type_lookup()?", query_type));
     }
 }
 
@@ -1379,7 +1380,7 @@ fn determine_alignment_std140(
 
         Ok(align_offset(alignment, 16))
     } else {
-        return Err(format!("Could not find type {}", query_type));
+        return Err(format!("Could not find type {}. Is this a built in type that needs to be added to create_builtin_type_lookup()?", query_type));
     }
 }
 
@@ -1405,7 +1406,7 @@ fn determine_alignment_std430(
 
         Ok(alignment)
     } else {
-        return Err(format!("Could not find type {}", query_type));
+        return Err(format!("Could not find type {}. Is this a built in type that needs to be added to create_builtin_type_lookup()?", query_type));
     }
 }
 
@@ -1428,7 +1429,7 @@ fn determine_alignment_c(
 
         Ok(alignment)
     } else {
-        return Err(format!("Could not find type {}", query_type));
+        return Err(format!("Could not find type {}. Is this a built in type that needs to be added to create_builtin_type_lookup()?", query_type));
     }
 }
 

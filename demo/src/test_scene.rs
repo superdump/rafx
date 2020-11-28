@@ -185,21 +185,21 @@ pub fn populate_test_lights(
     //     },
     // );
 
-    // let light_from = glam::Vec3::new(-3.0, -3.0, 0.0);
-    // let light_to = glam::Vec3::zero();
-    // let light_direction = (light_to - light_from).normalize();
-    // add_spot_light(
-    //     resources,
-    //     world,
-    //     light_from,
-    //     SpotLightComponent {
-    //         direction: light_direction,
-    //         spotlight_half_angle: 10.0 * (std::f32::consts::PI / 180.0),
-    //         range: 8.0,
-    //         color: [1.0, 1.0, 1.0, 1.0].into(),
-    //         intensity: 1000.0,
-    //     },
-    // );
+    let light_from = glam::Vec3::new(-3.0, -3.0, 5.0);
+    let light_to = glam::Vec3::zero();
+    let light_direction = (light_to - light_from).normalize();
+    add_spot_light(
+        resources,
+        world,
+        light_from,
+        SpotLightComponent {
+            direction: light_direction,
+            spotlight_half_angle: 40.0 * (std::f32::consts::PI / 180.0),
+            range: 12.0,
+            color: [1.0, 0.0, 1.0, 1.0].into(),
+            intensity: 500.0,
+        },
+    );
 
     let light_from = glam::Vec3::new(5.0, 5.0, 5.0);
     let light_to = glam::Vec3::zero();
@@ -209,7 +209,7 @@ pub fn populate_test_lights(
         world,
         DirectionalLightComponent {
             direction: light_direction,
-            intensity: 8.0,
+            intensity: 4.0,
             color: [1.0, 1.0, 1.0, 1.0].into(),
         },
     );

@@ -1,6 +1,6 @@
 use crate::asset_resource::AssetResource;
 use crate::features::debug3d::create_debug3d_extract_job;
-use crate::features::mesh::{create_mesh_extract_job, MeshRenderNodeSet};
+use crate::features::mesh::{create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData};
 use crate::features::sprite::{create_sprite_extract_job, SpriteRenderNodeSet};
 use crate::imgui_support::Sdl2ImguiManager;
 use crate::phases::TransparentRenderPhase;
@@ -11,8 +11,8 @@ use ash::prelude::VkResult;
 use legion::*;
 use renderer::assets::AssetManager;
 use renderer::nodes::{
-    AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMask, RenderPhaseMaskBuilder,
-    RenderRegistry, RenderViewSet,
+    AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry,
+    RenderView, RenderViewSet, VisibilityResult,
 };
 use renderer::resources::vk_description as dsc;
 use renderer::resources::{ImageViewResource, ResourceArc};
@@ -37,8 +37,9 @@ mod render_graph;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;
-use crate::components::DirectionalLightComponent;
+use crate::components::{DirectionalLightComponent, SpotLightComponent};
 use crate::features::imgui::create_imgui_extract_job;
+use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
 
 pub struct GameRendererInner {
@@ -49,8 +50,6 @@ pub struct GameRendererInner {
 
     // Everything that requires being created after the swapchain inits
     swapchain_resources: Option<SwapchainResources>,
-
-    main_camera_render_phase_mask: RenderPhaseMask,
 
     render_thread: RenderThread,
 }
@@ -80,13 +79,6 @@ impl GameRenderer {
             resources,
         )?;
 
-        let main_camera_render_phase_mask = RenderPhaseMaskBuilder::default()
-            .add_render_phase::<OpaqueRenderPhase>()
-            .add_render_phase::<ShadowMapRenderPhase>()
-            .add_render_phase::<TransparentRenderPhase>()
-            .add_render_phase::<UiRenderPhase>()
-            .build();
-
         log::info!("all waits complete");
         let game_renderer_resources =
             GameRendererStaticResources::new(asset_resource, asset_manager)?;
@@ -97,8 +89,6 @@ impl GameRenderer {
             imgui_font_atlas_image_view,
             static_resources: game_renderer_resources,
             swapchain_resources: None,
-
-            main_camera_render_phase_mask,
 
             render_thread,
         };
@@ -317,7 +307,11 @@ impl GameRenderer {
         let mut guard = game_renderer.inner.lock().unwrap();
         let game_renderer_inner = &mut *guard;
 
-        let main_camera_render_phase_mask = game_renderer_inner.main_camera_render_phase_mask;
+        let main_camera_render_phase_mask = RenderPhaseMaskBuilder::default()
+            .add_render_phase::<OpaqueRenderPhase>()
+            .add_render_phase::<TransparentRenderPhase>()
+            .add_render_phase::<UiRenderPhase>()
+            .build();
 
         let static_resources = &game_renderer_inner.static_resources;
 
@@ -373,52 +367,8 @@ impl GameRenderer {
         //
         // Determine shadowmap views
         //
-        let mut directional_light: Option<DirectionalLightComponent> = None;
-        let mut query = <Read<DirectionalLightComponent>>::query();
-        for light in query.iter(world) {
-            directional_light = Some(light.clone());
-        }
-
-        // Temporarily assume we have a light
-        let directional_light = directional_light.unwrap();
-        let directional_light_view = {
-            let eye_position = directional_light.direction * -40.0;
-            let view = glam::Mat4::look_at_rh(
-                eye_position,
-                glam::Vec3::zero(),
-                glam::Vec3::new(0.0, 0.0, 1.0),
-            );
-
-            let ortho_projection_size = 10.0;
-            let proj = glam::Mat4::orthographic_rh(
-                -ortho_projection_size,
-                ortho_projection_size,
-                ortho_projection_size,
-                -ortho_projection_size,
-                100.0,
-                0.01,
-            );
-
-            //NOTE: This would be the correct way to do perspective projection in our coordinate system
-            // let proj = glam::Mat4::perspective_infinite_reverse_rh(
-            //     std::f32::consts::FRAC_PI_4,
-            //     aspect_ratio,
-            //     0.01,
-            // );
-            // let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
-
-            let view = render_view_set.create_view(
-                eye_position,
-                view,
-                proj,
-                main_camera_render_phase_mask,
-                "shadow_map".to_string(),
-            );
-
-            //println!("VIEW: {:?} {:?}", (glam::Vec3::zero() - (directional_light.direction * -40.0)).normalize(), view.view_dir());
-
-            view
-        };
+        let (shadow_map_lookup, shadow_map_render_views) =
+            GameRenderer::get_shadow_map_views(world, &render_view_set);
 
         //
         // Visibility
@@ -427,11 +377,6 @@ impl GameRenderer {
             static_visibility_node_set.calculate_static_visibility(&main_view);
         let main_view_dynamic_visibility_result =
             dynamic_visibility_node_set.calculate_dynamic_visibility(&main_view);
-
-        let directional_light_view_view_static_visibility_result =
-            static_visibility_node_set.calculate_static_visibility(&directional_light_view);
-        let directional_light_view_view_dynamic_visibility_result =
-            dynamic_visibility_node_set.calculate_dynamic_visibility(&directional_light_view);
 
         log::trace!(
             "main view static node count: {}",
@@ -442,6 +387,36 @@ impl GameRenderer {
             "main view dynamic node count: {}",
             main_view_dynamic_visibility_result.handles.len()
         );
+
+        struct ShadowMapVisibility {
+            shadow_map_view: RenderView,
+            static_visibility: VisibilityResult,
+            dynamic_visibility: VisibilityResult,
+        }
+
+        let mut shadow_map_visibility_results = Vec::default();
+        for render_view in &shadow_map_render_views {
+            let static_visibility =
+                static_visibility_node_set.calculate_static_visibility(&render_view);
+            let dynamic_visibility =
+                dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
+
+            log::trace!(
+                "shadow view static node count: {}",
+                static_visibility.handles.len()
+            );
+
+            log::trace!(
+                "shadow view dynamic node count: {}",
+                dynamic_visibility.handles.len()
+            );
+
+            shadow_map_visibility_results.push(ShadowMapVisibility {
+                shadow_map_view: render_view.clone(),
+                static_visibility,
+                dynamic_visibility,
+            });
+        }
 
         //
         // Build the frame packet - this takes the views and visibility results and creates a
@@ -468,13 +443,15 @@ impl GameRenderer {
             ],
         );
 
-        frame_packet_builder.add_view(
-            &directional_light_view,
-            &[
-                directional_light_view_view_static_visibility_result,
-                directional_light_view_view_dynamic_visibility_result,
-            ],
-        );
+        for shadow_map_visibility_result in shadow_map_visibility_results {
+            frame_packet_builder.add_view(
+                &shadow_map_visibility_result.shadow_map_view,
+                &[
+                    shadow_map_visibility_result.static_visibility,
+                    shadow_map_visibility_result.dynamic_visibility,
+                ],
+            );
+        }
 
         //
         // Update Resources and flush descriptor set changes
@@ -505,11 +482,17 @@ impl GameRenderer {
             &swapchain_info,
             swapchain_image,
             main_view.clone(),
-            directional_light_view.clone(),
+            &shadow_map_render_views,
             bloom_extract_material_pass,
             bloom_blur_material_pass,
             bloom_combine_material_pass,
         )?;
+
+        let shadow_map_data = ShadowMapData {
+            shadow_map_lookup,
+            shadow_map_render_views: shadow_map_render_views.clone(),
+            shadow_map_images: render_graph.shadow_maps.clone(),
+        };
 
         //
         // Extract Jobs
@@ -527,10 +510,7 @@ impl GameRenderer {
             ));
 
             // Meshes
-            extract_job_set.add_job(create_mesh_extract_job(
-                render_graph.shadow_map,
-                directional_light_view.clone(),
-            ));
+            extract_job_set.add_job(create_mesh_extract_job(shadow_map_data));
 
             // Debug 3D
             extract_job_set.add_job(create_debug3d_extract_job(
@@ -549,11 +529,14 @@ impl GameRenderer {
         let prepare_job_set = {
             profiling::scope!("renderer extract");
             let extract_context = RenderJobExtractContext::new(&world, &resources, asset_manager);
-            extract_job_set.extract(
-                &extract_context,
-                &frame_packet,
-                &[&main_view, &directional_light_view],
-            )
+
+            let mut views = Vec::default();
+            views.push(&main_view);
+            for shadow_map_view in &shadow_map_render_views {
+                views.push(shadow_map_view);
+            }
+
+            extract_job_set.extract(&extract_context, &frame_packet, &views)
         };
 
         let game_renderer = game_renderer.clone();
@@ -565,11 +548,86 @@ impl GameRenderer {
             resource_context,
             frame_packet,
             main_view,
-            directional_light_view,
+            shadow_map_render_views,
             render_registry,
             device_context,
         };
 
         Ok(prepared_frame)
+    }
+
+    #[profiling::function]
+    fn get_shadow_map_views(
+        world: &World,
+        render_view_set: &RenderViewSet,
+    ) -> (FnvHashMap<LightId, usize>, Vec<RenderView>) {
+        let mut shadow_map_render_views = Vec::default();
+        let mut shadow_map_lookup = FnvHashMap::default();
+
+        let shadow_map_phase_mask = RenderPhaseMaskBuilder::default()
+            .add_render_phase::<ShadowMapRenderPhase>()
+            .build();
+
+        let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
+        for (entity, light) in query.iter(world) {
+            let eye_position = light.direction * -40.0;
+            let view = glam::Mat4::look_at_rh(
+                eye_position,
+                glam::Vec3::zero(),
+                glam::Vec3::new(0.0, 0.0, 1.0),
+            );
+
+            let ortho_projection_size = 10.0;
+            let proj = glam::Mat4::orthographic_rh(
+                -ortho_projection_size,
+                ortho_projection_size,
+                ortho_projection_size,
+                -ortho_projection_size,
+                100.0,
+                0.01,
+            );
+
+            let view = render_view_set.create_view(
+                eye_position,
+                view,
+                proj,
+                shadow_map_phase_mask,
+                "shadow_map".to_string(),
+            );
+
+            let index = shadow_map_render_views.len();
+            shadow_map_render_views.push(view);
+            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
+            assert!(old.is_none());
+        }
+
+        let mut query = <(Entity, Read<SpotLightComponent>)>::query();
+        for (entity, light) in query.iter(world) {
+            let eye_position = light.direction * -40.0;
+            let view = glam::Mat4::look_at_rh(
+                eye_position,
+                glam::Vec3::zero(),
+                glam::Vec3::new(0.0, 0.0, 1.0),
+            );
+
+            let proj =
+                glam::Mat4::perspective_infinite_reverse_rh(std::f32::consts::FRAC_PI_4, 1.0, 0.01);
+            let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+
+            let view = render_view_set.create_view(
+                eye_position,
+                view,
+                proj,
+                shadow_map_phase_mask,
+                "shadow_map".to_string(),
+            );
+
+            let index = shadow_map_render_views.len();
+            shadow_map_render_views.push(view);
+            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
+            assert!(old.is_none());
+        }
+
+        (shadow_map_lookup, shadow_map_render_views)
     }
 }

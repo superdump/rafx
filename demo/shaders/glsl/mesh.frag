@@ -30,6 +30,7 @@ struct PointLight {
     vec4 color;
     float range;
     float intensity;
+    int shadow_map;
 };
 
 struct DirectionalLight {
@@ -37,6 +38,7 @@ struct DirectionalLight {
     vec3 direction_vs;
     vec4 color;
     float intensity;
+    int shadow_map;
 };
 
 struct SpotLight {
@@ -48,11 +50,12 @@ struct SpotLight {
     float spotlight_half_angle;
     float range;
     float intensity;
+    int shadow_map;
 };
 
-struct Shadow {
-    vec4 shadow_map_pos;
-    vec3 shadow_map_light_dir_vs;
+struct ShadowMapData {
+    mat4 shadow_map_view_proj;
+    vec3 shadow_map_light_dir;
 };
 
 // @[export]
@@ -65,49 +68,50 @@ layout (set = 0, binding = 0) uniform PerViewData {
     PointLight point_lights[16];
     DirectionalLight directional_lights[16];
     SpotLight spot_lights[16];
-    Shadow shadows[48];
-} per_frame_data;
+    uint shadow_map_count;
+    ShadowMapData shadow_maps[48];
+} per_view_data;
 
 
 // @[immutable_samplers([
-//         (
-//             mag_filter: Linear,
-//             min_filter: Linear,
-//             address_mode_u: Repeat,
-//             address_mode_v: Repeat,
-//             address_mode_w: Repeat,
-//             anisotropy_enable: true,
-//             max_anisotropy: 16.0,
-//             border_color: IntOpaqueBlack,
-//             unnormalized_coordinates: false,
-//             compare_enable: false,
-//             compare_op: Always,
-//             mipmap_mode: Linear,
-//             mip_lod_bias: 0,
-//             min_lod: 0,
-//             max_lod: 1000
-//         )
+//     (
+//         mag_filter: Linear,
+//         min_filter: Linear,
+//         address_mode_u: Repeat,
+//         address_mode_v: Repeat,
+//         address_mode_w: Repeat,
+//         anisotropy_enable: true,
+//         max_anisotropy: 16.0,
+//         border_color: IntOpaqueBlack,
+//         unnormalized_coordinates: false,
+//         compare_enable: false,
+//         compare_op: Always,
+//         mipmap_mode: Linear,
+//         mip_lod_bias: 0,
+//         min_lod: 0,
+//         max_lod: 1000
+//     )
 // ])]
 layout (set = 0, binding = 1) uniform sampler smp;
 
 // @[immutable_samplers([
-//         (
-//             mag_filter: Linear,
-//             min_filter: Linear,
-//             address_mode_u: ClampToBorder,
-//             address_mode_v: ClampToBorder,
-//             address_mode_w: ClampToBorder,
-//             anisotropy_enable: true,
-//             max_anisotropy: 16.0,
-//             border_color: IntOpaqueBlack,
-//             unnormalized_coordinates: false,
-//             compare_enable: true,
-//             compare_op: Greater,
-//             mipmap_mode: Linear,
-//             mip_lod_bias: 0,
-//             min_lod: 0,
-//             max_lod: 1000
-//         )
+//     (
+//         mag_filter: Linear,
+//         min_filter: Linear,
+//         address_mode_u: ClampToBorder,
+//         address_mode_v: ClampToBorder,
+//         address_mode_w: ClampToBorder,
+//         anisotropy_enable: true,
+//         max_anisotropy: 16.0,
+//         border_color: IntOpaqueBlack,
+//         unnormalized_coordinates: false,
+//         compare_enable: true,
+//         compare_op: Greater,
+//         mipmap_mode: Linear,
+//         mip_lod_bias: 0,
+//         min_lod: 0,
+//         max_lod: 1000
+//     )
 // ])]
 
 // @[export]
@@ -160,6 +164,9 @@ layout (set = 1, binding = 4) uniform texture2D occlusion_texture;
 // @[slot_name("emissive_texture")]
 layout (set = 1, binding = 5) uniform texture2D emissive_texture;
 
+// set = 2, binding = 0
+#include "mesh_common_bindings.glsl"
+
 layout (location = 0) in vec3 in_position_vs;
 layout (location = 1) in vec3 in_normal_vs;
 // w component is a sign value (-1 or +1) indicating handedness of the tangent basis
@@ -167,8 +174,7 @@ layout (location = 1) in vec3 in_normal_vs;
 layout (location = 2) in vec3 in_tangent_vs;
 layout (location = 3) in vec3 in_binormal_vs;
 layout (location = 4) in vec2 in_uv;
-layout (location = 5) in vec4 in_shadow_map_pos;
-layout (location = 6) in vec3 in_shadow_map_light_dir_vs;
+layout (location = 5) in vec4 in_position_ws;
 
 layout (location = 0) out vec4 out_color;
 
@@ -188,6 +194,86 @@ vec4 normal_map(
     // it into the TNB's space (view space))
     normal = tangent_binormal_normal * normal;
     return normalize(vec4(normal, 0.0));
+}
+
+float calculate_percent_lit(vec3 normal, int index) {
+    vec4 shadow_map_pos = per_view_data.shadow_maps[index].shadow_map_view_proj * in_position_ws;
+    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_maps[index].shadow_map_light_dir;
+
+    // homogenous coordinate normalization
+    vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
+
+    // Z is 0..1 already, so depth is simply z
+    float distance_from_light = projected.z;
+
+    // Convert [-1, 1] range to [0, 1] range so we can sample the shadow map
+    vec2 sample_location = projected.xy * 0.5 + 0.5;
+
+    // I found in practice this a constant value was working fine in my scene, so can consider removing this later
+    vec3 surface_to_light_dir = -light_dir;
+
+
+    // Non-PCF form
+    /*
+    float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
+    // float bias = 0.0005;
+    float distance_from_closest_object_to_light = texture(sampler2D(shadow_map_images[index], smp_depth), sample_location, 0.5).r;
+    float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
+    */
+
+    // PCF form single sample
+    /*
+    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    float shadow = texture(
+        sampler2DShadow(shadow_map_images[index], smp_depth),
+        vec3(
+            sample_location,
+            distance_from_light + bias
+        )
+    ).r;
+    */
+
+    // PCF reasonable sample count
+    /*
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
+    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            shadow += texture(
+                sampler2DShadow(shadow_map_images[index], smp_depth),
+                vec3(
+                    sample_location + vec2(x, y) * texelSize,
+                    distance_from_light + bias
+                )
+            ).r;
+        }
+    }
+    shadow /= 9.0;
+    */
+
+    // PCF probably too many samples
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
+    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    for(int x = -2; x <= 2; ++x)
+    {
+        for(int y = -2; y <= 2; ++y)
+        {
+            shadow += texture(
+                sampler2DShadow(shadow_map_images[index], smp_depth),
+                vec3(
+                    sample_location + vec2(x, y) * texelSize,
+                    distance_from_light + bias
+                )
+            ).r;
+        }
+    }
+    shadow /= 25.0;
+
+    return shadow;
 }
 
 //
@@ -549,10 +635,13 @@ vec4 non_pbr_path(
 ) {
     // Point Lights
     vec3 total_light = vec3(0.0);
-    for (uint i = 0; i < per_frame_data.point_light_count; ++i) {
+    for (uint i = 0; i < per_view_data.point_light_count; ++i) {
         // TODO: Early out by distance?
-        total_light += point_light(
-            per_frame_data.point_lights[i],
+
+        // Need to use cube maps to detect percent lit
+        //float percent_lit = 1.0;
+        total_light += /*percent_lit * */ point_light(
+            per_view_data.point_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs
@@ -560,10 +649,12 @@ vec4 non_pbr_path(
     }
 
     // Spot Lights
-    for (uint i = 0; i < per_frame_data.spot_light_count; ++i) {
+    for (uint i = 0; i < per_view_data.spot_light_count; ++i) {
         // TODO: Early out by distance?
-        total_light += spot_light(
-            per_frame_data.spot_lights[i],
+
+        float percent_lit = per_view_data.spot_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.spot_lights[i].shadow_map) : 1.0;
+        total_light += percent_lit * spot_light(
+            per_view_data.spot_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs
@@ -571,9 +662,10 @@ vec4 non_pbr_path(
     }
 
     // directional Lights
-    for (uint i = 0; i < per_frame_data.directional_light_count; ++i) {
-        total_light += directional_light(
-            per_frame_data.directional_lights[i],
+    for (uint i = 0; i < per_view_data.directional_light_count; ++i) {
+        float percent_lit = per_view_data.directional_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.directional_lights[i].shadow_map) : 1.0;
+        total_light += percent_lit * directional_light(
+            per_view_data.directional_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs
@@ -581,7 +673,7 @@ vec4 non_pbr_path(
     }
 
     vec3 rgb_color = base_color.rgb;
-    rgb_color *= (per_frame_data.ambient_light.rgb + vec3(total_light));
+    rgb_color *= (per_view_data.ambient_light.rgb + vec3(total_light));
     return vec4(emissive_color.rgb + rgb_color, 1.0);
 }
 
@@ -592,8 +684,7 @@ vec4 pbr_path(
     vec4 emissive_color,
     float metalness,
     float roughness,
-    vec3 normal_vs,
-    float percent_lit
+    vec3 normal_vs
 ) {
     // used in fresnel, non-metals use 0.04 and metals use the base color
     vec3 fresnel_base = vec3(0.04);
@@ -601,10 +692,12 @@ vec4 pbr_path(
 
     // Point Lights
     vec3 total_light = vec3(0.0);
-    for (uint i = 0; i < per_frame_data.point_light_count; ++i) {
+    for (uint i = 0; i < per_view_data.point_light_count; ++i) {
         // TODO: Early out by distance?
-        total_light += point_light_pbr(
-            per_frame_data.point_lights[i],
+        // Need to use cube maps to detect percent lit
+        //float percent_lit = 1.0;
+        total_light += /* percent_lit * */ point_light_pbr(
+            per_view_data.point_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs,
@@ -616,10 +709,11 @@ vec4 pbr_path(
     }
 
     // Spot Lights
-    for (uint i = 0; i < per_frame_data.spot_light_count; ++i) {
+    for (uint i = 0; i < per_view_data.spot_light_count; ++i) {
         // TODO: Early out by distance?
-        total_light += spot_light_pbr(
-            per_frame_data.spot_lights[i],
+        float percent_lit = per_view_data.spot_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.spot_lights[i].shadow_map) : 1.0;
+        total_light += percent_lit * spot_light_pbr(
+            per_view_data.spot_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs,
@@ -631,9 +725,10 @@ vec4 pbr_path(
     }
 
     // directional Lights
-    for (uint i = 0; i < per_frame_data.directional_light_count; ++i) {
-        total_light += directional_light_pbr(
-            per_frame_data.directional_lights[i],
+    for (uint i = 0; i < per_view_data.directional_light_count; ++i) {
+        float percent_lit = per_view_data.directional_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.directional_lights[i].shadow_map) : 1.0;
+        total_light += percent_lit * directional_light_pbr(
+            per_view_data.directional_lights[i],
             surface_to_eye_vs,
             in_position_vs,
             normal_vs,
@@ -647,8 +742,8 @@ vec4 pbr_path(
     //
     // There are still issues here, not sure how alpha interacts and gamma looks terrible
     //
-    vec3 ambient = per_frame_data.ambient_light.rgb * base_color.rgb; //TODO: Multiply ao in here
-    vec3 color = ambient + (total_light * percent_lit) + emissive_color.rgb;
+    vec3 ambient = per_view_data.ambient_light.rgb * base_color.rgb; //TODO: Multiply ao in here
+    vec3 color = ambient + total_light + emissive_color.rgb;
     return vec4(color, base_color.a);
 
     // tonemapping
@@ -662,86 +757,6 @@ vec4 pbr_path(
     //return vec4(mapped, base_color.a);
 }
 
-float calculate_percent_lit_single(vec4 shadow_map_pos, vec3 normal, vec3 light_dir, int index) {
-    // homogenous coordinate normalization
-    vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
-
-    // Z is 0..1 already, so depth is simply z
-    float distance_from_light = projected.z;
-
-    // Convert [-1, 1] range to [0, 1] range so we can sample the shadow map
-    vec2 sample_location = projected.xy * 0.5 + 0.5;
-
-    // I found in practice this a constant value was working fine in my scene, so can consider removing this later
-    vec3 surface_to_light_dir = -light_dir;
-
-
-    // Non-PCF form
-    /*
-    float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
-    // float bias = 0.0005;
-    float distance_from_closest_object_to_light = texture(sampler2D(shadow_map_images[index], smp_depth), sample_location, 0.5).r;
-    float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
-    */
-
-    // PCF form single sample
-    /*
-    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    float shadow = texture(
-        sampler2DShadow(shadow_map_images[index], smp_depth),
-        vec3(
-            sample_location,
-            distance_from_light + bias
-        )
-    ).r;
-    */
-
-    // PCF reasonable sample count
-    /*
-    float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    for(int x = -1; x <= 1; ++x)
-    {
-        for(int y = -1; y <= 1; ++y)
-        {
-            shadow += texture(
-                sampler2DShadow(shadow_map_images[index], smp_depth),
-                vec3(
-                    sample_location + vec2(x, y) * texelSize,
-                    distance_from_light + bias
-                )
-            ).r;
-        }
-    }
-    shadow /= 9.0;
-    */
-
-    // PCF probably too many samples
-    float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    for(int x = -2; x <= 2; ++x)
-    {
-        for(int y = -2; y <= 2; ++y)
-        {
-            shadow += texture(
-                sampler2DShadow(shadow_map_images[index], smp_depth),
-                vec3(
-                    sample_location + vec2(x, y) * texelSize,
-                    distance_from_light + bias
-                )
-            ).r;
-        }
-    }
-    shadow /= 25.0;
-
-    return shadow;
-}
-
-float calculate_percent_lit(vec4 shadow_map_pos, vec3 normal, vec3 light_dir) {
-    return calculate_percent_lit_single(shadow_map_pos, normal, light_dir, 0);
-}
 
 void main() {
     // Sample the base color, if it exists
@@ -790,7 +805,7 @@ void main() {
     vec3 eye_position_vs = vec3(0, 0, 0);
     vec3 surface_to_eye_vs = normalize(eye_position_vs - in_position_vs);
 
-    float percent_lit = calculate_percent_lit(in_shadow_map_pos, normal_vs, in_shadow_map_light_dir_vs);
+    //float percent_lit = calculate_percent_lit(normal_vs);
 
 //    out_color = non_pbr_path(
 //        surface_to_eye_vs,
@@ -807,8 +822,7 @@ void main() {
         emissive_color,
         metalness,
         roughness,
-        normal_vs,
-        percent_lit
+        normal_vs
     );
     //out_color = vec4(vec3(dot(normal_vs, -in_shadow_map_light_dir_vs)), 1.0);
 }
