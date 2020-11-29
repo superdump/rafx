@@ -361,9 +361,9 @@ impl GameRenderer {
         // Determine Camera Location
         //
         let main_view = {
-            const CAMERA_XY_DISTANCE: f32 = 12.0;
-            const CAMERA_Z: f32 = 5.0;
-            const CAMERA_ROTATE_SPEED: f32 = -0.00;
+            const CAMERA_XY_DISTANCE: f32 = 5.0;
+            const CAMERA_Z: f32 = 6.0;
+            const CAMERA_ROTATE_SPEED: f32 = -0.20;
             const CAMERA_LOOP_OFFSET: f32 = -0.3;
             let loop_time = time_state.total_time().as_secs_f32();
             let eye = glam::Vec3::new(
@@ -633,30 +633,30 @@ impl GameRenderer {
         for (entity, light, position) in query.iter(world) {
             //let eye_position = position.position;
 
-            let light_from = glam::Vec3::new(-3.0, -3.0, 5.0);
-            let light_to = glam::Vec3::zero();
-            let light_direction = (light_to - light_from).normalize();
-            let eye_position = light_direction * -40.0;
-
-            let view = glam::Mat4::look_at_rh(
-                eye_position,
-                eye_position + light_direction, //TODO: Transform direction by rotation
-                glam::Vec3::new(0.0, 0.0, 1.0),
-            );
-
-            // let light_from = position.position;
-            // let light_to = position.position + light.direction;
-            // //let light_direction = (light_to - light_from).normalize();
-            // let eye_position = position.position;
+            // let light_from = glam::Vec3::new(-3.0, -3.0, 5.0);
+            // let light_to = glam::Vec3::zero();
+            // let light_direction = (light_to - light_from).normalize();
+            // let eye_position = light_direction * -40.0;
             //
             // let view = glam::Mat4::look_at_rh(
             //     eye_position,
-            //     light_to, //TODO: Transform direction by rotation
+            //     eye_position + light_direction, //TODO: Transform direction by rotation
             //     glam::Vec3::new(0.0, 0.0, 1.0),
             // );
 
+            let light_from = position.position;
+            let light_to = position.position + light.direction;
+            //let light_direction = (light_to - light_from).normalize();
+            let eye_position = position.position;
+
+            let view = glam::Mat4::look_at_rh(
+                eye_position,
+                light_to, //TODO: Transform direction by rotation
+                glam::Vec3::new(0.0, 0.0, 1.0),
+            );
+
             let proj = perspective_rh(
-                light.spotlight_half_angle,
+                light.spotlight_half_angle * 2.0,
                 1.0,
                 100.0,
                 0.01
@@ -730,7 +730,7 @@ impl GameRenderer {
                 ortho_projection_size,
                 ortho_projection_size,
                 -ortho_projection_size,
-                100.0,
+                100000.0,
                 0.01,
             );
 

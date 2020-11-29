@@ -214,18 +214,22 @@ float calculate_percent_lit(vec3 normal, int index) {
 
 
     // Non-PCF form
-    /*
-    float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
-    // float bias = 0.0005;
-    float distance_from_closest_object_to_light = texture(sampler2D(shadow_map_images[index], smp_depth), sample_location, 0.5).r;
+/*
+    ///float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
+    //float bias = 0.0005;
+    float bias = 0.0;
+    float distance_from_closest_object_to_light = texture(
+        sampler2D(shadow_map_images[index], smp_depth),
+        sample_location
+    ).r;
     float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
-    */
+*/
 
     // PCF form single sample
-
-    float bias = 0.0;
+/*
+    //float bias = 0.0;
     //float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    //float bias = 0.001;
+    float bias = 0.00001;
     float shadow = texture(
         sampler2DShadow(shadow_map_images[index], smp_depth),
         vec3(
@@ -233,10 +237,10 @@ float calculate_percent_lit(vec3 normal, int index) {
             distance_from_light + bias
         )
     ).r;
-
+*/
 
     // PCF reasonable sample count
-    /*
+/*
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
     float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
@@ -254,13 +258,15 @@ float calculate_percent_lit(vec3 normal, int index) {
         }
     }
     shadow /= 9.0;
-    */
+*/
 
-/*
+
     // PCF probably too many samples
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    float bias = 0.0;//max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    //float bias = 0.0;
+    //float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    float bias = 0.00001;
     for(int x = -2; x <= 2; ++x)
     {
         for(int y = -2; y <= 2; ++y)
@@ -275,7 +281,7 @@ float calculate_percent_lit(vec3 normal, int index) {
         }
     }
     shadow /= 25.0;
-*/
+
 
     return shadow;
 }

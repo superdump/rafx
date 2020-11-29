@@ -210,36 +210,36 @@ pub fn populate_test_lights(
         world,
         DirectionalLightComponent {
             direction: light_direction,
-            intensity: 3.0,
-            color: [1.0, 0.0, 0.0, 1.0].into(),
+            intensity: 2.0,
+            color: [1.0, 1.0, 1.0, 1.0].into(),
         },
     );
 
-    // let light_from = glam::Vec3::new(-5.0, 5.0, 5.0);
-    // let light_to = glam::Vec3::zero();
-    // let light_direction = (light_to - light_from).normalize();
-    // add_directional_light(
-    //     resources,
-    //     world,
-    //     DirectionalLightComponent {
-    //         direction: light_direction,
-    //         intensity: 3.0,
-    //         color: [1.0, 0.5, 1.0, 1.0].into(),
-    //     },
-    // );
-    //
-    // let light_from = glam::Vec3::new(0.0, -7.0, 5.0);
-    // let light_to = glam::Vec3::zero();
-    // let light_direction = (light_to - light_from).normalize();
-    // add_directional_light(
-    //     resources,
-    //     world,
-    //     DirectionalLightComponent {
-    //         direction: light_direction,
-    //         intensity: 3.0,
-    //         color: [1.0, 1.0, 0.5, 1.0].into(),
-    //     },
-    // );
+    let light_from = glam::Vec3::new(-5.0, 5.0, 5.0);
+    let light_to = glam::Vec3::zero();
+    let light_direction = (light_to - light_from).normalize();
+    add_directional_light(
+        resources,
+        world,
+        DirectionalLightComponent {
+            direction: light_direction,
+            intensity: 3.0,
+            color: [1.0, 0.5, 1.0, 1.0].into(),
+        },
+    );
+
+    let light_from = glam::Vec3::new(0.0, -7.0, 5.0);
+    let light_to = glam::Vec3::zero();
+    let light_direction = (light_to - light_from).normalize();
+    add_directional_light(
+        resources,
+        world,
+        DirectionalLightComponent {
+            direction: light_direction,
+            intensity: 3.0,
+            color: [1.0, 1.0, 0.5, 1.0].into(),
+        },
+    );
 }
 
 fn add_directional_light(
