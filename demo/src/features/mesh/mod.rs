@@ -43,11 +43,6 @@ pub enum LightId {
     DirectionalLight(legion::Entity),
 }
 
-// pub struct ShadowMapView {
-//     pub image: ResourceArc<ImageViewResource>,
-//     pub render_view: RenderView,
-// }
-
 pub struct ShadowMapData {
     pub shadow_map_lookup: FnvHashMap<LightId, usize>,
     pub shadow_map_render_views: Vec<RenderView>,

@@ -72,12 +72,6 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
             }
         }
 
-        // let shadow_maps = vec![shaders::mesh_frag::ShadowMapDataStd140 {
-        //     shadow_map_view_proj: self.shadow_map_views.view_proj().to_cols_array_2d(),
-        //     shadow_map_light_dir: self.shadow_map_views.view_dir().into(),
-        //     ..Default::default()
-        // }];
-
         //
         // Create uniform data for each shadow map and a properly-sized static array of the images
         //

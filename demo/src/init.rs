@@ -115,10 +115,10 @@ pub fn rendering_init(
     resources.insert(DynamicVisibilityNodeSet::default());
     resources.insert(DebugDraw3DResource::new());
 
-    //#[cfg(debug_assertions)]
+    #[cfg(debug_assertions)]
     let use_vulkan_debug_layer = true;
-    //#[cfg(not(debug_assertions))]
-    //let use_vulkan_debug_layer = false;
+    #[cfg(not(debug_assertions))]
+    let use_vulkan_debug_layer = false;
 
     #[cfg(not(feature = "static-vulkan"))]
     let link_method = VulkanLinkMethod::Dynamic;
