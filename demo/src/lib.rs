@@ -301,7 +301,7 @@ fn add_light_debug_draw(
             light_from + (light.range * light_direction),
             light.range * light.spotlight_half_angle.tan(),
             light.color,
-            20,
+            10,
         );
     }
 }
