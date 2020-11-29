@@ -21,6 +21,46 @@ const float PI = 3.14159265359;
 //const int MAX_SPOT_LIGHTS = 16;
 //const int MAX_SHADOWS = MAX_DIRECTIONAL_LIGHTS * MAX_POINT_LIGHTS * MAX_SPOT_LIGHTS;
 
+// These are determined by trial and error. A deeper Z projection requires lower numbers here so this may need to be
+// per light based on Z-depth
+//
+// Also, currently the depth values from ortho projections are compressed near 1.0 and perspective near 0.0. Don't know
+// why this is happening and it may be why these need such different values
+//
+// Make sure to tune these with 1-sample PCF rather than multi-sample PCF as multi-sample will hide shadow acne
+//
+// If the numbers are high, you'll get peter-panning
+// If the nubers are low, you'll get noise (shadow acne)
+//
+// These were tuned with near/far distances of 0.1 to 100.0 reversed Z
+//
+const float SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 0.01;
+const float DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 1.0;
+
+// The max is used when light is hitting at an angle (near orthogonal to normal). Min is used when light is hitting
+// directly
+//
+// Tuning steps:
+// - Use a single directional light (DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 1.0)
+//   - Test a light almost vertical with the ground (almost parallel to normal). Raise SHADOW_MAP_BIAS_MIN until
+//     shadow acne is gone
+//   - Test a light almost horizontal with the ground (almost orthogonal to normal). Raise SHADOW_MAP_BIAS_MAX until
+//     shadow acne is gone
+//     - There may be a repeating pattern on the ground, the frequency this repeats at in distance is how much peter-panning
+//       there will be once the min is high enough to get rid of the noise
+//   - Test angles at in-between angles. You can play with the bias function to square or cube the bias_angle_factor
+// - Test other lights and adjust their bias
+// - NOTE: Factors at play here are (probably) Z depth of projection and resolution of shadow texture
+//
+// TODO: Investigate if per-light bias multiplier (i.e. SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER) should apply to SHADOW_MAP_BIAS_MIN
+const float SHADOW_MAP_BIAS_MAX = 0.01;
+const float SHADOW_MAP_BIAS_MIN = 0.0005;
+
+//#define PCF_DISABLED
+//#define PCF_SAMPLE_1
+//#define PCF_SAMPLE_9
+#define PCF_SAMPLE_25
+
 //
 // Per-Frame Pass
 //
@@ -196,7 +236,7 @@ vec4 normal_map(
     return normalize(vec4(normal, 0.0));
 }
 
-float calculate_percent_lit(vec3 normal, int index) {
+float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
     vec4 shadow_map_pos = per_view_data.shadow_maps[index].shadow_map_view_proj * in_position_ws;
     vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_maps[index].shadow_map_light_dir;
 
@@ -212,24 +252,23 @@ float calculate_percent_lit(vec3 normal, int index) {
     // I found in practice this a constant value was working fine in my scene, so can consider removing this later
     vec3 surface_to_light_dir = -light_dir;
 
+    // Tune with single-PCF
+    // bias_angle_factor is high when the light angle is almost orthogonal to the normal
+    float bias_angle_factor = 1.0 - dot(normal, surface_to_light_dir);
+    float bias = max(SHADOW_MAP_BIAS_MAX * bias_angle_factor * bias_angle_factor * bias_angle_factor, SHADOW_MAP_BIAS_MIN) * bias_multiplier;
 
     // Non-PCF form
-/*
-    ///float bias = max(0.0005 * (1.0 - dot(normal, surface_to_light_dir)), 0.0001);
-    //float bias = 0.0005;
-    float bias = 0.0;
+#ifdef PCF_DISABLED
     float distance_from_closest_object_to_light = texture(
         sampler2D(shadow_map_images[index], smp_depth),
         sample_location
     ).r;
     float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
-*/
+#endif
+
 
     // PCF form single sample
-/*
-    //float bias = 0.0;
-    //float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    float bias = 0.00001;
+#ifdef PCF_SAMPLE_1
     float shadow = texture(
         sampler2DShadow(shadow_map_images[index], smp_depth),
         vec3(
@@ -237,13 +276,13 @@ float calculate_percent_lit(vec3 normal, int index) {
             distance_from_light + bias
         )
     ).r;
-*/
+#endif
+
 
     // PCF reasonable sample count
-/*
+#ifdef PCF_SAMPLE_9
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
     for(int x = -1; x <= 1; ++x)
     {
         for(int y = -1; y <= 1; ++y)
@@ -258,15 +297,13 @@ float calculate_percent_lit(vec3 normal, int index) {
         }
     }
     shadow /= 9.0;
-*/
+#endif
 
 
     // PCF probably too many samples
+#ifdef PCF_SAMPLE_25
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    //float bias = 0.0;
-    //float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
-    float bias = 0.00001;
     for(int x = -2; x <= 2; ++x)
     {
         for(int y = -2; y <= 2; ++y)
@@ -281,9 +318,18 @@ float calculate_percent_lit(vec3 normal, int index) {
         }
     }
     shadow /= 25.0;
-
+#endif
 
     return shadow;
+}
+
+
+float calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
+    if (index == -1) {
+        return 1.0;
+    }
+
+    return do_calculate_percent_lit(normal, index, bias_multiplier);
 }
 
 //
@@ -662,7 +708,12 @@ vec4 non_pbr_path(
     for (uint i = 0; i < per_view_data.spot_light_count; ++i) {
         // TODO: Early out by distance?
 
-        float percent_lit = per_view_data.spot_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.spot_lights[i].shadow_map) : 1.0;
+        float percent_lit = calculate_percent_lit(
+            normal_vs,
+            per_view_data.spot_lights[i].shadow_map,
+            SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
+        );
+
         total_light += percent_lit * spot_light(
             per_view_data.spot_lights[i],
             surface_to_eye_vs,
@@ -673,7 +724,12 @@ vec4 non_pbr_path(
 
     // directional Lights
     for (uint i = 0; i < per_view_data.directional_light_count; ++i) {
-        float percent_lit = per_view_data.directional_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.directional_lights[i].shadow_map) : 1.0;
+        float percent_lit = calculate_percent_lit(
+            normal_vs,
+            per_view_data.directional_lights[i].shadow_map,
+            DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
+        );
+
         total_light += percent_lit * directional_light(
             per_view_data.directional_lights[i],
             surface_to_eye_vs,
@@ -721,7 +777,11 @@ vec4 pbr_path(
     // Spot Lights
     for (uint i = 0; i < per_view_data.spot_light_count; ++i) {
         // TODO: Early out by distance?
-        float percent_lit = per_view_data.spot_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.spot_lights[i].shadow_map) : 1.0;
+        float percent_lit = calculate_percent_lit(
+            normal_vs,
+            per_view_data.spot_lights[i].shadow_map,
+            SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
+        );
         total_light += percent_lit * spot_light_pbr(
             per_view_data.spot_lights[i],
             surface_to_eye_vs,
@@ -736,7 +796,11 @@ vec4 pbr_path(
 
     // directional Lights
     for (uint i = 0; i < per_view_data.directional_light_count; ++i) {
-        float percent_lit = per_view_data.directional_lights[i].shadow_map != -1 ? calculate_percent_lit(normal_vs, per_view_data.directional_lights[i].shadow_map) : 1.0;
+        float percent_lit = calculate_percent_lit(
+            normal_vs,
+            per_view_data.directional_lights[i].shadow_map,
+            DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
+        );
         total_light += percent_lit * directional_light_pbr(
             per_view_data.directional_lights[i],
             surface_to_eye_vs,

@@ -655,7 +655,7 @@ impl GameRenderer {
                 ortho_projection_size,
                 ortho_projection_size,
                 -ortho_projection_size,
-                100000.0,
+                100.0,
                 0.01,
             );
 
