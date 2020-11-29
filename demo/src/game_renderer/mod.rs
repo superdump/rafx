@@ -37,13 +37,18 @@ mod render_graph;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;
-use crate::components::{DirectionalLightComponent, SpotLightComponent, PositionComponent};
+use crate::components::{DirectionalLightComponent, PositionComponent, SpotLightComponent};
 use crate::features::imgui::create_imgui_extract_job;
 use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
-pub fn perspective_rh(fov_y_radians: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> glam::Mat4 {
+pub fn perspective_rh(
+    fov_y_radians: f32,
+    aspect_ratio: f32,
+    z_near: f32,
+    z_far: f32,
+) -> glam::Mat4 {
     debug_assert!(z_near > 0.0 && z_far > 0.0);
     let (sin_fov, cos_fov) = (0.5 * fov_y_radians).sin_cos();
     let h = cos_fov / sin_fov;
@@ -548,7 +553,11 @@ impl GameRenderer {
     }
 
     #[profiling::function]
-    fn calculte_main_view(render_view_set: &RenderViewSet, window: &dyn Window, time_state: &TimeState) -> RenderView {
+    fn calculte_main_view(
+        render_view_set: &RenderViewSet,
+        window: &dyn Window,
+        time_state: &TimeState,
+    ) -> RenderView {
         let main_camera_render_phase_mask = RenderPhaseMaskBuilder::default()
             .add_render_phase::<OpaqueRenderPhase>()
             .add_render_phase::<TransparentRenderPhase>()
@@ -571,8 +580,7 @@ impl GameRenderer {
         let extents_height = extents.height.max(1);
         let aspect_ratio = extents_width as f32 / extents_height as f32;
 
-        let view =
-            glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
+        let view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
 
         let proj = glam::Mat4::perspective_infinite_reverse_rh(
             std::f32::consts::FRAC_PI_4,
@@ -590,7 +598,6 @@ impl GameRenderer {
             "main".to_string(),
         )
     }
-
 
     #[profiling::function]
     fn calculate_shadow_map_views(
@@ -612,18 +619,10 @@ impl GameRenderer {
             let eye_position = position.position;
             let light_to = position.position + light.direction;
 
-            let view = glam::Mat4::look_at_rh(
-                eye_position,
-                light_to,
-                glam::Vec3::new(0.0, 0.0, 1.0),
-            );
+            let view =
+                glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
 
-            let proj = perspective_rh(
-                light.spotlight_half_angle * 2.0,
-                1.0,
-                100.0,
-                0.01
-            );
+            let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, 100.0, 0.01);
             let proj = matrix_flip_y(proj);
 
             let view = render_view_set.create_view(

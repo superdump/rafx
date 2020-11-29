@@ -180,31 +180,31 @@ pub fn run(args: &DemoArgs) {
         add_light_debug_draw(&resources, &world);
 
         /*
-        {
-            let time_state = resources.get::<TimeState>().unwrap();
-            let mut query = <Write<DirectionalLightComponent>>::query();
-            for mut light in query.iter_mut(&mut world) {
-                const LIGHT_XY_DISTANCE: f32 = 50.0;
-                const LIGHT_Z: f32 = 50.0;
-                const LIGHT_ROTATE_SPEED: f32 = 0.0;
-                const LIGHT_LOOP_OFFSET: f32 = 2.0;
-                let loop_time = time_state.total_time().as_secs_f32();
-                let light_from = glam::Vec3::new(
-                    LIGHT_XY_DISTANCE
-                        * f32::cos(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET),
-                    LIGHT_XY_DISTANCE
-                        * f32::sin(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET),
-                    LIGHT_Z,
-                    //LIGHT_Z// * f32::sin(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET).abs(),
-                    //0.2
-                    //2.0
-                );
-                let light_to = glam::Vec3::default();
+                {
+                    let time_state = resources.get::<TimeState>().unwrap();
+                    let mut query = <Write<DirectionalLightComponent>>::query();
+                    for mut light in query.iter_mut(&mut world) {
+                        const LIGHT_XY_DISTANCE: f32 = 50.0;
+                        const LIGHT_Z: f32 = 50.0;
+                        const LIGHT_ROTATE_SPEED: f32 = 0.0;
+                        const LIGHT_LOOP_OFFSET: f32 = 2.0;
+                        let loop_time = time_state.total_time().as_secs_f32();
+                        let light_from = glam::Vec3::new(
+                            LIGHT_XY_DISTANCE
+                                * f32::cos(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET),
+                            LIGHT_XY_DISTANCE
+                                * f32::sin(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET),
+                            LIGHT_Z,
+                            //LIGHT_Z// * f32::sin(LIGHT_ROTATE_SPEED * loop_time + LIGHT_LOOP_OFFSET).abs(),
+                            //0.2
+                            //2.0
+                        );
+                        let light_to = glam::Vec3::default();
 
-                light.direction = (light_to - light_from).normalize();
-            }
-        }
-*/
+                        light.direction = (light_to - light_from).normalize();
+                    }
+                }
+        */
         //
         // imgui debug draw,
         //
