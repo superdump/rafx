@@ -37,7 +37,7 @@ mod render_graph;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;
-use crate::components::{DirectionalLightComponent, SpotLightComponent};
+use crate::components::{DirectionalLightComponent, SpotLightComponent, PositionComponent};
 use crate::features::imgui::create_imgui_extract_job;
 use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
@@ -570,7 +570,7 @@ impl GameRenderer {
 
         let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
         for (entity, light) in query.iter(world) {
-            let eye_position = light.direction * -40.0;
+            let eye_position = light.direction * -40.0; //TODO: Transform direction by rotation
             let view = glam::Mat4::look_at_rh(
                 eye_position,
                 glam::Vec3::zero(),
@@ -601,18 +601,18 @@ impl GameRenderer {
             assert!(old.is_none());
         }
 
-        let mut query = <(Entity, Read<SpotLightComponent>)>::query();
-        for (entity, light) in query.iter(world) {
-            let eye_position = light.direction * -40.0;
+        let mut query = <(Entity, Read<SpotLightComponent>, Read<PositionComponent>)>::query();
+        for (entity, light, position) in query.iter(world) {
+            let eye_position = position.position;
             let view = glam::Mat4::look_at_rh(
                 eye_position,
-                glam::Vec3::zero(),
+                eye_position + light.direction, //TODO: Transform direction by rotation
                 glam::Vec3::new(0.0, 0.0, 1.0),
             );
 
             let proj =
                 glam::Mat4::perspective_infinite_reverse_rh(std::f32::consts::FRAC_PI_4, 1.0, 0.01);
-            let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+           // let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
 
             let view = render_view_set.create_view(
                 eye_position,
@@ -624,7 +624,7 @@ impl GameRenderer {
 
             let index = shadow_map_render_views.len();
             shadow_map_render_views.push(view);
-            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
+            let old = shadow_map_lookup.insert(LightId::SpotLight(*entity), index);
             assert!(old.is_none());
         }
 

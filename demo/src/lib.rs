@@ -179,6 +179,7 @@ pub fn run(args: &DemoArgs) {
 
         add_light_debug_draw(&resources, &world);
 
+        /*
         {
             let time_state = resources.get::<TimeState>().unwrap();
             let mut query = <Write<DirectionalLightComponent>>::query();
@@ -203,7 +204,7 @@ pub fn run(args: &DemoArgs) {
                 light.direction = (light_to - light_from).normalize();
             }
         }
-
+*/
         //
         // imgui debug draw,
         //
