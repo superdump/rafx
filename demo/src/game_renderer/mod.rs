@@ -42,6 +42,37 @@ use crate::features::imgui::create_imgui_extract_job;
 use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
 
+
+
+/// Creates a right-handed perspective projection matrix with [0,1] depth range.
+pub fn perspective_rh(fov_y_radians: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> glam::Mat4 {
+    debug_assert!(z_near > 0.0 && z_far > 0.0);
+    let (sin_fov, cos_fov) = (0.5 * fov_y_radians).sin_cos();
+    let h = cos_fov / sin_fov;
+    let w = h / aspect_ratio;
+    let r = z_far / (z_near - z_far);
+    glam::Mat4::from_cols(
+        glam::Vec4::new(w, 0.0, 0.0, 0.0),
+        glam::Vec4::new(0.0, h, 0.0, 0.0),
+        glam::Vec4::new(0.0, 0.0, r, -1.0),
+        glam::Vec4::new(0.0, 0.0, r * z_near, 0.0),
+    )
+}
+
+pub fn matrix_flip_y(proj: glam::Mat4) -> glam::Mat4 {
+    glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj
+}
+
+pub fn matrix_reverse_z(proj: glam::Mat4) -> glam::Mat4 {
+    let mut reverse_mat = glam::Mat4::from_cols(
+        glam::Vec4::new(1.0, 0.0, 0.0, 0.0),
+        glam::Vec4::new(0.0, 1.0, 0.0, 0.0),
+        glam::Vec4::new(0.0, 0.0, -1.0, 0.0),
+        glam::Vec4::new(0.0, 0.0, 1.0, 1.0),
+    );
+    reverse_mat * proj
+}
+
 pub struct GameRendererInner {
     imgui_font_atlas_image_view: ResourceArc<ImageViewResource>,
 
@@ -348,12 +379,39 @@ impl GameRenderer {
 
             let view =
                 glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
+
             let proj = glam::Mat4::perspective_infinite_reverse_rh(
                 std::f32::consts::FRAC_PI_4,
                 aspect_ratio,
                 0.01,
             );
+            // Flip it on Y
             let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+
+            /*
+            // let proj = perspective_rh(
+            //     std::f32::consts::FRAC_PI_4,
+            //     aspect_ratio,
+            //     0.01,
+            //     100.0
+            // );
+
+            let proj = glam::Mat4::perspective_infinite_rh(
+                std::f32::consts::FRAC_PI_4,
+                aspect_ratio,
+                0.01,
+            );
+            // Flip it on Y
+            let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+            // Reverse it on Z
+            let mut reverse_mat = glam::Mat4::from_cols(
+                glam::Vec4::new(1.0, 0.0, 0.0, 0.0),
+                glam::Vec4::new(0.0, 1.0, 0.0, 0.0),
+                glam::Vec4::new(0.0, 0.0, -1.0, 0.0),
+                glam::Vec4::new(0.0, 0.0, 1.0, 1.0),
+            );
+            let proj = reverse_mat * proj;
+             */
 
             render_view_set.create_view(
                 eye,
@@ -556,6 +614,7 @@ impl GameRenderer {
         Ok(prepared_frame)
     }
 
+
     #[profiling::function]
     fn get_shadow_map_views(
         world: &World,
@@ -568,12 +627,83 @@ impl GameRenderer {
             .add_render_phase::<ShadowMapRenderPhase>()
             .build();
 
-        let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
-        for (entity, light) in query.iter(world) {
-            let eye_position = light.direction * -40.0; //TODO: Transform direction by rotation
+
+
+        let mut query = <(Entity, Read<SpotLightComponent>, Read<PositionComponent>)>::query();
+        for (entity, _light, position) in query.iter(world) {
+            //let eye_position = position.position;
+
+
+            let light_from = glam::Vec3::new(3.0, 3.0, 5.0);
+            let light_to = glam::Vec3::zero();
+            let light_direction = (light_to - light_from).normalize();
+            let eye_position = light_direction * -40.0;
+
             let view = glam::Mat4::look_at_rh(
                 eye_position,
-                glam::Vec3::zero(),
+                eye_position + light_direction, //TODO: Transform direction by rotation
+                glam::Vec3::new(0.0, 0.0, 1.0),
+            );
+
+            let proj = perspective_rh(
+                std::f32::consts::FRAC_PI_4,
+                1.0,
+                100.0,
+                0.01
+            );
+            let proj = matrix_flip_y(proj);
+
+            let view = render_view_set.create_view(
+                eye_position,
+                view,
+                proj,
+                shadow_map_phase_mask,
+                "shadow_map".to_string(),
+            );
+
+            let index = shadow_map_render_views.len();
+            shadow_map_render_views.push(view);
+            let old = shadow_map_lookup.insert(LightId::SpotLight(*entity), index);
+            assert!(old.is_none());
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
+        for (entity, _light) in query.iter(world) {
+            //let eye_position = position.position;
+
+
+            let light_from = glam::Vec3::new(-3.0, -3.0, 5.0);
+            let light_to = glam::Vec3::zero();
+            let light_direction = (light_to - light_from).normalize();
+            let eye_position = light_direction * -40.0;
+
+            let view = glam::Mat4::look_at_rh(
+                eye_position,
+                eye_position + light_direction, //TODO: Transform direction by rotation
                 glam::Vec3::new(0.0, 0.0, 1.0),
             );
 
@@ -601,18 +731,69 @@ impl GameRenderer {
             assert!(old.is_none());
         }
 
-        let mut query = <(Entity, Read<SpotLightComponent>, Read<PositionComponent>)>::query();
-        for (entity, light, position) in query.iter(world) {
-            let eye_position = position.position;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        /*
+        let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
+        for (entity, light) in query.iter(world) {
+            let eye_position = light.direction * -40.0; //TODO: Transform direction by rotation
             let view = glam::Mat4::look_at_rh(
                 eye_position,
-                eye_position + light.direction, //TODO: Transform direction by rotation
+                glam::Vec3::zero(),
                 glam::Vec3::new(0.0, 0.0, 1.0),
             );
 
-            let proj =
-                glam::Mat4::perspective_infinite_reverse_rh(std::f32::consts::FRAC_PI_4, 1.0, 0.01);
-           // let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+
+/*
+            let ortho_projection_size = 10.0;
+            let proj = glam::Mat4::orthographic_rh(
+                -ortho_projection_size,
+                ortho_projection_size,
+                ortho_projection_size,
+                -ortho_projection_size,
+                100.0,
+                0.01,
+            );
+            */
+
+
+
+            let proj = perspective_rh(
+                std::f32::consts::FRAC_PI_4,
+                1.0,
+                100.0,
+                0.1
+            );
+            // Flip it on Y
+            let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
+            // Reverse it on Z
+            // let mut reverse_mat = glam::Mat4::from_cols(
+            //     glam::Vec4::new(1.0, 0.0, 0.0, 0.0),
+            //     glam::Vec4::new(0.0, 1.0, 0.0, 0.0),
+            //     glam::Vec4::new(0.0, 0.0, -1.0, 0.0),
+            //     glam::Vec4::new(0.0, 0.0, 1.0, 1.0),
+            // );
+            //let proj = reverse_mat * proj;
+
+
+
+
+
 
             let view = render_view_set.create_view(
                 eye_position,
@@ -624,9 +805,10 @@ impl GameRenderer {
 
             let index = shadow_map_render_views.len();
             shadow_map_render_views.push(view);
-            let old = shadow_map_lookup.insert(LightId::SpotLight(*entity), index);
+            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
             assert!(old.is_none());
         }
+         */
 
         (shadow_map_lookup, shadow_map_render_views)
     }

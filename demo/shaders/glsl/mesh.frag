@@ -257,7 +257,7 @@ float calculate_percent_lit(vec3 normal, int index) {
     // PCF probably too many samples
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadow_map_images[index], smp_depth), 0);
-    float bias = max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
+    float bias = 0.0;//max(0.005 * (1.0 - dot(normal, surface_to_light_dir)), 0.001);
     for(int x = -2; x <= 2; ++x)
     {
         for(int y = -2; y <= 2; ++y)
@@ -272,6 +272,7 @@ float calculate_percent_lit(vec3 normal, int index) {
         }
     }
     shadow /= 25.0;
+
 
     return shadow;
 }
