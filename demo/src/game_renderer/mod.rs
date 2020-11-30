@@ -1,6 +1,6 @@
 use crate::asset_resource::AssetResource;
 use crate::features::debug3d::create_debug3d_extract_job;
-use crate::features::mesh::{create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData};
+use crate::features::mesh::{create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData, ShadowMapRenderView};
 use crate::features::sprite::{create_sprite_extract_job, SpriteRenderNodeSet};
 use crate::imgui_support::Sdl2ImguiManager;
 use crate::phases::TransparentRenderPhase;
@@ -11,10 +11,7 @@ use ash::prelude::VkResult;
 use legion::*;
 use rafx::assets::image_utils;
 use rafx::assets::AssetManager;
-use rafx::nodes::{
-    AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry,
-    RenderView, RenderViewSet, VisibilityResult,
-};
+use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry, RenderView, RenderViewSet, VisibilityResult, RenderPhaseMask};
 use rafx::resources::vk_description as dsc;
 use rafx::resources::{ImageViewResource, ResourceArc};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
@@ -38,10 +35,11 @@ mod render_graph;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;
-use crate::components::{DirectionalLightComponent, PositionComponent, SpotLightComponent};
+use crate::components::{DirectionalLightComponent, PositionComponent, SpotLightComponent, PointLightComponent};
 use crate::features::imgui::create_imgui_extract_job;
 use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
+use arrayvec::ArrayVec;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
 pub fn perspective_rh(
@@ -385,34 +383,61 @@ impl GameRenderer {
             main_view_dynamic_visibility_result.handles.len()
         );
 
-        struct ShadowMapVisibility {
-            shadow_map_view: RenderView,
+        struct RenderViewVisibility {
+            render_view: RenderView,
             static_visibility: VisibilityResult,
             dynamic_visibility: VisibilityResult,
         }
 
+        enum ShadowMapVisibility {
+            Single(RenderViewVisibility),
+            Cube(ArrayVec<[RenderViewVisibility; 6]>)
+        }
+
         let mut shadow_map_visibility_results = Vec::default();
         for render_view in &shadow_map_render_views {
-            let static_visibility =
-                static_visibility_node_set.calculate_static_visibility(&render_view);
-            let dynamic_visibility =
-                dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
+            fn create_render_view_visibility(
+                static_visibility_node_set: &mut StaticVisibilityNodeSet,
+                dynamic_visibility_node_set: &mut DynamicVisibilityNodeSet,
+                render_view: &RenderView
+            ) -> RenderViewVisibility {
+                let static_visibility =
+                    static_visibility_node_set.calculate_static_visibility(&render_view);
+                let dynamic_visibility =
+                    dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
 
-            log::trace!(
-                "shadow view static node count: {}",
-                static_visibility.handles.len()
-            );
+                log::trace!(
+                    "shadow view static node count: {}",
+                    static_visibility.handles.len()
+                );
 
-            log::trace!(
-                "shadow view dynamic node count: {}",
-                dynamic_visibility.handles.len()
-            );
+                log::trace!(
+                    "shadow view dynamic node count: {}",
+                    dynamic_visibility.handles.len()
+                );
 
-            shadow_map_visibility_results.push(ShadowMapVisibility {
-                shadow_map_view: render_view.clone(),
-                static_visibility,
-                dynamic_visibility,
-            });
+                RenderViewVisibility {
+                    render_view: render_view.clone(),
+                    static_visibility,
+                    dynamic_visibility,
+                }
+            }
+
+            match render_view {
+                ShadowMapRenderView::Single(view) => {
+                    shadow_map_visibility_results.push(ShadowMapVisibility::Single(create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, view)))
+                },
+                ShadowMapRenderView::Cube(views) => {
+                    shadow_map_visibility_results.push(ShadowMapVisibility::Cube([
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[0]),
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[1]),
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[2]),
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[3]),
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[4]),
+                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[5]),
+                    ].into()));
+                }
+            }
         }
 
         //
@@ -441,13 +466,29 @@ impl GameRenderer {
         );
 
         for shadow_map_visibility_result in shadow_map_visibility_results {
-            frame_packet_builder.add_view(
-                &shadow_map_visibility_result.shadow_map_view,
-                &[
-                    shadow_map_visibility_result.static_visibility,
-                    shadow_map_visibility_result.dynamic_visibility,
-                ],
-            );
+            match shadow_map_visibility_result {
+                ShadowMapVisibility::Single(view) => {
+                    frame_packet_builder.add_view(
+                        &view.render_view,
+                        &[
+                            view.static_visibility,
+                            view.dynamic_visibility,
+                        ],
+                    );
+                },
+                ShadowMapVisibility::Cube(views) => {
+                    for view in views {
+                        let static_visibility = view.static_visibility;
+                        frame_packet_builder.add_view(
+                            &view.render_view,
+                            &[
+                                static_visibility,
+                                view.dynamic_visibility,
+                            ],
+                        );
+                    }
+                }
+            }
         }
 
         //
@@ -485,10 +526,11 @@ impl GameRenderer {
             bloom_combine_material_pass,
         )?;
 
+        assert_eq!(shadow_map_render_views.len(), render_graph.shadow_map_image_views.len());
         let shadow_map_data = ShadowMapData {
             shadow_map_lookup,
             shadow_map_render_views: shadow_map_render_views.clone(),
-            shadow_map_images: render_graph.shadow_maps.clone(),
+            shadow_map_image_views: render_graph.shadow_map_image_views.clone(),
         };
 
         //
@@ -527,13 +569,22 @@ impl GameRenderer {
             profiling::scope!("renderer extract");
             let extract_context = RenderJobExtractContext::new(&world, &resources, asset_manager);
 
-            let mut views = Vec::default();
-            views.push(&main_view);
+            let mut extract_views = Vec::default();
+            extract_views.push(&main_view);
             for shadow_map_view in &shadow_map_render_views {
-                views.push(shadow_map_view);
+                match shadow_map_view {
+                    ShadowMapRenderView::Single(view) => {
+                        extract_views.push(view);
+                    },
+                    ShadowMapRenderView::Cube(views) => {
+                        for view in views {
+                            extract_views.push(view);
+                        }
+                    }
+                }
             }
 
-            extract_job_set.extract(&extract_context, &frame_packet, &views)
+            extract_job_set.extract(&extract_context, &frame_packet, &extract_views)
         };
 
         let game_renderer = game_renderer.clone();
@@ -604,7 +655,7 @@ impl GameRenderer {
     fn calculate_shadow_map_views(
         render_view_set: &RenderViewSet,
         world: &World,
-    ) -> (FnvHashMap<LightId, usize>, Vec<RenderView>) {
+    ) -> (FnvHashMap<LightId, usize>, Vec<ShadowMapRenderView>) {
         let mut shadow_map_render_views = Vec::default();
         let mut shadow_map_lookup = FnvHashMap::default();
 
@@ -635,7 +686,7 @@ impl GameRenderer {
             );
 
             let index = shadow_map_render_views.len();
-            shadow_map_render_views.push(view);
+            shadow_map_render_views.push(ShadowMapRenderView::Single(view));
             let old = shadow_map_lookup.insert(LightId::SpotLight(*entity), index);
             assert!(old.is_none());
         }
@@ -668,7 +719,55 @@ impl GameRenderer {
             );
 
             let index = shadow_map_render_views.len();
-            shadow_map_render_views.push(view);
+            shadow_map_render_views.push(ShadowMapRenderView::Single(view));
+            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
+            assert!(old.is_none());
+        }
+
+        #[rustfmt::skip]
+        let cube_map_view_matrices = [
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_x(), glam::Vec3::unit_z()),
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_z()),
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_y(), glam::Vec3::unit_z()),
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_z(), glam::Vec3::unit_y()),
+            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_z() * -1.0, glam::Vec3::unit_y()),
+        ];
+
+        let mut query = <(Entity, Read<PointLightComponent>, Read<PositionComponent>)>::query();
+        for (entity, light, position) in query.iter(world) {
+            fn cubemap_face(
+                phase_mask: RenderPhaseMask,
+                render_view_set: &RenderViewSet,
+                position: glam::Vec3,
+                view_matrix: &glam::Mat4
+            ) -> RenderView {
+                let view = *view_matrix * glam::Mat4::from_translation(position);
+
+                let proj = perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 100.0, 0.01);
+                let proj = matrix_flip_y(proj);
+
+                render_view_set.create_view(
+                    position,
+                    view,
+                    proj,
+                    phase_mask,
+                    "shadow_map".to_string(),
+                )
+            }
+
+            #[rustfmt::skip]
+            let cube_map_views = [
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[0]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[1]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[2]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[3]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[4]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[5]),
+            ];
+
+            let index = shadow_map_render_views.len();
+            shadow_map_render_views.push(ShadowMapRenderView::Cube(cube_map_views));
             let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
             assert!(old.is_none());
         }

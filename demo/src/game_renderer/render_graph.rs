@@ -10,6 +10,7 @@ use rafx::resources::ResourceContext;
 use rafx::resources::{vk_description as dsc, VertexDataSetLayout};
 use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
+use crate::features::mesh::ShadowMapRenderView;
 
 lazy_static::lazy_static! {
     pub static ref EMPTY_VERTEX_LAYOUT : VertexDataSetLayout = {
@@ -18,7 +19,7 @@ lazy_static::lazy_static! {
 }
 
 pub struct BuildRenderGraphResult {
-    pub shadow_maps: Vec<ResourceArc<ImageViewResource>>,
+    pub shadow_map_image_views: Vec<ResourceArc<ImageViewResource>>,
     pub executor: RenderGraphExecutor<RenderGraphUserContext>,
 }
 
@@ -28,6 +29,58 @@ pub struct RenderGraphUserContext {
     pub prepared_render_data: Box<PreparedRenderData<RenderJobWriteContext>>,
 }
 
+struct ShadowMapPass {
+    node: RenderGraphNodeId,
+    depth: RenderGraphImageUsageId,
+}
+
+fn shadow_map_pass(
+    graph: &mut RenderGraphBuilder,
+    graph_callbacks: &mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
+    depth_format: vk::Format,
+    render_view: &RenderView,
+) -> ShadowMapPass {
+    let node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
+
+    let depth = graph.create_depth_attachment(
+        node,
+        Some(vk::ClearDepthStencilValue {
+            depth: 0.0,
+            stencil: 0,
+        }),
+        RenderGraphImageConstraint {
+            samples: Some(vk::SampleCountFlags::TYPE_1),
+            format: Some(depth_format),
+            aspect_flags: vk::ImageAspectFlags::DEPTH,
+            create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
+            ..Default::default()
+        },
+    );
+    graph.set_image_name(depth, "depth");
+
+    graph_callbacks.add_renderphase_dependency::<ShadowMapRenderPhase>(node);
+
+    let render_view = render_view.clone();
+    graph_callbacks.set_renderpass_callback(node, move |args, user_context| {
+        let mut write_context =
+            RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
+        user_context
+            .prepared_render_data
+            .write_view_phase::<ShadowMapRenderPhase>(
+                &render_view,
+                &mut write_context,
+            );
+        Ok(())
+    });
+
+    ShadowMapPass { node, depth }
+}
+
+enum ShadowMapImageResources {
+    Single(RenderGraphImageUsageId),
+    Cube([RenderGraphImageUsageId; 6])
+}
+
 pub fn build_render_graph(
     device_context: &VkDeviceContext,
     resource_context: &ResourceContext,
@@ -35,7 +88,7 @@ pub fn build_render_graph(
     swapchain_info: &SwapchainInfo,
     swapchain_image: ResourceArc<ImageViewResource>,
     main_view: RenderView,
-    shadow_map_views: &[RenderView],
+    shadow_map_views: &[ShadowMapRenderView],
     bloom_extract_material_pass: ResourceArc<MaterialPassResource>,
     bloom_blur_material_pass: ResourceArc<MaterialPassResource>,
     bloom_combine_material_pass: ResourceArc<MaterialPassResource>,
@@ -53,48 +106,41 @@ pub fn build_render_graph(
 
     let mut shadow_map_passes = Vec::default();
     for shadow_map_view in shadow_map_views {
-        let shadow_map_pass = {
-            struct ShadowMapPass {
-                node: RenderGraphNodeId,
-                depth: RenderGraphImageUsageId,
+        match shadow_map_view {
+            ShadowMapRenderView::Single(render_view) => {
+                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, render_view);
+                shadow_map_passes.push(ShadowMapImageResources::Single(shadow_map_pass.depth));
+            },
+            ShadowMapRenderView::Cube(render_view) => {
+
+                // let cube_map_node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
+                // let depth = graph.create_depth_attachment(
+                //     cube_map_node,
+                //     Some(vk::ClearDepthStencilValue {
+                //         depth: 0.0,
+                //         stencil: 0,
+                //     }),
+                //     RenderGraphImageConstraint {
+                //         samples: Some(vk::SampleCountFlags::TYPE_1),
+                //         format: Some(depth_format),
+                //         aspect_flags: vk::ImageAspectFlags::DEPTH,
+                //         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
+                //         ..Default::default()
+                //     },
+                // );
+
+                let depth_images = [
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[0]).depth,
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[1]).depth,
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[2]).depth,
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[3]).depth,
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[4]).depth,
+                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[5]).depth,
+                ];
+
+                shadow_map_passes.push(ShadowMapImageResources::Cube(depth_images));
             }
-
-            let node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
-
-            let depth = graph.create_depth_attachment(
-                node,
-                Some(vk::ClearDepthStencilValue {
-                    depth: 0.0,
-                    stencil: 0,
-                }),
-                RenderGraphImageConstraint {
-                    samples: Some(vk::SampleCountFlags::TYPE_1),
-                    format: Some(depth_format),
-                    aspect_flags: vk::ImageAspectFlags::DEPTH,
-                    ..Default::default()
-                },
-            );
-            graph.set_image_name(depth, "depth");
-
-            graph_callbacks.add_renderphase_dependency::<ShadowMapRenderPhase>(node);
-
-            let directional_light_view = shadow_map_view.clone();
-            graph_callbacks.set_renderpass_callback(node, move |args, user_context| {
-                let mut write_context =
-                    RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
-                user_context
-                    .prepared_render_data
-                    .write_view_phase::<ShadowMapRenderPhase>(
-                        &directional_light_view,
-                        &mut write_context,
-                    );
-                Ok(())
-            });
-
-            ShadowMapPass { node, depth }
-        };
-
-        shadow_map_passes.push(shadow_map_pass);
+        }
     }
 
     let opaque_pass = {
@@ -135,7 +181,16 @@ pub fn build_render_graph(
         graph.set_image_name(depth, "depth");
 
         for shadow_map_pass in &shadow_map_passes {
-            graph.sample_image(node, shadow_map_pass.depth, Default::default());
+            match shadow_map_pass {
+                ShadowMapImageResources::Single(image) => {
+                    graph.sample_image(node, *image, Default::default());
+                },
+                ShadowMapImageResources::Cube(images) => {
+                    for image in images {
+                        graph.sample_image(node, *image, Default::default());
+                    }
+                }
+            }
         }
 
         graph_callbacks.add_renderphase_dependency::<OpaqueRenderPhase>(node);
@@ -483,6 +538,7 @@ pub fn build_render_graph(
             format: swapchain_format,
             aspect_flags: vk::ImageAspectFlags::COLOR,
             usage_flags: swapchain_info.image_usage_flags,
+            create_flags: Default::default()
         },
         dsc::ImageLayout::PresentSrcKhr,
         vk::AccessFlags::empty(),
@@ -501,13 +557,21 @@ pub fn build_render_graph(
         graph_callbacks,
     )?;
 
-    let shadow_maps = shadow_map_passes
-        .iter()
-        .map(|x| executor.image_resource(x.depth).unwrap())
-        .collect();
+    let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
+    for shadow_map_pass in shadow_map_passes {
+        let image_view = match shadow_map_pass {
+            ShadowMapImageResources::Single(image) => {
+                shadow_map_image_views.push(executor.image_resource(image).unwrap())
+            },
+            ShadowMapImageResources::Cube(images) => {
+                //TODO: Create a cubemap view
+                shadow_map_image_views.push(executor.image_resource(images[0]).unwrap())
+            }
+        };
+    }
 
     Ok(BuildRenderGraphResult {
-        shadow_maps,
+        shadow_map_image_views,
         executor,
     })
 }

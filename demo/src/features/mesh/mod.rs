@@ -38,33 +38,58 @@ pub use shaders::mesh_frag::PerViewDataUniform as MeshPerViewFragmentShaderParam
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum LightId {
-    PointLight(legion::Entity),
+    PointLight(legion::Entity), // u32 is a face index
     SpotLight(legion::Entity),
     DirectionalLight(legion::Entity),
 }
 
+#[derive(Clone)]
+pub enum ShadowMapRenderView {
+    Single(RenderView),
+    Cube([RenderView; 6])
+}
+
 pub struct ShadowMapData {
     pub shadow_map_lookup: FnvHashMap<LightId, usize>,
-    pub shadow_map_render_views: Vec<RenderView>,
-    pub shadow_map_images: Vec<ResourceArc<ImageViewResource>>,
+    pub shadow_map_render_views: Vec<ShadowMapRenderView>,
+    pub shadow_map_image_views: Vec<ResourceArc<ImageViewResource>>,
+    // pub shadow_cube_map_render_views: Vec<RenderView>,
+    // pub shadow_cube_map_images: Vec<ResourceArc<ImageViewResource>>,
 }
 
-pub struct PreparedDirectionalLight {
+pub struct ExtractedDirectionalLight {
     light: DirectionalLightComponent,
-    shadow_map_index: Option<usize>,
+    entity: legion::Entity,
 }
 
-pub struct PreparedPointLight {
+pub struct ExtractedPointLight {
     light: PointLightComponent,
     position: PositionComponent,
-    shadow_map_index: Option<usize>,
+    entity: legion::Entity,
 }
 
-pub struct PreparedSpotLight {
+pub struct ExtractedSpotLight {
     light: SpotLightComponent,
     position: PositionComponent,
-    shadow_map_index: Option<usize>,
+    entity: legion::Entity,
 }
+
+// pub struct PreparedDirectionalLight {
+//     light: DirectionalLightComponent,
+//     shadow_map_index: Option<usize>,
+// }
+//
+// pub struct PreparedPointLight {
+//     light: PointLightComponent,
+//     position: PositionComponent,
+//     shadow_map_index: Option<usize>,
+// }
+//
+// pub struct PreparedSpotLight {
+//     light: SpotLightComponent,
+//     position: PositionComponent,
+//     shadow_map_index: Option<usize>,
+// }
 
 pub fn create_mesh_extract_job(
     shadow_map_data: ShadowMapData

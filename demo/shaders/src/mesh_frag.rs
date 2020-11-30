@@ -268,7 +268,7 @@ pub const PER_OBJECT_DATA_DESCRIPTOR_BINDING_INDEX: usize = 0;
 
 pub struct DescriptorSet0Args<'a> {
     pub per_view_data: &'a PerViewDataUniform,
-    pub shadow_map_images: &'a [Option<&'a ResourceArc<ImageViewResource>>; 48],
+    pub shadow_map_image_views: &'a [Option<&'a ResourceArc<ImageViewResource>>; 48],
 }
 
 impl<'a> DescriptorSetInitializer<'a> for DescriptorSet0Args<'a> {
@@ -307,7 +307,7 @@ impl DescriptorSet0 {
         );
         descriptor_set.set_images(
             SHADOW_MAP_IMAGES_DESCRIPTOR_BINDING_INDEX as u32,
-            args.shadow_map_images,
+            args.shadow_map_image_views,
         );
     }
 
@@ -316,7 +316,7 @@ impl DescriptorSet0 {
         args: DescriptorSet0Args,
     ) {
         self.set_per_view_data(args.per_view_data);
-        self.set_shadow_map_images(args.shadow_map_images);
+        self.set_shadow_map_images(args.shadow_map_image_views);
     }
 
     pub fn set_per_view_data(

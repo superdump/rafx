@@ -75,6 +75,7 @@ pub struct RenderGraphImageSpecification {
     pub format: vk::Format,
     pub aspect_flags: vk::ImageAspectFlags,
     pub usage_flags: vk::ImageUsageFlags,
+    pub create_flags: vk::ImageCreateFlags,
 }
 
 impl RenderGraphImageSpecification {
@@ -118,6 +119,7 @@ pub struct RenderGraphImageConstraint {
     pub format: Option<vk::Format>,
     pub aspect_flags: vk::ImageAspectFlags,
     pub usage_flags: vk::ImageUsageFlags,
+    pub create_flags: vk::ImageCreateFlags,
 }
 
 impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
@@ -127,6 +129,7 @@ impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
             format: Some(specification.format),
             aspect_flags: specification.aspect_flags,
             usage_flags: specification.usage_flags,
+            create_flags: specification.create_flags,
         }
     }
 }
@@ -141,6 +144,7 @@ impl RenderGraphImageConstraint {
                 format: self.format.unwrap(),
                 aspect_flags: self.aspect_flags,
                 usage_flags: self.usage_flags,
+                create_flags: self.create_flags,
             })
         }
     }
@@ -181,6 +185,7 @@ impl RenderGraphImageConstraint {
 
         self.aspect_flags |= other.aspect_flags;
         self.usage_flags |= other.usage_flags;
+        self.create_flags |= other.create_flags;
 
         true
     }
@@ -207,6 +212,7 @@ impl RenderGraphImageConstraint {
 
         self.aspect_flags |= other.aspect_flags;
         self.usage_flags |= other.usage_flags;
+        self.create_flags |= other.create_flags;
 
         complete_merge
     }
