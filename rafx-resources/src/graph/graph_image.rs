@@ -60,6 +60,7 @@ pub struct RenderGraphImageUsage {
     pub(super) version: RenderGraphImageVersionId,
 
     pub(super) preferred_layout: dsc::ImageLayout,
+    pub(super) subresource_range: dsc::ImageSubresourceRange,
     //pub(super) access_flags: vk::AccessFlags,
     //pub(super) stage_flags: vk::PipelineStageFlags,
     //pub(super) image_aspect_flags: vk::ImageAspectFlags,
@@ -70,12 +71,21 @@ pub type RenderGraphResourceName = &'static str;
 /// Immutable, fully-specified attributes of an image. A *constraint* is partially specified and
 /// the graph will use constraints to solve for the specification
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RenderGraphImageSpecification {
+pub struct RenderGraphImageSpecification { // Rename to RenderGraphImageUsageSpecification?
     pub samples: vk::SampleCountFlags,
     pub format: vk::Format,
     pub aspect_flags: vk::ImageAspectFlags,
     pub usage_flags: vk::ImageUsageFlags,
     pub create_flags: vk::ImageCreateFlags,
+    pub subresource_range: dsc::ImageSubresourceRange,
+    // image type
+    // extents
+    // mip levels
+    // layers
+    // tiling
+    // layout
+    // sharing mode
+
 }
 
 impl RenderGraphImageSpecification {
@@ -88,6 +98,9 @@ impl RenderGraphImageSpecification {
             return false;
         }
         if self.format != other.format {
+            return false;
+        }
+        if self.subresource_range != other.subresource_range {
             return false;
         }
 
@@ -114,12 +127,14 @@ impl RenderGraphImageSpecification {
 /// Constraints on an image. Constraints are set per-field and start out None (i.e. unconstrained)
 /// The rendergraph will derive specifications from the constraints
 #[derive(Default, Clone, Debug)]
-pub struct RenderGraphImageConstraint {
+pub struct RenderGraphImageConstraint { // Rename to RenderGraphImageUsageConstraint?
     pub samples: Option<vk::SampleCountFlags>,
     pub format: Option<vk::Format>,
     pub aspect_flags: vk::ImageAspectFlags,
     pub usage_flags: vk::ImageUsageFlags,
     pub create_flags: vk::ImageCreateFlags,
+    //pub dimensions: vk::ImageSubresource
+    pub subresource_range: Option<dsc::ImageSubresourceRange>,
 }
 
 impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
@@ -130,6 +145,7 @@ impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
             aspect_flags: specification.aspect_flags,
             usage_flags: specification.usage_flags,
             create_flags: specification.create_flags,
+            subresource_range: Some(specification.subresource_range),
         }
     }
 }
@@ -145,6 +161,7 @@ impl RenderGraphImageConstraint {
                 aspect_flags: self.aspect_flags,
                 usage_flags: self.usage_flags,
                 create_flags: self.create_flags,
+                subresource_range: self.subresource_range.unwrap(),
             })
         }
     }

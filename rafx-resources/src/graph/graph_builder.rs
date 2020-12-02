@@ -63,6 +63,7 @@ impl RenderGraphBuilder {
         version: RenderGraphImageVersionId,
         usage_type: RenderGraphImageUsageType,
         preferred_layout: dsc::ImageLayout,
+        subresource_range: dsc::ImageSubresourceRange,
         _access_flags: vk::AccessFlags,
         _stage_flags: vk::PipelineStageFlags,
         _image_aspect_flags: vk::ImageAspectFlags,
@@ -73,6 +74,7 @@ impl RenderGraphBuilder {
             usage_type,
             version,
             preferred_layout,
+            subresource_range
             //access_flags,
             //stage_flags,
             //image_aspect_flags
@@ -87,6 +89,7 @@ impl RenderGraphBuilder {
         attachment_type: RenderGraphAttachmentType,
         constraint: RenderGraphImageConstraint,
         preferred_layout: dsc::ImageLayout,
+        subresource_range: dsc::ImageSubresourceRange,
         access_flags: vk::AccessFlags,
         stage_flags: vk::PipelineStageFlags,
         image_aspect_flags: vk::ImageAspectFlags,
@@ -100,6 +103,7 @@ impl RenderGraphBuilder {
             version_id,
             RenderGraphImageUsageType::Create,
             preferred_layout,
+            subresource_range,
             access_flags,
             stage_flags,
             image_aspect_flags,
@@ -143,6 +147,7 @@ impl RenderGraphBuilder {
             version_id,
             RenderGraphImageUsageType::Read,
             preferred_layout,
+            self.image_usages[image.0].subresource_range.clone(),
             access_flags,
             stage_flags,
             image_aspect_flags,
@@ -183,6 +188,7 @@ impl RenderGraphBuilder {
             read_version_id,
             RenderGraphImageUsageType::ModifyRead,
             preferred_layout,
+            self.image_usages[image.0].subresource_range.clone(),
             read_access_flags,
             read_stage_flags,
             read_image_aspect_flags,
@@ -203,6 +209,7 @@ impl RenderGraphBuilder {
             write_version_id,
             RenderGraphImageUsageType::ModifyWrite,
             preferred_layout,
+            self.image_usages[image.0].subresource_range.clone(),
             write_access_flags,
             write_stage_flags,
             write_image_aspect_flags,
@@ -284,6 +291,7 @@ impl RenderGraphBuilder {
             attachment_type,
             constraint,
             dsc::ImageLayout::ColorAttachmentOptimal,
+            dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into()),
             vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             vk::ImageAspectFlags::COLOR,
@@ -319,6 +327,7 @@ impl RenderGraphBuilder {
             attachment_type,
             constraint,
             dsc::ImageLayout::DepthAttachmentOptimal,
+            dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Depth.into()),
             vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
                 | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
@@ -356,6 +365,7 @@ impl RenderGraphBuilder {
             attachment_type,
             constraint,
             dsc::ImageLayout::DepthStencilAttachmentOptimal,
+            dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Depth | dsc::ImageAspectFlag::Stencil),
             vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
                 | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
@@ -392,6 +402,7 @@ impl RenderGraphBuilder {
             attachment_type,
             constraint,
             dsc::ImageLayout::ColorAttachmentOptimal,
+            dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into()),
             vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             vk::ImageAspectFlags::COLOR,
@@ -668,6 +679,10 @@ impl RenderGraphBuilder {
         usage
     }
 
+    pub fn subresource_image() {
+
+    }
+
     pub fn set_output_image(
         &mut self,
         image_id: RenderGraphImageUsageId,
@@ -693,6 +708,7 @@ impl RenderGraphBuilder {
             version_id,
             RenderGraphImageUsageType::Output,
             layout,
+            specification.subresource_range.clone(),
             access_flags,
             stage_flags,
             specification.aspect_flags,

@@ -112,22 +112,21 @@ pub fn build_render_graph(
                 shadow_map_passes.push(ShadowMapImageResources::Single(shadow_map_pass.depth));
             },
             ShadowMapRenderView::Cube(render_view) => {
-
-                // let cube_map_node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
-                // let depth = graph.create_depth_attachment(
-                //     cube_map_node,
-                //     Some(vk::ClearDepthStencilValue {
-                //         depth: 0.0,
-                //         stencil: 0,
-                //     }),
-                //     RenderGraphImageConstraint {
-                //         samples: Some(vk::SampleCountFlags::TYPE_1),
-                //         format: Some(depth_format),
-                //         aspect_flags: vk::ImageAspectFlags::DEPTH,
-                //         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
-                //         ..Default::default()
-                //     },
-                // );
+                let cube_map_node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
+                let depth = graph.create_depth_attachment(
+                    cube_map_node,
+                    Some(vk::ClearDepthStencilValue {
+                        depth: 0.0,
+                        stencil: 0,
+                    }),
+                    RenderGraphImageConstraint {
+                        samples: Some(vk::SampleCountFlags::TYPE_1),
+                        format: Some(depth_format),
+                        aspect_flags: vk::ImageAspectFlags::DEPTH,
+                        create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
+                        ..Default::default()
+                    },
+                );
 
                 let depth_images = [
                     shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[0]).depth,
@@ -538,7 +537,8 @@ pub fn build_render_graph(
             format: swapchain_format,
             aspect_flags: vk::ImageAspectFlags::COLOR,
             usage_flags: swapchain_info.image_usage_flags,
-            create_flags: Default::default()
+            create_flags: Default::default(),
+            subresource_range: dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into())
         },
         dsc::ImageLayout::PresentSrcKhr,
         vk::AccessFlags::empty(),
@@ -559,7 +559,7 @@ pub fn build_render_graph(
 
     let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
     for shadow_map_pass in shadow_map_passes {
-        let image_view = match shadow_map_pass {
+        match shadow_map_pass {
             ShadowMapImageResources::Single(image) => {
                 shadow_map_image_views.push(executor.image_resource(image).unwrap())
             },
@@ -567,7 +567,7 @@ pub fn build_render_graph(
                 //TODO: Create a cubemap view
                 shadow_map_image_views.push(executor.image_resource(images[0]).unwrap())
             }
-        };
+        }
     }
 
     Ok(BuildRenderGraphResult {

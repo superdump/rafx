@@ -48,16 +48,19 @@ The demo includes:
  * Assets can be streamed to remote hardware (i.e. a phone)
  * OR assets can be cooked into a binary blob for shipping
  * Hot-reloading assets (needs more work, some asset types do not work reliably)
- * Render graph can be used for efficient and flexible definition of a render pipeline
+ * Render graph can be used for efficient and flexible definition of a render pipeline, including rendering to textures
+   and multiple cameras.
  * Auto-generated shader bindings make working with descriptor sets convenient and less error prone.
  * Material System supporting multiple passes
- * Multi-view support (to produce shadow maps, for example)
+ * Multi-camera support (to produce shadow maps, for example)
  * Demo game state stored in ECS (NOTE: demo uses legion but the renderer is ECS-agnostic)
  * PBR Meshes
  * Sprites
  * Debug Draw
  * imgui
  * HDR Pipeline with Bloom
+ * Point, Spot, and Directional Lights
+ * Multiple Spot/Directional light soft shadows
 
 ## Running the Demo
 

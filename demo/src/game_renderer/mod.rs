@@ -735,7 +735,7 @@ impl GameRenderer {
         ];
 
         let mut query = <(Entity, Read<PointLightComponent>, Read<PositionComponent>)>::query();
-        for (entity, light, position) in query.iter(world) {
+        for (entity, _light, position) in query.iter(world) {
             fn cubemap_face(
                 phase_mask: RenderPhaseMask,
                 render_view_set: &RenderViewSet,

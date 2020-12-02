@@ -4,7 +4,7 @@ use crate::components::{
 };
 use crate::features::mesh::prepare::MeshPrepareJob;
 use crate::features::mesh::{
-    ExtractedFrameNodeMeshData, LightId, MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet,
+    ExtractedFrameNodeMeshData, MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet,
     ExtractedDirectionalLight, ExtractedPointLight, ExtractedSpotLight, ShadowMapData,
 };
 use crate::game_asset_manager::GameAssetManager;
