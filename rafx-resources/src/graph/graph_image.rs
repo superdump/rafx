@@ -60,7 +60,7 @@ pub struct RenderGraphImageUsage {
     pub(super) version: RenderGraphImageVersionId,
 
     pub(super) preferred_layout: dsc::ImageLayout,
-    pub(super) subresource_range: dsc::ImageSubresourceRange,
+    pub(super) subresource_range: Option<dsc::ImageSubresourceRange>,
     //pub(super) access_flags: vk::AccessFlags,
     //pub(super) stage_flags: vk::PipelineStageFlags,
     //pub(super) image_aspect_flags: vk::ImageAspectFlags,
@@ -77,7 +77,9 @@ pub struct RenderGraphImageSpecification { // Rename to RenderGraphImageUsageSpe
     pub aspect_flags: vk::ImageAspectFlags,
     pub usage_flags: vk::ImageUsageFlags,
     pub create_flags: vk::ImageCreateFlags,
-    pub subresource_range: dsc::ImageSubresourceRange,
+    pub layer_count: u32,
+    pub mip_count: u32,
+    //pub subresource_range: dsc::ImageSubresourceRange,
     // image type
     // extents
     // mip levels
@@ -100,7 +102,13 @@ impl RenderGraphImageSpecification {
         if self.format != other.format {
             return false;
         }
-        if self.subresource_range != other.subresource_range {
+        // if self.subresource_range != other.subresource_range {
+        //     return false;
+        // }
+        if self.mip_count != other.mip_count {
+            return false;
+        }
+        if self.layer_count != other.layer_count {
             return false;
         }
 
@@ -134,7 +142,9 @@ pub struct RenderGraphImageConstraint { // Rename to RenderGraphImageUsageConstr
     pub usage_flags: vk::ImageUsageFlags,
     pub create_flags: vk::ImageCreateFlags,
     //pub dimensions: vk::ImageSubresource
-    pub subresource_range: Option<dsc::ImageSubresourceRange>,
+    //pub subresource_range: Option<dsc::ImageSubresourceRange>,
+    pub layer_count: Option<u32>,
+    pub mip_count: Option<u32>,
 }
 
 impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
@@ -145,23 +155,26 @@ impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
             aspect_flags: specification.aspect_flags,
             usage_flags: specification.usage_flags,
             create_flags: specification.create_flags,
-            subresource_range: Some(specification.subresource_range),
+            layer_count: Some(specification.layer_count),
+            mip_count: Some(specification.mip_count),
         }
     }
 }
 
 impl RenderGraphImageConstraint {
     pub fn try_convert_to_specification(self) -> Option<RenderGraphImageSpecification> {
-        if self.samples.is_none() || self.format.is_none() {
+        if /*self.samples.is_none() ||*/ self.format.is_none() /*|| self.subresource_range.is_none()*/ {
             None
         } else {
             Some(RenderGraphImageSpecification {
-                samples: self.samples.unwrap(),
+                samples: self.samples.unwrap_or(vk::SampleCountFlags::TYPE_1),
                 format: self.format.unwrap(),
                 aspect_flags: self.aspect_flags,
                 usage_flags: self.usage_flags,
                 create_flags: self.create_flags,
-                subresource_range: self.subresource_range.unwrap(),
+                //subresource_range: self.subresource_range.unwrap(),
+                layer_count: self.layer_count.unwrap_or(1),
+                mip_count: self.mip_count.unwrap_or(1),
             })
         }
     }
@@ -251,7 +264,6 @@ pub enum RenderGraphImageUsageType {
     Read,
     ModifyRead,
     ModifyWrite,
-    AddImageView,
     Output,
 }
 

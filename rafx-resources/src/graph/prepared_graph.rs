@@ -557,7 +557,11 @@ impl<'b, RenderGraphUserContextT> RenderGraphNodeVisitor
         node_id: RenderGraphNodeId,
         args: VisitRenderpassArgs,
     ) -> VkResult<()> {
-        (self.node_callbacks[&node_id])(args, self.context)
+        // "Empty" nodes are sometimes helpful for manually allocating resources
+        if self.node_callbacks.contains_key(&node_id) {
+            (self.node_callbacks[&node_id])(args, self.context)?
+        }
+        Ok(())
     }
 }
 

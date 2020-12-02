@@ -175,6 +175,16 @@ impl ImageSubresourceRange {
             layer_count: 1,
         }
     }
+
+    pub fn default_no_mips(aspect_mask: ImageAspectFlags, layer: u32) -> Self {
+        ImageSubresourceRange {
+            aspect_mask,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: layer,
+            layer_count: 1,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

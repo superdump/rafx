@@ -40,29 +40,29 @@ fn shadow_map_pass(
     graph_callbacks: &mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
     depth_format: vk::Format,
     render_view: &RenderView,
+    depth_image: RenderGraphImageUsageId,
+    layer: usize,
 ) -> ShadowMapPass {
     let node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
 
-    let depth = graph.create_depth_attachment(
+    let depth = graph.modify_depth_attachment(
         node,
+        depth_image,
         Some(vk::ClearDepthStencilValue {
             depth: 0.0,
             stencil: 0,
         }),
-        RenderGraphImageConstraint {
-            samples: Some(vk::SampleCountFlags::TYPE_1),
-            format: Some(depth_format),
-            aspect_flags: vk::ImageAspectFlags::DEPTH,
-            create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
-            ..Default::default()
-        },
+        RenderGraphImageConstraint::default(),
+        Some(dsc::ImageSubresourceRange::default_no_mips(dsc::ImageAspectFlag::Depth.into(), layer as u32)),
     );
+    println!("shadow_map_pass modify {:?} {:?}", depth_image, depth);
     graph.set_image_name(depth, "depth");
 
     graph_callbacks.add_renderphase_dependency::<ShadowMapRenderPhase>(node);
 
     let render_view = render_view.clone();
     graph_callbacks.set_renderpass_callback(node, move |args, user_context| {
+        println!("shadow map pass");
         let mut write_context =
             RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
         user_context
@@ -109,34 +109,53 @@ pub fn build_render_graph(
     for shadow_map_view in shadow_map_views {
         match shadow_map_view {
             ShadowMapRenderView::Single(render_view) => {
-                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, render_view);
+                let shadow_map_node = graph.add_node("create shadowmap", RenderGraphQueue::DefaultGraphics);
+                // let depth = graph.create_depth_attachment(
+                //     node,
+                //     Some(vk::ClearDepthStencilValue {
+                //         depth: 0.0,
+                //         stencil: 0,
+                //     }),
+                //     RenderGraphImageConstraint {
+                //         samples: Some(vk::SampleCountFlags::TYPE_1),
+                //         format: Some(depth_format),
+                //         aspect_flags: vk::ImageAspectFlags::DEPTH,
+                //         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
+                //         ..Default::default()
+                //     },
+                // );
+
+                let depth_image = graph.add_image(
+                    shadow_map_node,
+                    RenderGraphImageConstraint {
+                        format: Some(depth_format),
+                        ..Default::default()
+                    },
+                );
+                println!("add_image {:?}", depth_image);
+
+                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, render_view, depth_image, 0);
                 shadow_map_passes.push(ShadowMapImageResources::Single(shadow_map_pass.depth));
             },
             ShadowMapRenderView::Cube(render_view) => {
-                let cube_map_node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
+                let cube_map_node = graph.add_node("create cube shadowmap", RenderGraphQueue::DefaultGraphics);
                 let depth = graph.add_image(
                     cube_map_node,
-                    RenderGraphImageSpecification {
-                        samples: vk::SampleCountFlags::TYPE_1,
-                        format: depth_format,
-                        aspect_flags: vk::ImageAspectFlags::DEPTH,
+                    RenderGraphImageConstraint {
+                        format: Some(depth_format),
                         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
-                        usage_flags: vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-                        subresource_range: dsc::ImageSubresourceRange {
-                            aspect_mask: dsc::ImageAspectFlag::Color.into(),
-                            base_array_layer: 0,
-                            layer_count: 6,
-                            base_mip_level: 0,
-                            level_count: 1,
-                        },
+                        layer_count: Some(6),
+                        ..Default::default()
                     },
                 );
+                println!("add_image {:?}", depth);
 
                 let mut depth_images = ArrayVec::<[RenderGraphImageUsageId; 6]>::new();
                 for i in 0..6 {
-                    graph.modify_depth_attachment(cube_map_node, depth, Default::default());
+                    //graph.add_node("shadow pass")
+                    //graph.modify_depth_attachment(cube_map_node, depth, Default::default());
 
-                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i]).depth);
+                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], depth, i).depth);
                 }
 
                 shadow_map_passes.push(ShadowMapImageResources::Cube(depth_images.into_inner().unwrap()));
@@ -184,11 +203,13 @@ pub fn build_render_graph(
         for shadow_map_pass in &shadow_map_passes {
             match shadow_map_pass {
                 ShadowMapImageResources::Single(image) => {
-                    graph.sample_image(node, *image, Default::default());
+                    println!("sample {:?}", *image);
+                    graph.sample_image(node, *image, Default::default(), None);
                 },
                 ShadowMapImageResources::Cube(images) => {
                     for image in images {
-                        graph.sample_image(node, *image, Default::default());
+                        println!("sample cube {:?}", *image);
+                        graph.sample_image(node, *image, Default::default(), None);
                     }
                 }
             }
@@ -247,6 +268,7 @@ pub fn build_render_graph(
                 samples: Some(vk::SampleCountFlags::TYPE_1),
                 ..Default::default()
             },
+            None,
         );
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -336,7 +358,7 @@ pub fn build_render_graph(
             ));
             graph.set_image_name(blur_dst.unwrap(), "blur_dst");
 
-            let sample_image = graph.sample_image(node, blur_src, Default::default());
+            let sample_image = graph.sample_image(node, blur_src, Default::default(), None);
             graph.set_image_name(blur_src, "blur_src");
 
             let bloom_blur_material_pass = bloom_blur_material_pass.clone();
@@ -430,10 +452,10 @@ pub fn build_render_graph(
         );
         graph.set_image_name(color, "color");
 
-        let sdr_image = graph.sample_image(node, bloom_extract_pass.sdr_image, Default::default());
+        let sdr_image = graph.sample_image(node, bloom_extract_pass.sdr_image, Default::default(), None);
         graph.set_image_name(sdr_image, "sdr");
 
-        let hdr_image = graph.sample_image(node, bloom_blur_pass.color, Default::default());
+        let hdr_image = graph.sample_image(node, bloom_blur_pass.color, Default::default(), None);
         graph.set_image_name(hdr_image, "hdr");
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -508,7 +530,7 @@ pub fn build_render_graph(
         // This node has a single color attachment
         let node = graph.add_node("Ui", RenderGraphQueue::DefaultGraphics);
         let color =
-            graph.modify_color_attachment(node, bloom_combine_pass.color, 0, Default::default());
+            graph.modify_color_attachment(node, bloom_combine_pass.color, 0, None, Default::default(), None);
         graph.set_image_name(color, "color");
 
         // Adding a phase dependency insures that we create all the pipelines for materials
@@ -540,7 +562,9 @@ pub fn build_render_graph(
             aspect_flags: vk::ImageAspectFlags::COLOR,
             usage_flags: swapchain_info.image_usage_flags,
             create_flags: Default::default(),
-            subresource_range: dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into())
+            //subresource_range: dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into())
+            layer_count: 1,
+            mip_count: 1
         },
         dsc::ImageLayout::PresentSrcKhr,
         vk::AccessFlags::empty(),

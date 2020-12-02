@@ -159,6 +159,21 @@ fn visit_node(
         }
     }
 
+    for sampled_image in &node.sampled_images {
+        let upstream_node = graph.image_version_info(*sampled_image).creator_node;
+        println!("upstream node for image {:?} is {:?}", sampled_image, upstream_node);
+        if !merge_candidates.contains(&upstream_node) {
+            visit_node(
+                graph,
+                upstream_node,
+                visited,
+                visiting,
+                visiting_stack,
+                ordered_list,
+            );
+        }
+    }
+
     //
     // Now visit the nodes we delayed visiting
     //
@@ -694,15 +709,26 @@ fn assign_virtual_images(
             //TODO: This could be smarter to handle the case of a resource being read/written
             // in different lifetimes
             let written_image_version_info = graph.image_version_info(written_image);
-            let mut read_count = 0;
-            let mut write_count = 0;
-            for usage in &written_image_version_info.read_usages {
-                if graph.image_usages[usage.0].usage_type.is_read_only() {
-                    read_count += 1;
-                } else {
-                    write_count += 1;
-                }
-            }
+            // let mut read_count = 0;
+            // let mut read_ranges = vec![];
+            // let mut write_count = 0;
+            // let mut write_ranges = vec![];
+            // for usage in &written_image_version_info.read_usages {
+            //     if graph.image_usages[usage.0].usage_type.is_read_only() {
+            //         read_count += 1;
+            //         read_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
+            //     } else {
+            //         write_count += 1;
+            //         write_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
+            //     }
+            // }
+            //
+            // let mut has_overlapping_write = false;
+            // for i in 0..write_ranges.len() {
+            //     for j in 0..i {
+            //
+            //     }
+            // }
 
             // If we don't already have an image
             let write_virtual_image = *usage_to_virtual.get(&written_image).unwrap();
@@ -723,14 +749,14 @@ fn assign_virtual_images(
                 let specifications_match = *written_spec == *usage_spec;
 
                 // We can't share images unless it's a read or it's an exclusive write
-                let is_read_or_exclusive_write = (read_count > 0
-                    && graph.image_usages[usage_resource_id.0]
-                        .usage_type
-                        .is_read_only())
-                    || write_count <= 1;
+                // let is_read_or_exclusive_write = (read_count > 0
+                //     && graph.image_usages[usage_resource_id.0]
+                //         .usage_type
+                //         .is_read_only())
+                //     || write_count <= 1;
 
                 let read_type = graph.image_usages[usage_resource_id.0].usage_type;
-                if specifications_match && is_read_or_exclusive_write {
+                if specifications_match /*&& is_read_or_exclusive_write*/ {
                     // it's a shared read or an exclusive write
                     log::trace!(
                         "    Usage {:?} will share an image with {:?} ({:?} -> {:?})",
@@ -747,13 +773,13 @@ fn assign_virtual_images(
                     // allocate new image
                     let virtual_image = virtual_image_id_allocator.allocate();
                     log::trace!(
-                        "    Allocate image {:?} for {:?} ({:?} -> {:?})  (specifications_match match: {} is_read_or_exclusive_write: {})",
+                        "    Allocate image {:?} for {:?} ({:?} -> {:?})  (specifications_match match: {})",
                         virtual_image,
                         usage_resource_id,
                         write_type,
                         read_type,
                         specifications_match,
-                        is_read_or_exclusive_write
+                        //is_read_or_exclusive_write
                     );
                     if !specifications_match {
                         log::trace!("      written: {:?}", written_spec);

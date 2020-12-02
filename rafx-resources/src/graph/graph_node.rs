@@ -22,7 +22,7 @@ pub enum RenderGraphAttachmentType {
 pub struct RenderGraphImageCreate {
     pub image: RenderGraphImageUsageId,
     pub constraint: RenderGraphImageConstraint,
-    pub attachment_type: RenderGraphAttachmentType,
+    //pub attachment_type: RenderGraphAttachmentType,
 }
 
 #[derive(Debug, Clone)]
