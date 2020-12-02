@@ -251,6 +251,7 @@ pub enum RenderGraphImageUsageType {
     Read,
     ModifyRead,
     ModifyWrite,
+    AddImageView,
     Output,
 }
 

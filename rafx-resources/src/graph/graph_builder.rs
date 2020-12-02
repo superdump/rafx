@@ -57,6 +57,9 @@ pub struct RenderGraphBuilder {
 }
 
 impl RenderGraphBuilder {
+    //NOTE: While the image aspect flags may seem redundant with subresource_range here, the
+    // subresource_range should indicate the image view's supported aspects and the provided
+    // image aspect flags the aspects that are actually being used
     pub(super) fn add_image_usage(
         &mut self,
         user: RenderGraphImageUser,
@@ -80,6 +83,107 @@ impl RenderGraphBuilder {
             //image_aspect_flags
         });
         usage_id
+    }
+
+    pub fn add_image(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        specification: RenderGraphImageSpecification,
+    ) -> RenderGraphImageUsageId {
+        let version_id = RenderGraphImageVersionId {
+            index: self.image_resources.len(),
+            version: 0,
+        };
+
+        self.add_image_usage(
+            RenderGraphImageUser::Node(create_node),
+            version_id,
+            RenderGraphImageUsageType::Create,
+            dsc::ImageLayout::Undefined,
+            specification.subresource_range.clone(),
+            vk::AccessFlags::empty(),
+            vk::PipelineStageFlags::empty(),
+            vk::ImageAspectFlags::empty(),
+        )
+    }
+
+    pub fn add_image_view(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        image: RenderGraphImageUsageId,
+        subresource_range: dsc::ImageSubresourceRange,
+    ) -> RenderGraphImageUsageId {
+        let read_version_id = self.image_usages[image.0].version;
+        let read_usage_id = self.add_image_usage(
+            RenderGraphImageUser::Node(modify_node),
+            read_version_id,
+            RenderGraphImageUsageType::Read,
+            preferred_layout,
+            subresource_range,
+            vk::AccessFlags::empty(),
+            vk::PipelineStageFlags::empty(),
+            vk::ImageAspectFlags::empty(),
+        );
+
+
+
+        // Create a new version and add it to the image
+        // let version = self.image_resources[read_version_id.index].versions.len();
+        // let write_version_id = RenderGraphImageVersionId {
+        //     index: read_version_id.index,
+        //     version,
+        // };
+
+
+
+
+
+        // let read_version_id = self.image_usages[image.0].version;
+        //
+        // let read_usage_id = self.add_image_usage(
+        //     RenderGraphImageUser::Node(modify_node),
+        //     read_version_id,
+        //     RenderGraphImageUsageType::ModifyRead,
+        //     preferred_layout,
+        //     self.image_usages[image.0].subresource_range.clone(),
+        //     read_access_flags,
+        //     read_stage_flags,
+        //     read_image_aspect_flags,
+        // );
+        //
+        // self.image_resources[read_version_id.index].versions[read_version_id.version]
+        //     .add_read_usage(read_usage_id);
+        //
+        // // Create a new version and add it to the image
+        // let version = self.image_resources[read_version_id.index].versions.len();
+        // let write_version_id = RenderGraphImageVersionId {
+        //     index: read_version_id.index,
+        //     version,
+        // };
+        // let write_usage_id = self.add_image_usage(
+        //     RenderGraphImageUser::Node(modify_node),
+        //     write_version_id,
+        //     RenderGraphImageUsageType::ModifyWrite,
+        //     preferred_layout,
+        //     self.image_usages[image.0].subresource_range.clone(),
+        //     write_access_flags,
+        //     write_stage_flags,
+        //     write_image_aspect_flags,
+        // );
+        //
+        // let version_info = RenderGraphImageResourceVersionInfo::new(modify_node, write_usage_id);
+        // self.image_resources[read_version_id.index]
+        //     .versions
+        //     .push(version_info);
+        //
+        // self.nodes[modify_node.0]
+        //     .image_modifies
+        //     .push(RenderGraphImageModify {
+        //         input: read_usage_id,
+        //         output: write_usage_id,
+        //         constraint,
+        //         attachment_type,
+        //     });
     }
 
     // Add an image that can be used by nodes
@@ -145,7 +249,7 @@ impl RenderGraphBuilder {
         let usage_id = self.add_image_usage(
             RenderGraphImageUser::Node(read_node),
             version_id,
-            RenderGraphImageUsageType::Read,
+            RenderGraphImageUsageType::AddImageView,
             preferred_layout,
             self.image_usages[image.0].subresource_range.clone(),
             access_flags,
@@ -199,7 +303,6 @@ impl RenderGraphBuilder {
 
         // Create a new version and add it to the image
         let version = self.image_resources[read_version_id.index].versions.len();
-
         let write_version_id = RenderGraphImageVersionId {
             index: read_version_id.index,
             version,

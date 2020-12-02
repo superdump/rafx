@@ -11,6 +11,7 @@ use rafx::resources::{vk_description as dsc, VertexDataSetLayout};
 use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
 use crate::features::mesh::ShadowMapRenderView;
+use arrayvec::ArrayVec;
 
 lazy_static::lazy_static! {
     pub static ref EMPTY_VERTEX_LAYOUT : VertexDataSetLayout = {
@@ -113,31 +114,32 @@ pub fn build_render_graph(
             },
             ShadowMapRenderView::Cube(render_view) => {
                 let cube_map_node = graph.add_node("Shadow", RenderGraphQueue::DefaultGraphics);
-                let depth = graph.create_depth_attachment(
+                let depth = graph.add_image(
                     cube_map_node,
-                    Some(vk::ClearDepthStencilValue {
-                        depth: 0.0,
-                        stencil: 0,
-                    }),
-                    RenderGraphImageConstraint {
-                        samples: Some(vk::SampleCountFlags::TYPE_1),
-                        format: Some(depth_format),
+                    RenderGraphImageSpecification {
+                        samples: vk::SampleCountFlags::TYPE_1,
+                        format: depth_format,
                         aspect_flags: vk::ImageAspectFlags::DEPTH,
                         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
-                        ..Default::default()
+                        usage_flags: vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                        subresource_range: dsc::ImageSubresourceRange {
+                            aspect_mask: dsc::ImageAspectFlag::Color.into(),
+                            base_array_layer: 0,
+                            layer_count: 6,
+                            base_mip_level: 0,
+                            level_count: 1,
+                        },
                     },
                 );
 
-                let depth_images = [
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[0]).depth,
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[1]).depth,
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[2]).depth,
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[3]).depth,
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[4]).depth,
-                    shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[5]).depth,
-                ];
+                let mut depth_images = ArrayVec::<[RenderGraphImageUsageId; 6]>::new();
+                for i in 0..6 {
+                    graph.modify_depth_attachment(cube_map_node, depth, Default::default());
 
-                shadow_map_passes.push(ShadowMapImageResources::Cube(depth_images));
+                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i]).depth);
+                }
+
+                shadow_map_passes.push(ShadowMapImageResources::Cube(depth_images.into_inner().unwrap()));
             }
         }
     }
