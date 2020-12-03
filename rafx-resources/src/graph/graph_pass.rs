@@ -1,5 +1,5 @@
-use crate::graph::graph_image::{PhysicalImageId, VirtualImageId};
-use crate::graph::RenderGraphNodeId;
+use crate::graph::graph_image::{PhysicalImageId, VirtualImageId, PhysicalImageViewId};
+use crate::graph::{RenderGraphNodeId, RenderGraphImageUsageId};
 use crate::vk_description as dsc;
 use ash::vk;
 use fnv::FnvHashMap;
@@ -106,8 +106,11 @@ impl Into<vk::ClearValue> for AttachmentClearValue {
 /// Attachment for a render pass
 #[derive(Debug)]
 pub struct RenderGraphPassAttachment {
+    pub(super) usage: RenderGraphImageUsageId,
     pub(super) virtual_image: VirtualImageId,
     pub(super) image: Option<PhysicalImageId>,
+    pub(super) image_view: Option<PhysicalImageViewId>,
+    //pub(super) subresource_range: dsc::ImageSubresourceRange,
     pub(super) load_op: vk::AttachmentLoadOp,
     pub(super) stencil_load_op: vk::AttachmentLoadOp,
     pub(super) store_op: vk::AttachmentStoreOp,
@@ -167,7 +170,7 @@ pub struct RenderGraphPass {
 pub struct RenderGraphOutputPass {
     pub(super) subpass_nodes: Vec<RenderGraphNodeId>,
     pub(super) description: Arc<dsc::RenderPass>,
-    pub(super) attachment_images: Vec<PhysicalImageId>,
+    pub(super) attachment_images: Vec<PhysicalImageViewId>,
     pub(super) clear_values: Vec<vk::ClearValue>,
     pub(super) extents: vk::Extent2D,
     pub(super) pre_pass_barrier: Option<PrepassBarrier>,

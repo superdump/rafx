@@ -31,20 +31,8 @@ pub struct AssignVirtualImagesResult {
     usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
 }
 
-#[derive(Default)]
-struct VirtualImageIdAllocator {
-    next_id: usize,
-}
-
-impl VirtualImageIdAllocator {
-    fn allocate(&mut self) -> VirtualImageId {
-        let id = VirtualImageId(self.next_id);
-        self.next_id += 1;
-        id
-    }
-}
-
-// Recursively called to topologically sort the nodes to determine execution order
+// Recursively called to topologically sort the nodes to determine execution order. See
+// determine_node_order which kicks this off.
 // https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
 fn visit_node(
     graph: &RenderGraphBuilder,
@@ -199,6 +187,10 @@ fn visit_node(
     visiting[node_id.0] = false;
 }
 
+//
+// The purpose of this function is to determine the order that nodes should execute in. We do this
+// by following the graph from the outputs backwards.
+//
 #[profiling::function]
 fn determine_node_order(graph: &RenderGraphBuilder) -> Vec<RenderGraphNodeId> {
     // As we depth-first traverse nodes, mark them as visiting and push them onto this stack.
@@ -254,6 +246,15 @@ fn can_passes_merge(
     false
 }
 
+//
+// This function determines the specifications of all images. This is done by looking at the
+// constraints on the image at every point it is used. This information and how the image is used
+// will determine the image specification. (The specification is all the information needed to
+// create the image. Conflicting constraints or incomplete constraints will result in an error.
+//
+// The general algorithm here is to start from the beginning of the graph, walk forward to the end,
+// propagating the constraints. Then walk backwards from the end to the beginning.
+//
 #[profiling::function]
 fn determine_image_constraints(
     graph: &RenderGraphBuilder,
@@ -546,6 +547,11 @@ fn determine_image_constraints(
     }
 }
 
+//
+// This function finds places where an image needs to transition from multisampled to non-multisampled.
+// This can be done efficiently by adding a resolve attachment to the pass. These resolves are
+// automatically inserted. This only works for color attachments (limitation of vulkan)
+//
 #[profiling::function]
 fn insert_resolves(
     graph: &mut RenderGraphBuilder,
@@ -646,12 +652,33 @@ fn insert_resolves(
     }
 }
 
+
+//
+// The graph is built with the assumption that every image is immutable. However in most cases we
+// can easily pass the same image through multiple passes saving memory and the need to copy data.
+// This function finds places where we can trivially forward an image from one pass to another. In
+// the future, cases where this is not possible might be handled by copying the image. (Needed if
+// there are multiple downstream consumers modifying the image or if the format needs to change.
+//
 #[profiling::function]
 fn assign_virtual_images(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
     image_constraint_results: &mut DetermineImageConstraintsResult,
 ) -> AssignVirtualImagesResult {
+    #[derive(Default)]
+    struct VirtualImageIdAllocator {
+        next_id: usize,
+    }
+
+    impl VirtualImageIdAllocator {
+        fn allocate(&mut self) -> VirtualImageId {
+            let id = VirtualImageId(self.next_id);
+            self.next_id += 1;
+            id
+        }
+    }
+
     let mut usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId> =
         FnvHashMap::default();
 
@@ -706,8 +733,16 @@ fn assign_virtual_images(
             // Count the downstream users of this image based on if they need read-only access
             // or write access. We need this information to determine which usages we can share
             // the output data with.
-            //TODO: This could be smarter to handle the case of a resource being read/written
-            // in different lifetimes
+            //
+            // I'm not sure if this works as written. I was thinking we might have trouble with
+            // multiple readers, and then they pass to a writer, but now that I think of it, readers
+            // don't "output" anything.
+            //
+            // That said, this doesn't understand multiple writers of different subresources right
+            // now.
+            //
+            //TODO: This could be smarter to handle the case of a resource being read and then
+            // later written
             let written_image_version_info = graph.image_version_info(written_image);
             // let mut read_count = 0;
             // let mut read_ranges = vec![];
@@ -730,15 +765,14 @@ fn assign_virtual_images(
             //     }
             // }
 
-            // If we don't already have an image
             let write_virtual_image = *usage_to_virtual.get(&written_image).unwrap();
             let write_type = graph.image_usages[written_image.0].usage_type;
 
+            let written_spec = image_constraint_results
+                .specification(written_image)
+                .unwrap();
+
             for usage_resource_id in &written_image_version_info.read_usages {
-                // We can't share images if they aren't the same format
-                let written_spec = image_constraint_results
-                    .specification(written_image)
-                    .unwrap();
                 let usage_spec = match image_constraint_results.specification(*usage_resource_id) {
                     Some(usage_spec) => usage_spec,
                     // If the reader of this image was culled, we may not have determined a spec.
@@ -746,6 +780,7 @@ fn assign_virtual_images(
                     None => continue,
                 };
 
+                // We can't share images if they aren't the same format
                 let specifications_match = *written_spec == *usage_spec;
 
                 // We can't share images unless it's a read or it's an exclusive write
@@ -807,6 +842,31 @@ fn assign_virtual_images(
     }
 }
 
+// #[profiling::function]
+// fn assign_image_views(
+//     graph: &RenderGraphBuilder,
+//     node_execution_order: &[RenderGraphNodeId],
+// ) {
+//     log::trace!("Create image views for usages");
+//     for node in node_execution_order {
+//         let node = graph.node(*node);
+//         log::trace!("  node {:?} {:?}", node.id().0, node.name());
+//
+//
+//
+//         for create in node.image_creates {
+//             // The view is always matching the image constraint
+//             //create.constraint.mip_count
+//             //create.constraint.samples
+//
+//         }
+//
+//         for read in node.image_reads {
+//
+//         }
+//     }
+// }
+
 //TODO: Redundant with can_passes_merge
 fn can_merge_nodes(
     graph: &RenderGraphBuilder,
@@ -833,6 +893,26 @@ fn can_merge_nodes(
     false
 }
 
+fn get_subresource_range_of_usage(
+    graph: &RenderGraphBuilder,
+    image_constraints: &DetermineImageConstraintsResult,
+    usage: RenderGraphImageUsageId,
+) -> dsc::ImageSubresourceRange {
+    graph.image_usages[usage.0].subresource_range.unwrap_or_else(|| {
+        let specification = image_constraints.images[&usage];
+        dsc::ImageSubresourceRange::default_all_mips_all_layers(
+            dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
+            specification.mip_count,
+            specification.layer_count,
+        )
+    })
+}
+
+//
+// This walks through the nodes and creates passes/subpasses. Most of the info to create them is
+// determined here along with stage/access/queue family barrier info. (The barrier info is used
+// later.. some of the invalidates/flushes can be merged.)
+//
 #[profiling::function]
 fn build_physical_passes(
     graph: &RenderGraphBuilder,
@@ -878,17 +958,28 @@ fn build_physical_passes(
         log::trace!("  nodes in pass: {:?}", pass_node_set);
         fn find_or_insert_attachment(
             attachments: &mut Vec<RenderGraphPassAttachment>,
+            usage: RenderGraphImageUsageId,
             virtual_image: VirtualImageId,
+            //subresource_range: dsc::ImageSubresourceRange
         ) -> (usize, bool) {
             if let Some(position) = attachments
                 .iter()
                 .position(|x| x.virtual_image == virtual_image)
             {
+                // For the time being, lets assume we consistently use the same subresource range
+                // within a pass
+                //assert_eq!(subresource_range, attachments[position].subresource_range);
                 (position, false)
             } else {
                 attachments.push(RenderGraphPassAttachment {
+                    usage,
                     virtual_image,
+                    //subresource_range,
+
+                    //NOTE: These get assigned later in assign_physical_images
                     image: None,
+                    image_view: None,
+
                     load_op: vk::AttachmentLoadOp::DONT_CARE,
                     stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
                     store_op: vk::AttachmentStoreOp::DONT_CARE,
@@ -896,6 +987,8 @@ fn build_physical_passes(
                     clear_color: Default::default(),
                     format: vk::Format::UNDEFINED,
                     samples: vk::SampleCountFlags::TYPE_1,
+
+                    // NOTE: These get assigned later in build_pass_barriers
                     initial_layout: dsc::ImageLayout::Undefined,
                     final_layout: dsc::ImageLayout::Undefined,
                 });
@@ -932,25 +1025,28 @@ fn build_physical_passes(
                         .usage_to_virtual
                         .get(&read_or_write_usage)
                         .unwrap();
+
+                    //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
+
                     //let version_id = graph.image_version_id(read_or_write_usage);
                     let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
                     log::trace!("      virtual attachment (color): {:?}", virtual_image);
 
                     let (pass_attachment_index, is_first_usage) =
-                        find_or_insert_attachment(&mut pass.attachments, *virtual_image);
+                        find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
                     subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
 
                     let mut attachment = &mut pass.attachments[pass_attachment_index];
                     if is_first_usage {
                         // Check if we load or clear
-                        if color_attachment.read_image.is_some() {
-                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
-                        } else if color_attachment.clear_color_value.is_some() {
+                        if color_attachment.clear_color_value.is_some() {
                             attachment.load_op = vk::AttachmentLoadOp::CLEAR;
                             attachment.clear_color = Some(AttachmentClearValue::Color(
                                 color_attachment.clear_color_value.unwrap(),
                             ))
-                        };
+                        } else if color_attachment.read_image.is_some() {
+                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
+                        }
 
                         attachment.format = specification.format;
                         attachment.samples = specification.samples;
@@ -981,8 +1077,10 @@ fn build_physical_passes(
                     let specification = image_constraints.images.get(&write_image).unwrap();
                     log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
 
+                    //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, write_image);
+
                     let (pass_attachment_index, is_first_usage) =
-                        find_or_insert_attachment(&mut pass.attachments, *virtual_image);
+                        find_or_insert_attachment(&mut pass.attachments, write_image, *virtual_image/*, subresource_range*/);
                     subpass.resolve_attachments[resolve_attachment_index] =
                         Some(pass_attachment_index);
 
@@ -1017,8 +1115,10 @@ fn build_physical_passes(
                 let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
                 log::trace!("      virtaul attachment (depth): {:?}", virtual_image);
 
+                //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
+
                 let (pass_attachment_index, is_first_usage) =
-                    find_or_insert_attachment(&mut pass.attachments, *virtual_image);
+                    find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
                 subpass.depth_attachment = Some(pass_attachment_index);
 
                 let mut attachment = &mut pass.attachments[pass_attachment_index];
@@ -1026,15 +1126,7 @@ fn build_physical_passes(
                     // Check if we load or clear
                     //TODO: Support load_op for stencil
 
-                    if depth_attachment.read_image.is_some() {
-                        if depth_attachment.has_depth {
-                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
-                        }
-
-                        if depth_attachment.has_stencil {
-                            attachment.stencil_load_op = vk::AttachmentLoadOp::LOAD;
-                        }
-                    } else if depth_attachment.clear_depth_stencil_value.is_some() {
+                    if depth_attachment.clear_depth_stencil_value.is_some() {
                         if depth_attachment.has_depth {
                             attachment.load_op = vk::AttachmentLoadOp::CLEAR;
                         }
@@ -1043,8 +1135,16 @@ fn build_physical_passes(
                         }
                         attachment.clear_color = Some(AttachmentClearValue::DepthStencil(
                             depth_attachment.clear_depth_stencil_value.unwrap(),
-                        ))
-                    };
+                        ));
+                    } else if depth_attachment.read_image.is_some() {
+                        if depth_attachment.has_depth {
+                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
+                        }
+
+                        if depth_attachment.has_stencil {
+                            attachment.stencil_load_op = vk::AttachmentLoadOp::LOAD;
+                        }
+                    }
 
                     attachment.format = specification.format;
                     attachment.samples = specification.samples;
@@ -1083,10 +1183,18 @@ fn build_physical_passes(
 #[derive(Debug)]
 struct AssignPhysicalImagesResult {
     usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
+    usage_to_image_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
+    image_views: Vec<RenderGraphImageView>, // indexed by physical image view id
     virtual_to_physical: FnvHashMap<VirtualImageId, PhysicalImageId>,
-    specifications: Vec<RenderGraphImageSpecification>,
+    specifications: Vec<RenderGraphImageSpecification>, // indexed by physical image id
 }
 
+//
+// This function walks through all the passes and creates a minimal list of images, potentially
+// reusing an image for multiple purposes during the execution of the graph. (Only if the lifetime
+// of those usages don't overlap!) For example, if we do a series of blurs, we can collapse those
+// image usages into ping-ponging back and forth between two images.
+//
 #[profiling::function]
 fn assign_physical_images(
     graph: &RenderGraphBuilder,
@@ -1102,6 +1210,10 @@ fn assign_physical_images(
         last_node_pass_index: usize,
     }
 
+    //
+    // This inner function is responsible for populating reuse_requirements and
+    // reuse_requirements_lookup. The goal here is to determine the lifetimes of all virtual images
+    //
     fn add_or_modify_reuse_image_requirements(
         virtual_images: &AssignVirtualImagesResult,
         image_constraints: &DetermineImageConstraintsResult,
@@ -1139,6 +1251,9 @@ fn assign_physical_images(
     let mut reuse_requirements = Vec::<PhysicalImageReuseRequirements>::default();
     let mut reuse_requirements_lookup = FnvHashMap::<VirtualImageId, usize>::default();
 
+    //
+    // Walk through all image usages to determine their lifetimes
+    //
     for (pass_index, pass) in passes.iter().enumerate() {
         for subpass in &pass.subpasses {
             let node = graph.node(subpass.node);
@@ -1160,6 +1275,9 @@ fn assign_physical_images(
                     &mut reuse_requirements,
                     &mut reuse_requirements_lookup,
                 );
+
+                // the subresource is on the usage..
+                //modify.input
             }
 
             for read in &node.image_reads {
@@ -1183,6 +1301,17 @@ fn assign_physical_images(
                     &mut reuse_requirements_lookup,
                 );
             }
+
+            for sample in &node.sampled_images {
+                add_or_modify_reuse_image_requirements(
+                    virtual_images,
+                    image_constraints,
+                    pass_index,
+                    *sample,
+                    &mut reuse_requirements,
+                    &mut reuse_requirements_lookup,
+                );
+            }
         }
     }
 
@@ -1199,7 +1328,9 @@ fn assign_physical_images(
     let mut physical_images = Vec::<PhysicalImage>::default();
     let mut virtual_to_physical = FnvHashMap::<VirtualImageId, PhysicalImageId>::default();
 
+    //
     // First allocate physical IDs for all output images
+    //
     for output_image in &graph.output_images {
         let physical_image_id = PhysicalImageId(physical_images.len());
         physical_images.push(PhysicalImage {
@@ -1210,6 +1341,7 @@ fn assign_physical_images(
 
         let virtual_id = virtual_images.usage_to_virtual[&output_image.usage];
         let old = virtual_to_physical.insert(virtual_id, physical_image_id);
+        assert!(old.is_none());
         log::trace!(
             "  Output Image {:?} -> {:?} Used in passes [{}:{}]",
             virtual_id,
@@ -1217,10 +1349,15 @@ fn assign_physical_images(
             0,
             passes.len() - 1
         );
-        assert!(old.is_none());
     }
 
-    // Images are sorted by first usage (because we register them in order of the passes that first use them)
+    //
+    // Determine the minimal set of physical images needed to represent all our virtual images,
+    // given that virtual images can use the same physical image if their lifetimes don't overlap
+    //
+    // Images are sorted by first usage (because we register them in order of the passes that first
+    // use them)
+    //
     for reuse_requirements in &reuse_requirements {
         if virtual_to_physical.contains_key(&reuse_requirements.virtual_id) {
             // May already have been registered by output image
@@ -1273,30 +1410,118 @@ fn assign_physical_images(
         virtual_to_physical.insert(reuse_requirements.virtual_id, physical_image_id);
     }
 
-    let mut map_image_to_physical = FnvHashMap::default();
+    //
+    // Create a lookup to get physical image from usage
+    //
+    let mut usage_to_physical = FnvHashMap::default();
     for (&usage, virtual_image) in &virtual_images.usage_to_virtual {
         //TODO: This was breaking in a test because an output image had no usage flags and we
         // never assigned the output image a physical ID since it wasn't in a pass
-        map_image_to_physical.insert(usage, virtual_to_physical[virtual_image]);
+        usage_to_physical.insert(usage, virtual_to_physical[virtual_image]);
     }
 
+    //
+    // Create a list of all images that need to be created
+    //
     let physical_image_specifications: Vec<_> = physical_images
         .into_iter()
         .map(|x| x.specification)
         .collect();
 
+    // Temporary to build image view list/lookup
+    let mut image_subresource_to_view = FnvHashMap::default();
+
+    // Create a list of all views needed for the graph and associating the usage with the view
+    let mut image_views = Vec::default();
+    let mut usage_to_image_view = FnvHashMap::default();
+
+    //
+    // Create a list and lookup for all image views that are needed for the graph
+    //
+    for (&usage, &physical_image) in &usage_to_physical {
+        let subresource_range = get_subresource_range_of_usage(graph, image_constraints, usage);
+        let image_view = RenderGraphImageView {
+            physical_image,
+            subresource_range
+        };
+
+        // Get the ID that matches the view, or insert a new view, generating a new ID
+        let image_view_id = *image_subresource_to_view.entry(image_view.clone()).or_insert_with(|| {
+            let image_view_id = PhysicalImageViewId(image_views.len());
+            image_views.push(image_view);
+            image_view_id
+        });
+
+        let old = usage_to_image_view.insert(usage, image_view_id);
+        assert!(old.is_none());
+    }
+
     for pass in passes {
         for attachment in &mut pass.attachments {
-            attachment.image = Some(virtual_to_physical[&attachment.virtual_image]);
+            let physical_image = virtual_to_physical[&attachment.virtual_image];
+            let image_view_id = usage_to_image_view[&attachment.usage];
+            // let image_view = ima
+            // let image_subresource_to_view
+            //
+            // // This is the image view we need to use with this attachment
+            // let image_view = RenderGraphImageView {
+            //     physical_image,
+            //     subresource_range: attachment.subresource_range.clone()
+            // };
+            //
+            // // Get the ID that matches the view, or insert a new view, generating a new ID
+            // let image_view_id = *image_subresource_to_view.entry(image_view.clone()).or_insert_with(|| {
+            //     let image_view_id = PhysicalImageViewId(image_views.len());
+            //     image_views.push(image_view);
+            //     image_view_id
+            // });
+
+
+            attachment.image = Some(physical_image);
+            attachment.image_view = Some(image_view_id);
         }
     }
 
+    //TODO: Handle views for sampled images?
+
+
+    struct PhysicalImageView {
+        subresource_range: dsc::ImageSubresourceRange
+    }
+    let mut physical_image_views = Vec::<PhysicalImageView>::default();
+
     AssignPhysicalImagesResult {
         virtual_to_physical,
-        usage_to_physical: map_image_to_physical,
+        usage_to_physical,
+        usage_to_image_view,
+        image_views,
         specifications: physical_image_specifications,
     }
 }
+
+// #[profiling::function]
+// fn assign_image_views(
+//     graph: &RenderGraphBuilder,
+//     image_constraints: &DetermineImageConstraintsResult,
+//     virtual_images: &AssignVirtualImagesResult,
+//     physical_images: &AssignPhysicalImagesResult,
+//     passes: &mut [RenderGraphPass],
+// ) -> AssignPhysicalImagesResult {
+//
+//     for modify in &node.image_modifies {
+//         // does this need a view?
+//     }
+//
+//     for (pass_index, pass) in passes.iter().enumerate() {
+//         for subpass in &pass.subpasses {
+//             let node = graph.node(subpass.node);
+//
+//             for read in &node.image_reads {
+//                 //read.image
+//             }
+//         }
+//     }
+// }
 
 #[profiling::function]
 fn build_node_barriers(
@@ -1447,10 +1672,11 @@ fn build_node_barriers(
     barriers
 }
 
-// * At this point we know format, samples, load_op, stencil_load_op, and initial_layout. We also
-//   know what needs to be flushed/invalidated
-// * We want to determine store_op, stencil_store_op, final_layout. And the validates/flushes
-//   we actually need to insert
+// * At this point we know images/image views, format, samples, load/store ops. We also know what
+//   needs to be flushed/invalidated
+// * We want to determine layouts and the validates/flushes we actually need to insert. Essentially
+//   we simulate executing the graph in sequence and keep up with what's been invalidated/flushed,
+//   and what layouts images are in when the respective node is run.
 #[profiling::function]
 fn build_pass_barriers(
     graph: &RenderGraphBuilder,
@@ -1923,7 +2149,7 @@ fn create_output_passes(
         let attachment_images = pass
             .attachments
             .iter()
-            .map(|attachment| attachment.image.unwrap())
+            .map(|attachment| attachment.image_view.unwrap())
             .collect();
         let clear_values = pass
             .attachments
@@ -2067,7 +2293,7 @@ fn verify_unculled_image_usages_specifications_exist(
 
 #[allow(dead_code)]
 fn print_final_images(
-    output_images: &FnvHashMap<PhysicalImageId, RenderGraphPlanOutputImage>,
+    output_images: &FnvHashMap<PhysicalImageViewId, RenderGraphPlanOutputImage>,
     intermediate_images: &FnvHashMap<PhysicalImageId, RenderGraphImageSpecification>,
 ) {
     log::trace!("-- IMAGES --");
@@ -2193,10 +2419,12 @@ pub struct RenderGraphPlanOutputImage {
 #[derive(Debug)]
 pub struct RenderGraphPlan {
     pub passes: Vec<RenderGraphOutputPass>,
-    pub output_images: FnvHashMap<PhysicalImageId, RenderGraphPlanOutputImage>,
+    pub output_images: FnvHashMap<PhysicalImageViewId, RenderGraphPlanOutputImage>,
     pub intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification>,
+    pub image_views: Vec<RenderGraphImageView>, // index by physical image view id
     pub node_to_renderpass_index: FnvHashMap<RenderGraphNodeId, usize>,
     pub image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
+    pub image_usage_to_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
 }
 
 impl RenderGraphPlan {
@@ -2363,19 +2591,22 @@ impl RenderGraphPlan {
         // Separate the output images from the intermediate images (the rendergraph will be
         // responsible for allocating the intermediate images)
         //
-        let mut output_images: FnvHashMap<PhysicalImageId, RenderGraphPlanOutputImage> =
+        let mut output_images: FnvHashMap<PhysicalImageViewId, RenderGraphPlanOutputImage> =
             Default::default();
+        let mut output_image_physical_ids = FnvHashSet::default();
         for output_image in &graph.output_images {
-            let output_image_physical_id =
-                assign_physical_images_result.usage_to_physical[&output_image.usage];
+            let output_image_view =
+                assign_physical_images_result.usage_to_image_view[&output_image.usage];
 
             output_images.insert(
-                output_image_physical_id,
+                output_image_view,
                 RenderGraphPlanOutputImage {
                     output_id: output_image.output_image_id,
                     dst_image: output_image.dst_image.clone(),
                 },
             );
+
+            output_image_physical_ids.insert(assign_physical_images_result.image_views[output_image_view.0].physical_image);
         }
 
         let mut intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification> =
@@ -2386,7 +2617,7 @@ impl RenderGraphPlan {
             .enumerate()
         {
             let physical_image = PhysicalImageId(index);
-            if output_images.contains_key(&physical_image) {
+            if output_image_physical_ids.contains(&physical_image) {
                 continue;
             }
 
@@ -2423,8 +2654,10 @@ impl RenderGraphPlan {
             passes: renderpasses,
             output_images,
             intermediate_images,
+            image_views: assign_physical_images_result.image_views,
             node_to_renderpass_index,
             image_usage_to_physical: assign_physical_images_result.usage_to_physical,
+            image_usage_to_view: assign_physical_images_result.usage_to_image_view,
         }
     }
 }

@@ -5,8 +5,8 @@ use crate::graph::{RenderGraphBuilder, RenderGraphImageSpecification, RenderGrap
 use crate::resources::FramebufferResource;
 use crate::resources::RenderPassResource;
 use crate::resources::ResourceLookupSet;
-use crate::vk_description as dsc;
-use crate::vk_description::{ImageAspectFlags, SwapchainSurfaceInfo};
+use crate::{vk_description as dsc, ImageResource};
+use crate::vk_description::{SwapchainSurfaceInfo};
 use crate::{ImageViewResource, ResourceArc, ResourceContext};
 use ash::prelude::VkResult;
 use ash::version::DeviceV1_0;
@@ -16,6 +16,7 @@ use rafx_nodes::{RenderPhase, RenderPhaseIndex};
 use rafx_shell_vulkan::{VkDeviceContext, VkImage};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
+use crate::graph::graph_image::PhysicalImageViewId;
 
 pub struct ResourceCache<T: Eq + Hash> {
     resources: FnvHashMap<T, u64>,
@@ -58,7 +59,7 @@ struct RenderGraphCachedImageKey {
 
 struct RenderGraphCachedImage {
     keep_until_frame: u64,
-    image_view: ResourceArc<ImageViewResource>,
+    image: ResourceArc<ImageResource>,
 }
 
 pub struct RenderGraphCacheInner {
@@ -107,16 +108,9 @@ impl RenderGraphCacheInner {
         graph: &RenderGraphPlan,
         resources: &ResourceLookupSet,
         swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
-    ) -> VkResult<FnvHashMap<PhysicalImageId, ResourceArc<ImageViewResource>>> {
+    ) -> VkResult<FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>> {
         log::trace!("Allocate images for rendergraph");
-        let mut image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageViewResource>> =
-            Default::default();
-
-        // For output images, the physical id just needs to be associated with the iamge provided by
-        // the user
-        for (id, image) in &graph.output_images {
-            image_resources.insert(*id, image.dst_image.clone());
-        }
+        let mut image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>> = Default::default();
 
         // Keeps track of what index in the cache we will use next. This starts at 0 for each key
         // and increments every time we use an image. If the next image is >= length of images, we
@@ -129,6 +123,8 @@ impl RenderGraphCacheInner {
         // Iterate all intermediate images, assigning an existing image from a previous frame or
         // allocating a new one
         for (id, specification) in &graph.intermediate_images {
+            let id = graph.image_views[id.0].physical_image;
+
             let key = RenderGraphCachedImageKey {
                 specification: specification.clone(),
                 swapchain_surface_info: swapchain_surface_info.clone(),
@@ -144,7 +140,7 @@ impl RenderGraphCacheInner {
                 log::trace!(
                     "  Image {:?} - REUSE {:?}  (key: {:?}, index: {})",
                     id,
-                    cached_image.image_view.get_raw().image_view,
+                    cached_image.image.get_raw().image,
                     key,
                     next_image_index
                 );
@@ -153,15 +149,30 @@ impl RenderGraphCacheInner {
                 cached_image.keep_until_frame = keep_until_frame;
                 *next_image_index += 1;
 
-                image_resources.insert(*id, cached_image.image_view.clone());
+                image_resources.insert(id, cached_image.image.clone());
             } else {
                 // No unused image available, create one
-                let image_view =
-                    RenderGraphCacheInner::create_image_for_key(device_context, resources, &key)?;
+                let image = VkImage::new(
+                    device_context,
+                    rafx_shell_vulkan::vk_mem::MemoryUsage::GpuOnly,
+                    key.specification.usage_flags,
+                    vk::Extent3D {
+                        width: key.swapchain_surface_info.extents.width,
+                        height: key.swapchain_surface_info.extents.height,
+                        depth: 1,
+                    },
+                    key.specification.format,
+                    vk::ImageTiling::OPTIMAL,
+                    key.specification.samples,
+                    1,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )?;
+                let image = resources.insert_image(image);
+
                 log::trace!(
                     "  Image {:?} - CREATE {:?}  (key: {:?}, index: {})",
                     id,
-                    image_view.get_raw().image_view,
+                    image.get_raw().image,
                     key,
                     next_image_index
                 );
@@ -170,55 +181,57 @@ impl RenderGraphCacheInner {
                 debug_assert_eq!(matching_cached_images.len(), *next_image_index);
                 matching_cached_images.push(RenderGraphCachedImage {
                     keep_until_frame,
-                    image_view: image_view.clone(),
+                    image: image.clone(),
                 });
                 *next_image_index += 1;
 
                 // Associate the physical id with this image
-                image_resources.insert(*id, image_view);
+                image_resources.insert(id, image);
             }
         }
 
         Ok(image_resources)
     }
 
-    fn create_image_for_key(
-        device_context: &VkDeviceContext,
+    fn allocate_image_views(
+        &mut self,
+        graph: &RenderGraphPlan,
         resources: &ResourceLookupSet,
-        key: &RenderGraphCachedImageKey,
-    ) -> VkResult<ResourceArc<ImageViewResource>> {
-        let image = VkImage::new(
-            device_context,
-            rafx_shell_vulkan::vk_mem::MemoryUsage::GpuOnly,
-            key.specification.usage_flags,
-            vk::Extent3D {
-                width: key.swapchain_surface_info.extents.width,
-                height: key.swapchain_surface_info.extents.height,
-                depth: 1,
-            },
-            key.specification.format,
-            vk::ImageTiling::OPTIMAL,
-            key.specification.samples,
-            1,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        )?;
-        let image_resource = resources.insert_image(image);
-        let subresource_range = dsc::ImageSubresourceRange {
-            aspect_mask: ImageAspectFlags::from_bits(key.specification.aspect_flags.as_raw())
-                .unwrap(),
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
-        let image_view_meta = dsc::ImageViewMeta {
-            format: key.specification.format.into(),
-            components: Default::default(),
-            subresource_range,
-            view_type: dsc::ImageViewType::Type2D,
-        };
+        swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
+        image_resources: &FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>,
+    ) -> VkResult<FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>> {
+        let mut image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>> =
+           Default::default();
 
-        resources.get_or_create_image_view(&image_resource, &image_view_meta)
+        // For output images, the physical id just needs to be associated with the iamge provided by
+        // the user
+        for (id, image) in &graph.output_images {
+           image_view_resources.insert(*id, image.dst_image.clone());
+        }
+
+        for (id, view) in graph.image_views.iter().enumerate() {
+            let id = PhysicalImageViewId(id);
+
+            // Skip output images (handled above). They already have ImageViewResources
+            if image_view_resources.contains_key(&id) {
+                continue;
+            }
+
+            let specification = &graph.intermediate_images[&view.physical_image];
+            let image_view_meta = dsc::ImageViewMeta {
+                format: specification.format.into(),
+                components: Default::default(),
+                subresource_range: view.subresource_range.clone(),
+                view_type: dsc::ImageViewType::Type2D,
+            };
+
+            let image_resource = &image_resources[&view.physical_image];
+
+            let old = image_view_resources.insert(id, resources.get_or_create_image_view(image_resource, &image_view_meta)?);
+            assert!(old.is_none());
+        }
+
+        Ok(image_view_resources)
     }
 
     fn allocate_render_passes(
@@ -252,7 +265,7 @@ impl RenderGraphCacheInner {
         graph: &RenderGraphPlan,
         resources: &ResourceLookupSet,
         swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
-        image_resources: &FnvHashMap<PhysicalImageId, ResourceArc<ImageViewResource>>,
+        image_resources: &FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>,
         render_pass_resources: &Vec<ResourceArc<RenderPassResource>>,
     ) -> VkResult<Vec<ResourceArc<FramebufferResource>>> {
         log::trace!("Allocate framebuffers for rendergraph");
@@ -322,11 +335,11 @@ pub struct RenderGraphContext<'a> {
 }
 
 impl<'a> RenderGraphContext<'a> {
-    pub fn image(
+    pub fn image_view(
         &self,
         image: RenderGraphImageUsageId,
     ) -> Option<ResourceArc<ImageViewResource>> {
-        self.prepared_graph.image(image)
+        self.prepared_graph.image_view(image)
     }
 
     pub fn device_context(&self) -> &VkDeviceContext {
@@ -349,7 +362,8 @@ pub struct VisitRenderpassArgs<'a> {
 pub struct PreparedRenderGraph {
     device_context: VkDeviceContext,
     resource_context: ResourceContext,
-    image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageViewResource>>,
+    image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>,
+    image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>,
     render_pass_resources: Vec<ResourceArc<RenderPassResource>>,
     framebuffer_resources: Vec<ResourceArc<FramebufferResource>>,
     graph_plan: RenderGraphPlan,
@@ -376,6 +390,13 @@ impl PreparedRenderGraph {
             swapchain_surface_info,
         )?;
 
+        let image_view_resources = cache.allocate_image_views(
+            &graph_plan,
+            resources,
+            swapchain_surface_info,
+            &image_resources,
+        )?;
+
         let render_pass_resources =
             cache.allocate_render_passes(&graph_plan, resources, swapchain_surface_info)?;
 
@@ -383,7 +404,7 @@ impl PreparedRenderGraph {
             &graph_plan,
             resources,
             swapchain_surface_info,
-            &image_resources,
+            &image_view_resources,
             &render_pass_resources,
         )?;
 
@@ -391,6 +412,7 @@ impl PreparedRenderGraph {
             device_context: device_context.clone(),
             resource_context: resource_context.clone(),
             image_resources,
+            image_view_resources,
             render_pass_resources,
             framebuffer_resources,
             graph_plan,
@@ -398,12 +420,12 @@ impl PreparedRenderGraph {
         })
     }
 
-    fn image(
+    fn image_view(
         &self,
         image: RenderGraphImageUsageId,
     ) -> Option<ResourceArc<ImageViewResource>> {
-        let physical_image = self.graph_plan.image_usage_to_physical.get(&image)?;
-        self.image_resources.get(&physical_image).cloned()
+        let physical_image = self.graph_plan.image_usage_to_view.get(&image)?;
+        self.image_view_resources.get(&physical_image).cloned()
     }
 
     pub fn execute_graph(
@@ -644,6 +666,10 @@ impl<T> RenderGraphExecutor<T> {
             graph,
             swapchain_surface_info,
         )?;
+
+        for (id, image) in &prepared_graph.graph_plan.image_usage_to_physical {
+            println!("Have image {:?} {:?}", id, image);
+        }
 
         //
         // Pre-warm caches for pipelines that we may need

@@ -14,6 +14,10 @@ pub struct VirtualImageId(pub(super) usize);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PhysicalImageId(pub(super) usize);
 
+/// An ID for an image view allocation (possibly reused)
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PhysicalImageViewId(pub(super) usize);
+
 /// Unique ID provided for any image registered as an output image
 #[derive(Debug, Copy, Clone)]
 pub struct RenderGraphOutputImageId(pub(super) usize);
@@ -43,6 +47,12 @@ impl RenderGraphImageResource {
             versions: Default::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RenderGraphImageView {
+    pub(super) physical_image: PhysicalImageId,
+    pub(super) subresource_range: dsc::ImageSubresourceRange
 }
 
 /// Defines what created a RenderGraphImageUsage

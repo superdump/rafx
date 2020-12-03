@@ -13,6 +13,9 @@ use rafx::vulkan::SwapchainInfo;
 use crate::features::mesh::ShadowMapRenderView;
 use arrayvec::ArrayVec;
 
+//TODO: Add support for clearing when using modify
+//TODO: Add support for creating views for the subresource ranged calls
+
 lazy_static::lazy_static! {
     pub static ref EMPTY_VERTEX_LAYOUT : VertexDataSetLayout = {
         VertexDataSetLayout::new(vec![])
@@ -79,7 +82,8 @@ fn shadow_map_pass(
 
 enum ShadowMapImageResources {
     Single(RenderGraphImageUsageId),
-    Cube([RenderGraphImageUsageId; 6])
+    // The cubemap, and the 6 faces of the cube
+    Cube(RenderGraphImageUsageId, [RenderGraphImageUsageId; 6])
 }
 
 pub fn build_render_graph(
@@ -139,7 +143,7 @@ pub fn build_render_graph(
             },
             ShadowMapRenderView::Cube(render_view) => {
                 let cube_map_node = graph.add_node("create cube shadowmap", RenderGraphQueue::DefaultGraphics);
-                let depth = graph.add_image(
+                let cube_map_image = graph.add_image(
                     cube_map_node,
                     RenderGraphImageConstraint {
                         format: Some(depth_format),
@@ -148,17 +152,14 @@ pub fn build_render_graph(
                         ..Default::default()
                     },
                 );
-                println!("add_image {:?}", depth);
+                println!("add_image {:?}", cube_map_image);
 
                 let mut depth_images = ArrayVec::<[RenderGraphImageUsageId; 6]>::new();
                 for i in 0..6 {
-                    //graph.add_node("shadow pass")
-                    //graph.modify_depth_attachment(cube_map_node, depth, Default::default());
-
-                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], depth, i).depth);
+                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], cube_map_image, i).depth);
                 }
 
-                shadow_map_passes.push(ShadowMapImageResources::Cube(depth_images.into_inner().unwrap()));
+                shadow_map_passes.push(ShadowMapImageResources::Cube(cube_map_image, depth_images.into_inner().unwrap()));
             }
         }
     }
@@ -206,11 +207,12 @@ pub fn build_render_graph(
                     println!("sample {:?}", *image);
                     graph.sample_image(node, *image, Default::default(), None);
                 },
-                ShadowMapImageResources::Cube(images) => {
-                    for image in images {
-                        println!("sample cube {:?}", *image);
-                        graph.sample_image(node, *image, Default::default(), None);
-                    }
+                ShadowMapImageResources::Cube(cube_map_image, cube_face_images) => {
+                    graph.sample_image(node, *cube_map_image, Default::default(), None);
+                    // for image in images {
+                    //     println!("sample cube {:?}", *cube_map_image);
+                    //     graph.sample_image(node, *cube_map_image, Default::default(), None);
+                    // }
                 }
             }
         }
@@ -589,9 +591,12 @@ pub fn build_render_graph(
             ShadowMapImageResources::Single(image) => {
                 shadow_map_image_views.push(executor.image_resource(image).unwrap())
             },
-            ShadowMapImageResources::Cube(images) => {
+            ShadowMapImageResources::Cube(cube_map_image, cube_face_images) => {
                 //TODO: Create a cubemap view
-                shadow_map_image_views.push(executor.image_resource(images[0]).unwrap())
+                println!("Cube image {:?}", cube_map_image);
+                println!("Get image {:?}", cube_face_images[0]);
+                //shadow_map_image_views.push(executor.image_resource(cube_face_images[0]).unwrap())
+                shadow_map_image_views.push(executor.image_resource(cube_map_image).unwrap())
             }
         }
     }

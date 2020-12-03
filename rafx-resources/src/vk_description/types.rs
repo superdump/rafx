@@ -138,6 +138,17 @@ pub enum ImageAspectFlag {
 
 pub type ImageAspectFlags = BitFlags<ImageAspectFlag>;
 
+impl ImageAspectFlag {
+    pub fn from_vk_image_aspect_flags(vk_flags: vk::ImageAspectFlags) -> ImageAspectFlags {
+        let mut flags = ImageAspectFlags::empty();
+        if vk_flags.contains(vk::ImageAspectFlags::COLOR) { flags |= ImageAspectFlag::Color; }
+        if vk_flags.contains(vk::ImageAspectFlags::DEPTH) { flags |= ImageAspectFlag::Depth; }
+        if vk_flags.contains(vk::ImageAspectFlags::STENCIL) { flags |= ImageAspectFlag::Stencil; }
+        if vk_flags.contains(vk::ImageAspectFlags::METADATA) { flags |= ImageAspectFlag::Metadata; }
+        flags
+    }
+}
+
 impl Default for ImageAspectFlag {
     fn default() -> Self {
         ImageAspectFlag::Color
@@ -166,7 +177,7 @@ impl Into<vk::ImageSubresourceRange> for ImageSubresourceRange {
 }
 
 impl ImageSubresourceRange {
-    pub fn default_no_mips_or_layers(aspect_mask: ImageAspectFlags) -> Self {
+    pub fn default_no_mips_no_layers(aspect_mask: ImageAspectFlags) -> Self {
         ImageSubresourceRange {
             aspect_mask,
             base_mip_level: 0,
@@ -176,13 +187,23 @@ impl ImageSubresourceRange {
         }
     }
 
-    pub fn default_no_mips(aspect_mask: ImageAspectFlags, layer: u32) -> Self {
+    pub fn default_no_mips_single_layer(aspect_mask: ImageAspectFlags, layer: u32) -> Self {
         ImageSubresourceRange {
             aspect_mask,
             base_mip_level: 0,
             level_count: 1,
             base_array_layer: layer,
             layer_count: 1,
+        }
+    }
+
+    pub fn default_all_mips_all_layers(aspect_mask: ImageAspectFlags, mip_count: u32, layer_count: u32) -> Self {
+        ImageSubresourceRange {
+            aspect_mask,
+            base_mip_level: 0,
+            level_count: mip_count,
+            base_array_layer: 0,
+            layer_count: layer_count,
         }
     }
 }
@@ -366,7 +387,7 @@ impl ImageViewMeta {
             view_type: ImageViewType::Type2D,
             format,
             components: Default::default(),
-            subresource_range: ImageSubresourceRange::default_no_mips_or_layers(image_aspect_flags),
+            subresource_range: ImageSubresourceRange::default_no_mips_no_layers(image_aspect_flags),
         }
     }
 }
