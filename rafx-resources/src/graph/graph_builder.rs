@@ -85,38 +85,6 @@ impl RenderGraphBuilder {
         usage_id
     }
 
-    pub fn add_image(
-        &mut self,
-        create_node: RenderGraphNodeId,
-        specification: RenderGraphImageConstraint,
-    ) -> RenderGraphImageUsageId {
-        // let version_id = RenderGraphImageVersionId {
-        //     index: self.image_resources.len(),
-        //     version: 0,
-        // };
-        //
-        // self.add_image_usage(
-        //     RenderGraphImageUser::Node(create_node),
-        //     version_id,
-        //     RenderGraphImageUsageType::Create,
-        //     dsc::ImageLayout::Undefined,
-        //     specification.subresource_range.clone(),
-        //     vk::AccessFlags::empty(),
-        //     vk::PipelineStageFlags::empty(),
-        //     vk::ImageAspectFlags::empty(),
-        // )
-
-        self.add_image_create(
-            create_node,
-            specification,
-            dsc::ImageLayout::Undefined,
-            None,
-            vk::AccessFlags::empty(),
-            vk::PipelineStageFlags::empty(),
-            vk::ImageAspectFlags::empty(),
-        )
-    }
-
     // Add an image that can be used by nodes
     pub(super) fn add_image_create(
         &mut self,
@@ -164,6 +132,39 @@ impl RenderGraphBuilder {
         usage_id
     }
 
+    pub fn add_image(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        constraint: RenderGraphImageConstraint,
+    ) -> RenderGraphImageUsageId {
+        // let version_id = RenderGraphImageVersionId {
+        //     index: self.image_resources.len(),
+        //     version: 0,
+        // };
+        //
+        // self.add_image_usage(
+        //     RenderGraphImageUser::Node(create_node),
+        //     version_id,
+        //     RenderGraphImageUsageType::Create,
+        //     dsc::ImageLayout::Undefined,
+        //     specification.subresource_range.clone(),
+        //     vk::AccessFlags::empty(),
+        //     vk::PipelineStageFlags::empty(),
+        //     vk::ImageAspectFlags::empty(),
+        // )
+
+        println!("add image constraint {:?}", constraint);
+        self.add_image_create(
+            create_node,
+            constraint,
+            dsc::ImageLayout::Undefined,
+            None,
+            vk::AccessFlags::empty(),
+            vk::PipelineStageFlags::empty(),
+            vk::ImageAspectFlags::empty(),
+        )
+    }
+
     pub(super) fn add_image_read(
         &mut self,
         read_node: RenderGraphNodeId,
@@ -174,7 +175,7 @@ impl RenderGraphBuilder {
         access_flags: vk::AccessFlags,
         stage_flags: vk::PipelineStageFlags,
         image_aspect_flags: vk::ImageAspectFlags,
-        subresource_range: Option<dsc::ImageSubresourceRange>,
+        _subresource_range: Option<dsc::ImageSubresourceRange>,
     ) -> RenderGraphImageUsageId {
         let version_id = self.image_usages[image.0].version;
 
@@ -320,15 +321,13 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::COLOR;
         constraint.usage_flags |= vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::Color(color_attachment_index);
 
         // Add the read to the graph
         let create_image = self.add_image_create(
             node,
-            //attachment_type,
             constraint,
             dsc::ImageLayout::ColorAttachmentOptimal,
-            None, //dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into()),
+            None,
             vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             vk::ImageAspectFlags::COLOR,
@@ -356,12 +355,10 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let create_image = self.add_image_create(
             node,
-            //attachment_type,
             constraint,
             dsc::ImageLayout::DepthAttachmentOptimal,
             None, //dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Depth.into()),
@@ -394,12 +391,10 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let create_image = self.add_image_create(
             node,
-            //attachment_type,
             constraint,
             dsc::ImageLayout::DepthStencilAttachmentOptimal,
             None, //dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Depth | dsc::ImageAspectFlag::Stencil),
@@ -432,11 +427,9 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::COLOR;
         constraint.usage_flags |= vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::Resolve(resolve_attachment_index);
 
         let create_image = self.add_image_create(
             node,
-            //attachment_type,
             constraint,
             dsc::ImageLayout::ColorAttachmentOptimal,
             None, //dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into()),
@@ -604,7 +597,7 @@ impl RenderGraphBuilder {
             color_attachment_index,
             RenderGraphPassColorAttachmentInfo {
                 attachment_type: RenderGraphPassAttachmentType::Modify,
-                clear_color_value: None,
+                clear_color_value,
                 read_image: Some(read_image),
                 write_image: Some(write_image),
             },
@@ -648,7 +641,7 @@ impl RenderGraphBuilder {
             node,
             RenderGraphPassDepthAttachmentInfo {
                 attachment_type: RenderGraphPassAttachmentType::Modify,
-                clear_depth_stencil_value: None,
+                clear_depth_stencil_value,
                 read_image: Some(read_image),
                 write_image: Some(write_image),
                 has_depth: true,
@@ -694,7 +687,7 @@ impl RenderGraphBuilder {
             node,
             RenderGraphPassDepthAttachmentInfo {
                 attachment_type: RenderGraphPassAttachmentType::Modify,
-                clear_depth_stencil_value: None,
+                clear_depth_stencil_value,
                 read_image: Some(read_image),
                 write_image: Some(write_image),
                 has_depth: true,

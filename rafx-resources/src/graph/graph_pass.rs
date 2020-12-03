@@ -154,6 +154,7 @@ pub struct PrepassImageBarrier {
     pub src_queue_family_index: u32,
     pub dst_queue_family_index: u32,
     pub image: PhysicalImageId,
+    pub subresource_range: dsc::ImageSubresourceRange,
 }
 
 /// Metadata required to create a renderpass

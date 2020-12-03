@@ -89,15 +89,11 @@ pub struct RenderGraphImageSpecification { // Rename to RenderGraphImageUsageSpe
     pub create_flags: vk::ImageCreateFlags,
     pub layer_count: u32,
     pub mip_count: u32,
-    //pub subresource_range: dsc::ImageSubresourceRange,
-    // image type
-    // extents
-    // mip levels
-    // layers
-    // tiling
-    // layout
-    // sharing mode
-
+    // image type - always 2D
+    // extents - always matches the render surface
+    // tiling - always optimal
+    // layout - controlled by graph
+    // sharing mode - always exclusive
 }
 
 impl RenderGraphImageSpecification {
@@ -112,9 +108,6 @@ impl RenderGraphImageSpecification {
         if self.format != other.format {
             return false;
         }
-        // if self.subresource_range != other.subresource_range {
-        //     return false;
-        // }
         if self.mip_count != other.mip_count {
             return false;
         }
@@ -152,7 +145,6 @@ pub struct RenderGraphImageConstraint { // Rename to RenderGraphImageUsageConstr
     pub usage_flags: vk::ImageUsageFlags,
     pub create_flags: vk::ImageCreateFlags,
     //pub dimensions: vk::ImageSubresource
-    //pub subresource_range: Option<dsc::ImageSubresourceRange>,
     pub layer_count: Option<u32>,
     pub mip_count: Option<u32>,
 }
@@ -162,11 +154,11 @@ impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
         RenderGraphImageConstraint {
             samples: Some(specification.samples),
             format: Some(specification.format),
+            layer_count: Some(specification.layer_count),
+            mip_count: Some(specification.mip_count),
             aspect_flags: specification.aspect_flags,
             usage_flags: specification.usage_flags,
             create_flags: specification.create_flags,
-            layer_count: Some(specification.layer_count),
-            mip_count: Some(specification.mip_count),
         }
     }
 }
@@ -179,12 +171,11 @@ impl RenderGraphImageConstraint {
             Some(RenderGraphImageSpecification {
                 samples: self.samples.unwrap_or(vk::SampleCountFlags::TYPE_1),
                 format: self.format.unwrap(),
+                layer_count: self.layer_count.unwrap_or(1),
+                mip_count: self.mip_count.unwrap_or(1),
                 aspect_flags: self.aspect_flags,
                 usage_flags: self.usage_flags,
                 create_flags: self.create_flags,
-                //subresource_range: self.subresource_range.unwrap(),
-                layer_count: self.layer_count.unwrap_or(1),
-                mip_count: self.mip_count.unwrap_or(1),
             })
         }
     }
@@ -200,6 +191,12 @@ impl RenderGraphImageConstraint {
             return false;
         }
         if self.format.is_some() && other.format.is_some() && self.format != other.format {
+            return false;
+        }
+        if self.layer_count.is_some() && other.layer_count.is_some() && self.layer_count != other.layer_count {
+            return false;
+        }
+        if self.mip_count.is_some() && other.mip_count.is_some() && self.mip_count != other.mip_count {
             return false;
         }
 
@@ -221,6 +218,12 @@ impl RenderGraphImageConstraint {
         }
         if self.format.is_none() && other.format.is_some() {
             self.format = other.format;
+        }
+        if self.layer_count.is_none() && other.layer_count.is_some() {
+            self.layer_count = other.layer_count;
+        }
+        if self.mip_count.is_none() && other.mip_count.is_some() {
+            self.mip_count = other.mip_count;
         }
 
         self.aspect_flags |= other.aspect_flags;
@@ -248,6 +251,18 @@ impl RenderGraphImageConstraint {
             complete_merge = false;
         } else if other.format.is_some() {
             self.format = other.format;
+        }
+
+        if self.layer_count.is_some() && other.layer_count.is_some() && self.layer_count != other.layer_count {
+            complete_merge = false;
+        } else if other.layer_count.is_some() {
+            self.layer_count = other.layer_count;
+        }
+
+        if self.mip_count.is_some() && other.mip_count.is_some() && self.mip_count != other.mip_count {
+            complete_merge = false;
+        } else if other.mip_count.is_some() {
+            self.mip_count = other.mip_count;
         }
 
         self.aspect_flags |= other.aspect_flags;
@@ -278,6 +293,7 @@ pub enum RenderGraphImageUsageType {
 }
 
 impl RenderGraphImageUsageType {
+    //TODO: Add support to see if multiple writes actually overlap
     pub fn is_read_only(&self) -> bool {
         match self {
             RenderGraphImageUsageType::Read => true,

@@ -122,9 +122,7 @@ impl RenderGraphCacheInner {
 
         // Iterate all intermediate images, assigning an existing image from a previous frame or
         // allocating a new one
-        for (id, specification) in &graph.intermediate_images {
-            let id = graph.image_views[id.0].physical_image;
-
+        for (&id, specification) in &graph.intermediate_images {
             let key = RenderGraphCachedImageKey {
                 specification: specification.clone(),
                 swapchain_surface_info: swapchain_surface_info.clone(),
@@ -164,6 +162,7 @@ impl RenderGraphCacheInner {
                     key.specification.format,
                     vk::ImageTiling::OPTIMAL,
                     key.specification.samples,
+                    specification.layer_count,
                     1,
                     vk::MemoryPropertyFlags::DEVICE_LOCAL,
                 )?;
@@ -197,7 +196,6 @@ impl RenderGraphCacheInner {
         &mut self,
         graph: &RenderGraphPlan,
         resources: &ResourceLookupSet,
-        swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
         image_resources: &FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>,
     ) -> VkResult<FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>> {
         let mut image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>> =
@@ -225,6 +223,7 @@ impl RenderGraphCacheInner {
                 view_type: dsc::ImageViewType::Type2D,
             };
 
+            log::trace!("get_or_create_image_view for {:?}", view.physical_image);
             let image_resource = &image_resources[&view.physical_image];
 
             let old = image_view_resources.insert(id, resources.get_or_create_image_view(image_resource, &image_view_meta)?);
@@ -393,7 +392,6 @@ impl PreparedRenderGraph {
         let image_view_resources = cache.allocate_image_views(
             &graph_plan,
             resources,
-            swapchain_surface_info,
             &image_resources,
         )?;
 
@@ -483,13 +481,8 @@ impl PreparedRenderGraph {
                         Vec::with_capacity(pre_pass_barrier.image_barriers.len());
 
                     for image_barrier in &pre_pass_barrier.image_barriers {
-                        let image_view = &self.image_resources[&image_barrier.image];
-
-                        let subresource_range = image_view
-                            .get_raw()
-                            .image_view_meta
-                            .subresource_range
-                            .into();
+                        let image = &self.image_resources[&image_barrier.image];
+                        let subresource_range = image_barrier.subresource_range.clone().into();
 
                         let image_memory_barrier = vk::ImageMemoryBarrier::builder()
                             .src_access_mask(image_barrier.src_access)
@@ -498,7 +491,7 @@ impl PreparedRenderGraph {
                             .new_layout(image_barrier.new_layout)
                             .src_queue_family_index(image_barrier.src_queue_family_index)
                             .dst_queue_family_index(image_barrier.dst_queue_family_index)
-                            .image(image_view.get_raw().image.get_raw().image.image)
+                            .image(image.get_raw().image.image)
                             .subresource_range(subresource_range)
                             .build();
 
@@ -720,13 +713,25 @@ impl<T> RenderGraphExecutor<T> {
     pub fn image_resource(
         &self,
         image_usage: RenderGraphImageUsageId,
-    ) -> Option<ResourceArc<ImageViewResource>> {
+    ) -> Option<ResourceArc<ImageResource>> {
         let image = self
             .prepared_graph
             .graph_plan
             .image_usage_to_physical
             .get(&image_usage)?;
         Some(self.prepared_graph.image_resources[image].clone())
+    }
+
+    pub fn image_view_resource(
+        &self,
+        image_usage: RenderGraphImageUsageId,
+    ) -> Option<ResourceArc<ImageViewResource>> {
+        let image = self
+            .prepared_graph
+            .graph_plan
+            .image_usage_to_view
+            .get(&image_usage)?;
+        Some(self.prepared_graph.image_view_resources[image].clone())
     }
 
     /// Executes the graph, passing through the given context parameter

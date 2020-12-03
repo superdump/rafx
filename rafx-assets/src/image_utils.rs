@@ -266,6 +266,7 @@ pub fn enqueue_load_images(
             format,
             vk::ImageTiling::OPTIMAL,
             vk::SampleCountFlags::TYPE_1,
+            1,
             mip_level_count,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?);

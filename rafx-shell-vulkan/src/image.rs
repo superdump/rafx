@@ -42,6 +42,7 @@ impl VkImage {
         format: vk::Format,
         tiling: vk::ImageTiling,
         samples: vk::SampleCountFlags,
+        layer_count: u32,
         mip_level_count: u32,
         required_property_flags: vk::MemoryPropertyFlags,
     ) -> VkResult<Self> {
@@ -59,7 +60,7 @@ impl VkImage {
             .image_type(vk::ImageType::TYPE_2D)
             .extent(extent)
             .mip_levels(mip_level_count)
-            .array_layers(1)
+            .array_layers(layer_count)
             .format(format)
             .tiling(tiling)
             .initial_layout(vk::ImageLayout::UNDEFINED)
@@ -112,15 +113,15 @@ impl VkImage {
 
 impl Drop for VkImage {
     fn drop(&mut self) {
-        log::trace!("destroying VkImage");
-
         if let Some(raw) = &self.raw {
+            log::trace!("destroying VkImage");
             self.device_context
                 .allocator()
                 .destroy_image(raw.image, &raw.allocation.unwrap())
                 .unwrap();
+            log::trace!("destroyed VkImage");
+        } else {
+            log::trace!("Empty VkImage dropped (take_raw() was called - resource belongs to something else)");
         }
-
-        log::trace!("destroyed VkImage");
     }
 }

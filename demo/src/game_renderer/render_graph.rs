@@ -56,7 +56,7 @@ fn shadow_map_pass(
             stencil: 0,
         }),
         RenderGraphImageConstraint::default(),
-        Some(dsc::ImageSubresourceRange::default_no_mips(dsc::ImageAspectFlag::Depth.into(), layer as u32)),
+        Some(dsc::ImageSubresourceRange::default_no_mips_single_layer(dsc::ImageAspectFlag::Depth.into(), layer as u32)),
     );
     println!("shadow_map_pass modify {:?} {:?}", depth_image, depth);
     graph.set_image_name(depth, "depth");
@@ -82,8 +82,7 @@ fn shadow_map_pass(
 
 enum ShadowMapImageResources {
     Single(RenderGraphImageUsageId),
-    // The cubemap, and the 6 faces of the cube
-    Cube(RenderGraphImageUsageId, [RenderGraphImageUsageId; 6])
+    Cube(RenderGraphImageUsageId)
 }
 
 pub fn build_render_graph(
@@ -143,7 +142,7 @@ pub fn build_render_graph(
             },
             ShadowMapRenderView::Cube(render_view) => {
                 let cube_map_node = graph.add_node("create cube shadowmap", RenderGraphQueue::DefaultGraphics);
-                let cube_map_image = graph.add_image(
+                let mut cube_map_image = graph.add_image(
                     cube_map_node,
                     RenderGraphImageConstraint {
                         format: Some(depth_format),
@@ -154,12 +153,12 @@ pub fn build_render_graph(
                 );
                 println!("add_image {:?}", cube_map_image);
 
-                let mut depth_images = ArrayVec::<[RenderGraphImageUsageId; 6]>::new();
                 for i in 0..6 {
-                    depth_images.push(shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], cube_map_image, i).depth);
+                    cube_map_image = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], cube_map_image, i).depth;
                 }
 
-                shadow_map_passes.push(ShadowMapImageResources::Cube(cube_map_image, depth_images.into_inner().unwrap()));
+                //
+                shadow_map_passes.push(ShadowMapImageResources::Cube(cube_map_image));
             }
         }
     }
@@ -207,12 +206,10 @@ pub fn build_render_graph(
                     println!("sample {:?}", *image);
                     graph.sample_image(node, *image, Default::default(), None);
                 },
-                ShadowMapImageResources::Cube(cube_map_image, cube_face_images) => {
+                ShadowMapImageResources::Cube(cube_map_image) => {
+                    //graph.sample_image(node, *cube_map_image, Default::default(), None);
+                    println!("sample cube {:?}", *cube_map_image);
                     graph.sample_image(node, *cube_map_image, Default::default(), None);
-                    // for image in images {
-                    //     println!("sample cube {:?}", *cube_map_image);
-                    //     graph.sample_image(node, *cube_map_image, Default::default(), None);
-                    // }
                 }
             }
         }
@@ -275,7 +272,7 @@ pub fn build_render_graph(
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
             // Get the color image from before
-            let sample_image = args.graph_context.image(sample_image);
+            let sample_image = args.graph_context.image_view(sample_image);
 
             // Get the pipeline
             let pipeline = args
@@ -366,7 +363,7 @@ pub fn build_render_graph(
             let bloom_blur_material_pass = bloom_blur_material_pass.clone();
             graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
                 // Get the color image from before
-                let sample_image = args.graph_context.image(sample_image);
+                let sample_image = args.graph_context.image_view(sample_image);
 
                 // Get the pipeline
                 let pipeline = args
@@ -462,8 +459,8 @@ pub fn build_render_graph(
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
             // Get the color image from before
-            let sdr_image = args.graph_context.image(sdr_image).unwrap();
-            let hdr_image = args.graph_context.image(hdr_image).unwrap();
+            let sdr_image = args.graph_context.image_view(sdr_image).unwrap();
+            let hdr_image = args.graph_context.image_view(hdr_image).unwrap();
 
             // Get the pipeline
             let pipeline = args
@@ -589,14 +586,13 @@ pub fn build_render_graph(
     for shadow_map_pass in shadow_map_passes {
         match shadow_map_pass {
             ShadowMapImageResources::Single(image) => {
-                shadow_map_image_views.push(executor.image_resource(image).unwrap())
+                shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
             },
-            ShadowMapImageResources::Cube(cube_map_image, cube_face_images) => {
+            ShadowMapImageResources::Cube(cube_map_image) => {
                 //TODO: Create a cubemap view
                 println!("Cube image {:?}", cube_map_image);
-                println!("Get image {:?}", cube_face_images[0]);
                 //shadow_map_image_views.push(executor.image_resource(cube_face_images[0]).unwrap())
-                shadow_map_image_views.push(executor.image_resource(cube_map_image).unwrap())
+                shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
             }
         }
     }

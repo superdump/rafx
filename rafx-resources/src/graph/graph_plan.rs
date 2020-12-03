@@ -267,6 +267,9 @@ fn determine_image_constraints(
 
     log::trace!("  Set up input images");
 
+    //TODO: Not propagating backwards from sampling
+    //TODO: Not propagating forwards from k
+
     //
     // Propagate input image state specifications into images. Inputs are fully specified and
     // their constraints will never be overwritten
@@ -898,8 +901,8 @@ fn get_subresource_range_of_usage(
     image_constraints: &DetermineImageConstraintsResult,
     usage: RenderGraphImageUsageId,
 ) -> dsc::ImageSubresourceRange {
-    graph.image_usages[usage.0].subresource_range.unwrap_or_else(|| {
-        let specification = image_constraints.images[&usage];
+    graph.image_usages[usage.0].subresource_range.clone().unwrap_or_else(|| {
+        let specification = &image_constraints.images[&usage];
         dsc::ImageSubresourceRange::default_all_mips_all_layers(
             dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
             specification.mip_count,
@@ -1169,9 +1172,16 @@ fn build_physical_passes(
                 }
             }
 
-            //TODO: Input attachments
+            //TODO: Need to skip subpasses with no attachments?
+            if subpass.color_attachments.is_empty() && subpass.depth_attachment.is_none() {
+                assert!(subpass.resolve_attachments.is_empty());
+                pass.subpasses.push(subpass);
+            }
+        }
 
-            pass.subpasses.push(subpass);
+        if pass.subpasses.is_empty() {
+            assert!(pass.attachments.is_empty());
+            continue;
         }
 
         passes.push(pass);
@@ -1460,35 +1470,10 @@ fn assign_physical_images(
         for attachment in &mut pass.attachments {
             let physical_image = virtual_to_physical[&attachment.virtual_image];
             let image_view_id = usage_to_image_view[&attachment.usage];
-            // let image_view = ima
-            // let image_subresource_to_view
-            //
-            // // This is the image view we need to use with this attachment
-            // let image_view = RenderGraphImageView {
-            //     physical_image,
-            //     subresource_range: attachment.subresource_range.clone()
-            // };
-            //
-            // // Get the ID that matches the view, or insert a new view, generating a new ID
-            // let image_view_id = *image_subresource_to_view.entry(image_view.clone()).or_insert_with(|| {
-            //     let image_view_id = PhysicalImageViewId(image_views.len());
-            //     image_views.push(image_view);
-            //     image_view_id
-            // });
-
-
             attachment.image = Some(physical_image);
             attachment.image_view = Some(image_view_id);
         }
     }
-
-    //TODO: Handle views for sampled images?
-
-
-    struct PhysicalImageView {
-        subresource_range: dsc::ImageSubresourceRange
-    }
-    let mut physical_image_views = Vec::<PhysicalImageView>::default();
 
     AssignPhysicalImagesResult {
         virtual_to_physical,
@@ -1715,6 +1700,7 @@ fn build_pass_barriers(
     }
 
     //TODO: to support subpass, probably need image states for each previous subpass
+    // TODO: This is coarse-grained over the whole image. Ideally it would be per-layer and per-mip
     let mut image_states: Vec<ImageState> =
         Vec::with_capacity(physical_images.specifications.len());
     image_states.resize_with(physical_images.specifications.len(), || Default::default());
@@ -1756,6 +1742,13 @@ fn build_pass_barriers(
                     use_external_dependency_for_pass_initial_layout_transition = false;
                     break;
                 }
+            }
+
+            struct ImageTransition {
+                physical_image_id: PhysicalImageId,
+                old_layout: vk::ImageLayout,
+                new_layout: vk::ImageLayout,
+                subresource_range: dsc::ImageSubresourceRange,
             }
 
             let mut image_transitions = Vec::default();
@@ -1875,12 +1868,28 @@ fn build_pass_barriers(
                     }
                 }
 
+                let specification = &physical_images.specifications[physical_image_id.0];
+                let subresource_range = dsc::ImageSubresourceRange::default_all_mips_all_layers(
+                    dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
+                    specification.mip_count,
+                    specification.layer_count
+                );
+
                 if layout_change && !use_external_dependency_for_pass_initial_layout_transition {
-                    image_transitions.push((
-                        physical_image_id,
-                        image_state.layout,
-                        image_barrier.layout,
-                    ));
+                    image_transitions.push(ImageTransition {
+                        physical_image_id: *physical_image_id,
+                        old_layout: image_state.layout,
+                        new_layout: image_state.layout,
+                        subresource_range
+                    });
+
+                    // image_transitions.push((
+                    //     physical_image_id,
+                    //     image_state.layout,
+                    //     image_barrier.layout,
+                    //     physical_images,
+                    //     subresource_range,
+                    // ));
                 }
 
                 image_state.layout = image_barrier.layout;
@@ -1969,14 +1978,16 @@ fn build_pass_barriers(
             } else {
                 let image_barriers = image_transitions
                     .into_iter()
-                    .map(|(&image, old_layout, new_layout)| PrepassImageBarrier {
-                        image,
-                        old_layout,
-                        new_layout,
+                    .map(|image_transition| PrepassImageBarrier {
+                        image: image_transition.physical_image_id,
+                        old_layout: image_transition.old_layout,
+                        new_layout: image_transition.new_layout,
                         src_access: invalidate_src_access_flags,
                         dst_access: invalidate_dst_access_flags,
                         src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                         dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                        subresource_range: image_transition.subresource_range.into()
+
                     })
                     .collect();
 
