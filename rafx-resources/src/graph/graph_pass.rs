@@ -4,6 +4,7 @@ use crate::vk_description as dsc;
 use ash::vk;
 use fnv::FnvHashMap;
 use std::sync::Arc;
+use crate::graph::graph_node::RenderGraphNodeName;
 
 /// Represents the invalidate or flush of a RenderGraphPassImageBarriers
 #[derive(Debug)]
@@ -175,6 +176,7 @@ pub struct RenderGraphOutputPass {
     pub(super) clear_values: Vec<vk::ClearValue>,
     pub(super) extents: vk::Extent2D,
     pub(super) pre_pass_barrier: Option<PrepassBarrier>,
+    pub(super) debug_name: Option<RenderGraphNodeName>,
 }
 
 impl std::fmt::Debug for RenderGraphOutputPass {

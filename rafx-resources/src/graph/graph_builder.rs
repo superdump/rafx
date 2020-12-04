@@ -153,7 +153,6 @@ impl RenderGraphBuilder {
         //     vk::ImageAspectFlags::empty(),
         // )
 
-        println!("add image constraint {:?}", constraint);
         self.add_image_create(
             create_node,
             constraint,
@@ -253,7 +252,6 @@ impl RenderGraphBuilder {
         );
 
         let version_info = RenderGraphImageResourceVersionInfo::new(modify_node, write_usage_id);
-        println!("version {:?} - creator node {:?}", version_info, modify_node);
         self.image_resources[read_version_id.index]
             .versions
             .push(version_info);

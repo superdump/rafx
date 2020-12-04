@@ -11,7 +11,6 @@ use rafx::resources::{vk_description as dsc, VertexDataSetLayout};
 use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
 use crate::features::mesh::ShadowMapRenderView;
-use arrayvec::ArrayVec;
 
 //TODO: Add support for clearing when using modify
 //TODO: Add support for creating views for the subresource ranged calls
@@ -41,7 +40,6 @@ struct ShadowMapPass {
 fn shadow_map_pass(
     graph: &mut RenderGraphBuilder,
     graph_callbacks: &mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
-    depth_format: vk::Format,
     render_view: &RenderView,
     depth_image: RenderGraphImageUsageId,
     layer: usize,
@@ -58,14 +56,12 @@ fn shadow_map_pass(
         RenderGraphImageConstraint::default(),
         Some(dsc::ImageSubresourceRange::default_no_mips_single_layer(dsc::ImageAspectFlag::Depth.into(), layer as u32)),
     );
-    println!("shadow_map_pass modify {:?} {:?}", depth_image, depth);
     graph.set_image_name(depth, "depth");
 
     graph_callbacks.add_renderphase_dependency::<ShadowMapRenderPhase>(node);
 
     let render_view = render_view.clone();
     graph_callbacks.set_renderpass_callback(node, move |args, user_context| {
-        println!("shadow map pass");
         let mut write_context =
             RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
         user_context
@@ -113,21 +109,6 @@ pub fn build_render_graph(
         match shadow_map_view {
             ShadowMapRenderView::Single(render_view) => {
                 let shadow_map_node = graph.add_node("create shadowmap", RenderGraphQueue::DefaultGraphics);
-                // let depth = graph.create_depth_attachment(
-                //     node,
-                //     Some(vk::ClearDepthStencilValue {
-                //         depth: 0.0,
-                //         stencil: 0,
-                //     }),
-                //     RenderGraphImageConstraint {
-                //         samples: Some(vk::SampleCountFlags::TYPE_1),
-                //         format: Some(depth_format),
-                //         aspect_flags: vk::ImageAspectFlags::DEPTH,
-                //         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
-                //         ..Default::default()
-                //     },
-                // );
-
                 let depth_image = graph.add_image(
                     shadow_map_node,
                     RenderGraphImageConstraint {
@@ -135,9 +116,8 @@ pub fn build_render_graph(
                         ..Default::default()
                     },
                 );
-                println!("add_image {:?}", depth_image);
 
-                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, render_view, depth_image, 0);
+                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, render_view, depth_image, 0);
                 shadow_map_passes.push(ShadowMapImageResources::Single(shadow_map_pass.depth));
             },
             ShadowMapRenderView::Cube(render_view) => {
@@ -151,10 +131,9 @@ pub fn build_render_graph(
                         ..Default::default()
                     },
                 );
-                println!("add_image {:?}", cube_map_image);
 
                 for i in 0..6 {
-                    cube_map_image = shadow_map_pass(&mut graph, &mut graph_callbacks, depth_format, &render_view[i], cube_map_image, i).depth;
+                    cube_map_image = shadow_map_pass(&mut graph, &mut graph_callbacks, &render_view[i], cube_map_image, i).depth;
                 }
 
                 //
@@ -203,12 +182,9 @@ pub fn build_render_graph(
         for shadow_map_pass in &shadow_map_passes {
             match shadow_map_pass {
                 ShadowMapImageResources::Single(image) => {
-                    println!("sample {:?}", *image);
                     graph.sample_image(node, *image, Default::default(), None);
                 },
                 ShadowMapImageResources::Cube(cube_map_image) => {
-                    //graph.sample_image(node, *cube_map_image, Default::default(), None);
-                    println!("sample cube {:?}", *cube_map_image);
                     graph.sample_image(node, *cube_map_image, Default::default(), None);
                 }
             }
@@ -589,9 +565,6 @@ pub fn build_render_graph(
                 shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
             },
             ShadowMapImageResources::Cube(cube_map_image) => {
-                //TODO: Create a cubemap view
-                println!("Cube image {:?}", cube_map_image);
-                //shadow_map_image_views.push(executor.image_resource(cube_face_images[0]).unwrap())
                 shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
             }
         }

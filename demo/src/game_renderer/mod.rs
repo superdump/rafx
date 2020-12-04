@@ -725,13 +725,14 @@ impl GameRenderer {
         }
 
         #[rustfmt::skip]
-        let cube_map_view_matrices = [
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_x(), glam::Vec3::unit_z()),
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_z()),
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_y(), glam::Vec3::unit_z()),
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_z(), glam::Vec3::unit_y()),
-            glam::Mat4::look_at_rh(glam::Vec3::zero(), glam::Vec3::unit_z() * -1.0, glam::Vec3::unit_y()),
+        // The eye offset and up vector
+        let cube_map_view_directions = [
+            (glam::Vec3::unit_x(), glam::Vec3::unit_z()),
+            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_z()),
+            (glam::Vec3::unit_y(), glam::Vec3::unit_z()),
+            (glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
+            (glam::Vec3::unit_z(), glam::Vec3::unit_y()),
+            (glam::Vec3::unit_z() * -1.0, glam::Vec3::unit_y()),
         ];
 
         let mut query = <(Entity, Read<PointLightComponent>, Read<PositionComponent>)>::query();
@@ -740,9 +741,9 @@ impl GameRenderer {
                 phase_mask: RenderPhaseMask,
                 render_view_set: &RenderViewSet,
                 position: glam::Vec3,
-                view_matrix: &glam::Mat4
+                cube_map_view_directions: &(glam::Vec3, glam::Vec3)
             ) -> RenderView {
-                let view = *view_matrix * glam::Mat4::from_translation(position);
+                let view = glam::Mat4::look_at_rh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
 
                 let proj = perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 100.0, 0.01);
                 let proj = matrix_flip_y(proj);
@@ -756,14 +757,15 @@ impl GameRenderer {
                 )
             }
 
+
             #[rustfmt::skip]
             let cube_map_views = [
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[0]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[1]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[2]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[3]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[4]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_matrices[5]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[0]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[1]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[2]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[3]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[4]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[5]),
             ];
 
             let index = shadow_map_render_views.len();

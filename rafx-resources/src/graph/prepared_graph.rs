@@ -120,6 +120,11 @@ impl RenderGraphCacheInner {
         // Using an image will bump the keep_until_frame for that image
         let keep_until_frame = self.current_frame_index + self.frames_to_persist;
 
+        for (id, image) in &graph.output_images {
+            let physical_id = graph.image_views[id.0].physical_image;
+            image_resources.insert(physical_id, image.dst_image.get_raw().image);
+        }
+
         // Iterate all intermediate images, assigning an existing image from a previous frame or
         // allocating a new one
         for (&id, specification) in &graph.intermediate_images {
@@ -201,7 +206,7 @@ impl RenderGraphCacheInner {
         let mut image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>> =
            Default::default();
 
-        // For output images, the physical id just needs to be associated with the iamge provided by
+        // For output images, the physical id just needs to be associated with the image provided by
         // the user
         for (id, image) in &graph.output_images {
            image_view_resources.insert(*id, image.dst_image.clone());
@@ -461,7 +466,8 @@ impl PreparedRenderGraph {
         // Iterate through all passes
         //
         for (pass_index, pass) in self.graph_plan.passes.iter().enumerate() {
-            profiling::scope!("pass");
+            profiling::scope!("pass", pass.debug_name.unwrap_or("unnamed"));
+            log::trace!("Execute pass name: {:?}", pass.debug_name);
             let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
                 .render_pass(self.render_pass_resources[pass_index].get_raw().renderpass)
                 .framebuffer(self.framebuffer_resources[pass_index].get_raw().framebuffer)
@@ -481,6 +487,7 @@ impl PreparedRenderGraph {
                         Vec::with_capacity(pre_pass_barrier.image_barriers.len());
 
                     for image_barrier in &pre_pass_barrier.image_barriers {
+                        log::trace!("add image barrier for image {:?}", image_barrier.image);
                         let image = &self.image_resources[&image_barrier.image];
                         let subresource_range = image_barrier.subresource_range.clone().into();
 
@@ -659,10 +666,6 @@ impl<T> RenderGraphExecutor<T> {
             graph,
             swapchain_surface_info,
         )?;
-
-        for (id, image) in &prepared_graph.graph_plan.image_usage_to_physical {
-            println!("Have image {:?} {:?}", id, image);
-        }
 
         //
         // Pre-warm caches for pipelines that we may need

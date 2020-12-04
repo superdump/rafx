@@ -179,7 +179,7 @@ pub fn populate_test_lights(
     add_point_light(
         resources,
         world,
-        glam::Vec3::new(-3.0, 3.0, 3.0),
+        glam::Vec3::new(-3.0, 3.0, 13.0),
         PointLightComponent {
             color: [1.0, 1.0, 1.0, 1.0].into(),
             intensity: 130.0,

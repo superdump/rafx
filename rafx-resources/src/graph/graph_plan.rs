@@ -149,7 +149,6 @@ fn visit_node(
 
     for sampled_image in &node.sampled_images {
         let upstream_node = graph.image_version_info(*sampled_image).creator_node;
-        println!("upstream node for image {:?} is {:?}", sampled_image, upstream_node);
         if !merge_candidates.contains(&upstream_node) {
             visit_node(
                 graph,
@@ -1007,14 +1006,21 @@ fn build_physical_passes(
 
         for node_id in pass_node_set {
             log::trace!("    subpass node: {:?}", node_id);
+            let subpass_node = graph.node(node_id);
+
+            // Don't create a subpass if there are no attachments
+            if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none() {
+                assert!(subpass_node.resolve_attachments.is_empty());
+                log::trace!("      Not generating a subpass - no attachments");
+                continue;
+            }
+
             let mut subpass = RenderGraphSubpass {
                 node: node_id,
                 color_attachments: Default::default(),
                 resolve_attachments: Default::default(),
                 depth_attachment: Default::default(),
             };
-
-            let subpass_node = graph.node(node_id);
 
             for (color_attachment_index, color_attachment) in
                 subpass_node.color_attachments.iter().enumerate()
@@ -1116,7 +1122,7 @@ fn build_physical_passes(
                     .unwrap();
                 //let version_id = graph.image_version_id(read_or_write_usage);
                 let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
-                log::trace!("      virtaul attachment (depth): {:?}", virtual_image);
+                log::trace!("      virtual attachment (depth): {:?}", virtual_image);
 
                 //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
 
@@ -1172,14 +1178,11 @@ fn build_physical_passes(
                 }
             }
 
-            //TODO: Need to skip subpasses with no attachments?
-            if subpass.color_attachments.is_empty() && subpass.depth_attachment.is_none() {
-                assert!(subpass.resolve_attachments.is_empty());
-                pass.subpasses.push(subpass);
-            }
+            pass.subpasses.push(subpass);
         }
 
         if pass.subpasses.is_empty() {
+            log::trace!("    Not generating a pass - no attachments");
             assert!(pass.attachments.is_empty());
             continue;
         }
@@ -1718,7 +1721,7 @@ fn build_pass_barriers(
         let mut attachment_initial_layout: Vec<Option<dsc::ImageLayout>> = Default::default();
         attachment_initial_layout.resize_with(pass.attachments.len(), || None);
 
-        //TODO: This does not support multipass
+        //TODO: This does not support multiple subpasses in a single pass
         assert_eq!(pass.subpasses.len(), 1);
         for (subpass_index, subpass) in pass.subpasses.iter_mut().enumerate() {
             log::trace!("  subpass {}", subpass_index);
@@ -1738,7 +1741,14 @@ fn build_pass_barriers(
                 if image_barrier.used_by_sampling
                     && image_states[physical_image_id.0].layout != image_barrier.layout
                 {
-                    log::trace!("    will emit separate barrier for layout transitions");
+                    log::trace!("    will emit separate barrier for layout transitions (sampled image needs transition)");
+                    use_external_dependency_for_pass_initial_layout_transition = false;
+                    break;
+                }
+
+                let image_specification = &physical_images.specifications[physical_image_id.0];
+                if image_specification.layer_count != 1 || image_specification.mip_count != 1 {
+                    log::trace!("    will emit separate barrier for layout transitions (an image has > 1 layers or mips)");
                     use_external_dependency_for_pass_initial_layout_transition = false;
                     break;
                 }
@@ -1879,7 +1889,7 @@ fn build_pass_barriers(
                     image_transitions.push(ImageTransition {
                         physical_image_id: *physical_image_id,
                         old_layout: image_state.layout,
-                        new_layout: image_state.layout,
+                        new_layout: image_barrier.layout,
                         subresource_range
                     });
 
@@ -1978,16 +1988,20 @@ fn build_pass_barriers(
             } else {
                 let image_barriers = image_transitions
                     .into_iter()
-                    .map(|image_transition| PrepassImageBarrier {
-                        image: image_transition.physical_image_id,
-                        old_layout: image_transition.old_layout,
-                        new_layout: image_transition.new_layout,
-                        src_access: invalidate_src_access_flags,
-                        dst_access: invalidate_dst_access_flags,
-                        src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                        dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                        subresource_range: image_transition.subresource_range.into()
+                    .map(|image_transition| {
+                        // Vulkan validation will trip if this assert trips
+                        assert_ne!(image_transition.new_layout, vk::ImageLayout::UNDEFINED);
+                        PrepassImageBarrier {
+                            image: image_transition.physical_image_id,
+                            old_layout: image_transition.old_layout,
+                            new_layout: image_transition.new_layout,
+                            src_access: invalidate_src_access_flags,
+                            dst_access: invalidate_dst_access_flags,
+                            src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                            dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                            subresource_range: image_transition.subresource_range.into()
 
+                        }
                     })
                     .collect();
 
@@ -2061,6 +2075,7 @@ fn build_pass_barriers(
 
 #[profiling::function]
 fn create_output_passes(
+    graph: &RenderGraphBuilder,
     passes: Vec<RenderGraphPass>,
     node_barriers: FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>,
     subpass_dependencies: &Vec<Vec<dsc::SubpassDependency>>,
@@ -2171,6 +2186,8 @@ fn create_output_passes(
             })
             .collect();
 
+        let debug_name = subpass_nodes.first().map(|x| graph.node(*x).name).flatten();
+
         let output_pass = RenderGraphOutputPass {
             subpass_nodes,
             description: Arc::new(renderpass_desc),
@@ -2178,6 +2195,7 @@ fn create_output_passes(
             attachment_images,
             clear_values,
             pre_pass_barrier: pass.pre_pass_barrier,
+            debug_name
         };
 
         renderpasses.push(output_pass);
@@ -2596,7 +2614,7 @@ impl RenderGraphPlan {
         // required to push them through the command queue
         //
         let renderpasses =
-            create_output_passes(passes, node_barriers, &subpass_dependencies, swapchain_info);
+            create_output_passes(&graph, passes, node_barriers, &subpass_dependencies, swapchain_info);
 
         //
         // Separate the output images from the intermediate images (the rendergraph will be
