@@ -63,6 +63,12 @@ pub enum ImageViewType {
     CubeArray,
 }
 
+impl Default for ImageViewType {
+    fn default() -> Self {
+        ImageViewType::Type2D
+    }
+}
+
 impl Into<vk::ImageViewType> for ImageViewType {
     fn into(self) -> vk::ImageViewType {
         match self {

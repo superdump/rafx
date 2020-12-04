@@ -93,7 +93,7 @@ struct SpotLight {
     int shadow_map;
 };
 
-struct ShadowMapData {
+struct ShadowMap2DData {
     mat4 shadow_map_view_proj;
     vec3 shadow_map_light_dir;
 };
@@ -108,8 +108,8 @@ layout (set = 0, binding = 0) uniform PerViewData {
     PointLight point_lights[16];
     DirectionalLight directional_lights[16];
     SpotLight spot_lights[16];
-    uint shadow_map_count;
-    ShadowMapData shadow_maps[48];
+    //uint shadow_map_count;
+    ShadowMap2DData shadow_map_2d_data[32];
 } per_view_data;
 
 
@@ -153,11 +153,13 @@ layout (set = 0, binding = 1) uniform sampler smp;
 //         max_lod: 1000
 //     )
 // ])]
+layout (set = 0, binding = 2) uniform sampler smp_depth;
 
 // @[export]
-layout (set = 0, binding = 2) uniform sampler smp_depth;
+layout (set = 0, binding = 3) uniform texture2D shadow_map_images[32];
+
 // @[export]
-layout (set = 0, binding = 3) uniform texture2D shadow_map_images[48];
+layout (set = 0, binding = 4) uniform textureCube shadow_map_images_cube[16];
 
 //
 // Per-Material Bindings
@@ -236,9 +238,28 @@ vec4 normal_map(
     return normalize(vec4(normal, 0.0));
 }
 
+
+float do_calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
+    vec3 light_to_surface_dir = in_position_ws.xyz - light_position_ws;
+    float distance_from_closest_object_to_light = texture(samplerCube(shadow_map_images_cube[index], smp_depth), light_to_surface_dir).r;
+    float distance = length(light_to_surface_dir);
+    float shadow = distance_from_closest_object_to_light > distance ? 1.0 : 0.0;
+    return shadow;
+}
+
+float calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
+    if (index == -1) {
+        return 1.0;
+    }
+
+    return do_calculate_percent_lit_cube(light_position_ws, index, bias_multiplier);
+}
+
+//TODO: Not sure about surface to light dir for spot lights... don't think it will do anything except give slightly bad
+// bias results though
 float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
-    vec4 shadow_map_pos = per_view_data.shadow_maps[index].shadow_map_view_proj * in_position_ws;
-    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_maps[index].shadow_map_light_dir;
+    vec4 shadow_map_pos = per_view_data.shadow_map_2d_data[index].shadow_map_view_proj * in_position_ws;
+    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
 
     // homogenous coordinate normalization
     vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
@@ -762,7 +783,15 @@ vec4 pbr_path(
         // TODO: Early out by distance?
         // Need to use cube maps to detect percent lit
         //float percent_lit = 1.0;
-        total_light += /* percent_lit * */ point_light_pbr(
+
+        float percent_lit = calculate_percent_lit_cube(
+            per_view_data.point_lights[i].position_ws,
+            per_view_data.point_lights[i].shadow_map,
+            1.0
+        );
+
+
+        total_light += percent_lit * point_light_pbr(
             per_view_data.point_lights[i],
             surface_to_eye_vs,
             in_position_vs,

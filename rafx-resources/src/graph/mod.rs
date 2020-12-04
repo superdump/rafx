@@ -8,6 +8,8 @@ mod graph_image;
 pub use graph_image::RenderGraphImageConstraint;
 pub use graph_image::RenderGraphImageSpecification;
 pub use graph_image::RenderGraphImageUsageId;
+pub use graph_image::RenderGraphImageSubresourceRange;
+pub use graph_image::RenderGraphImageExtents;
 use graph_image::*;
 
 mod graph_node;

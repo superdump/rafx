@@ -53,6 +53,8 @@ impl RenderViewSet {
         eye_position: Vec3,
         view: Mat4,
         proj: Mat4,
+        extents_width: u32,
+        extents_height: u32,
         render_phase_mask: RenderPhaseMask,
         debug_name: String,
     ) -> RenderView {
@@ -62,6 +64,8 @@ impl RenderViewSet {
             eye_position,
             view,
             proj,
+            extents_width,
+            extents_height,
             render_phase_mask,
             debug_name,
         )
@@ -80,8 +84,11 @@ pub struct RenderViewInner {
     view_proj: Mat4,
     view_dir: Vec3,
     view_index: RenderViewIndex,
+    extents_width: u32,
+    extents_height: u32,
     render_phase_mask: RenderPhaseMask,
     debug_name: String,
+
 }
 
 #[derive(Clone)]
@@ -95,6 +102,8 @@ impl RenderView {
         eye_position: Vec3,
         view: Mat4,
         proj: Mat4,
+        extents_width: u32,
+        extents_height: u32,
         render_phase_mask: RenderPhaseMask,
         debug_name: String,
     ) -> RenderView {
@@ -109,6 +118,8 @@ impl RenderView {
             view_proj: proj * view,
             view_dir,
             view_index,
+            extents_width,
+            extents_height,
             render_phase_mask,
             debug_name,
         };
@@ -141,6 +152,10 @@ impl RenderView {
     pub fn view_index(&self) -> RenderViewIndex {
         self.inner.view_index
     }
+
+    pub fn extents_width(&self) -> u32 { self.inner.extents_width }
+
+    pub fn extents_height(&self) -> u32 { self.inner.extents_height }
 
     pub fn debug_name(&self) -> &str {
         &self.inner.debug_name

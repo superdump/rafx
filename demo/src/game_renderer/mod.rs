@@ -646,6 +646,8 @@ impl GameRenderer {
             eye,
             view,
             proj,
+            extents_width,
+            extents_height,
             main_camera_render_phase_mask,
             "main".to_string(),
         )
@@ -665,6 +667,8 @@ impl GameRenderer {
 
         //TODO: The look-at calls in this fn will fail if the light is pointed straight down
 
+        const SHADOW_MAP_RESOLUTION: u32 = 1024;
+
         let mut query = <(Entity, Read<SpotLightComponent>, Read<PositionComponent>)>::query();
         for (entity, light, position) in query.iter(world) {
             //TODO: Transform direction by rotation
@@ -681,6 +685,8 @@ impl GameRenderer {
                 eye_position,
                 view,
                 proj,
+                SHADOW_MAP_RESOLUTION,
+                SHADOW_MAP_RESOLUTION,
                 shadow_map_phase_mask,
                 "shadow_map".to_string(),
             );
@@ -714,6 +720,8 @@ impl GameRenderer {
                 eye_position,
                 view,
                 proj,
+                SHADOW_MAP_RESOLUTION,
+                SHADOW_MAP_RESOLUTION,
                 shadow_map_phase_mask,
                 "shadow_map".to_string(),
             );
@@ -752,6 +760,8 @@ impl GameRenderer {
                     position,
                     view,
                     proj,
+                    SHADOW_MAP_RESOLUTION,
+                    SHADOW_MAP_RESOLUTION,
                     phase_mask,
                     "shadow_map".to_string(),
                 )

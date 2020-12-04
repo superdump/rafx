@@ -895,20 +895,20 @@ fn can_merge_nodes(
     false
 }
 
-fn get_subresource_range_of_usage(
-    graph: &RenderGraphBuilder,
-    image_constraints: &DetermineImageConstraintsResult,
-    usage: RenderGraphImageUsageId,
-) -> dsc::ImageSubresourceRange {
-    graph.image_usages[usage.0].subresource_range.clone().unwrap_or_else(|| {
-        let specification = &image_constraints.images[&usage];
-        dsc::ImageSubresourceRange::default_all_mips_all_layers(
-            dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
-            specification.mip_count,
-            specification.layer_count,
-        )
-    })
-}
+// fn get_subresource_range_of_usage(
+//     graph: &RenderGraphBuilder,
+//     image_constraints: &DetermineImageConstraintsResult,
+//     usage: RenderGraphImageUsageId,
+// ) -> dsc::ImageSubresourceRange {
+//     graph.image_usages[usage.0].subresource_range.clone().unwrap_or_else(|| {
+//         let specification = &image_constraints.images[&usage];
+//         dsc::ImageSubresourceRange::default_all_mips_all_layers(
+//             dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
+//             specification.mip_count,
+//             specification.layer_count,
+//         )
+//     })
+// }
 
 //
 // This walks through the nodes and creates passes/subpasses. Most of the info to create them is
@@ -921,6 +921,7 @@ fn build_physical_passes(
     node_execution_order: &[RenderGraphNodeId],
     image_constraints: &DetermineImageConstraintsResult,
     virtual_images: &AssignVirtualImagesResult,
+    swapchain_surface_info: &dsc::SwapchainSurfaceInfo
     //determine_image_layouts_result: &DetermineImageLayoutsResult
 ) -> Vec<RenderGraphPass> {
     let mut pass_node_sets = Vec::default();
@@ -968,15 +969,11 @@ fn build_physical_passes(
                 .iter()
                 .position(|x| x.virtual_image == virtual_image)
             {
-                // For the time being, lets assume we consistently use the same subresource range
-                // within a pass
-                //assert_eq!(subresource_range, attachments[position].subresource_range);
                 (position, false)
             } else {
                 attachments.push(RenderGraphPassAttachment {
                     usage,
                     virtual_image,
-                    //subresource_range,
 
                     //NOTE: These get assigned later in assign_physical_images
                     image: None,
@@ -998,11 +995,20 @@ fn build_physical_passes(
             }
         }
 
-        let mut pass = RenderGraphPass {
-            attachments: Default::default(),
-            subpasses: Default::default(),
-            pre_pass_barrier: Default::default(),
-        };
+        fn set_extent(
+            extent: &mut Option<vk::Extent2D>,
+            specification: &RenderGraphImageSpecification,
+            swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
+        ) {
+            let size = specification.extents.into_vk_extent_2d(swapchain_surface_info);
+            if extent.is_some() {
+                assert_eq!(*extent, Some(size))
+            } else {
+                *extent = Some(size);
+            }
+        }
+
+        let mut pass = RenderGraphPass::default();
 
         for node_id in pass_node_set {
             log::trace!("    subpass node: {:?}", node_id);
@@ -1035,12 +1041,10 @@ fn build_physical_passes(
                         .get(&read_or_write_usage)
                         .unwrap();
 
-                    //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
-
-                    //let version_id = graph.image_version_id(read_or_write_usage);
                     let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
                     log::trace!("      virtual attachment (color): {:?}", virtual_image);
 
+                    set_extent(&mut pass.extents, specification, swapchain_surface_info);
                     let (pass_attachment_index, is_first_usage) =
                         find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
                     subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
@@ -1088,6 +1092,7 @@ fn build_physical_passes(
 
                     //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, write_image);
 
+                    set_extent(&mut pass.extents, specification, swapchain_surface_info);
                     let (pass_attachment_index, is_first_usage) =
                         find_or_insert_attachment(&mut pass.attachments, write_image, *virtual_image/*, subresource_range*/);
                     subpass.resolve_attachments[resolve_attachment_index] =
@@ -1126,6 +1131,7 @@ fn build_physical_passes(
 
                 //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
 
+                set_extent(&mut pass.extents, specification, swapchain_surface_info);
                 let (pass_attachment_index, is_first_usage) =
                     find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
                 subpass.depth_attachment = Some(pass_attachment_index);
@@ -1184,6 +1190,7 @@ fn build_physical_passes(
         if pass.subpasses.is_empty() {
             log::trace!("    Not generating a pass - no attachments");
             assert!(pass.attachments.is_empty());
+            assert!(pass.extents.is_none());
             continue;
         }
 
@@ -1452,10 +1459,13 @@ fn assign_physical_images(
     // Create a list and lookup for all image views that are needed for the graph
     //
     for (&usage, &physical_image) in &usage_to_physical {
-        let subresource_range = get_subresource_range_of_usage(graph, image_constraints, usage);
+        let image_specification = image_constraints.specification(usage).unwrap();
+        let subresource_range = graph.image_usages[usage.0].subresource_range.into_subresource_range(image_specification);
+        let view_type = graph.image_usages[usage.0].view_type;
         let image_view = RenderGraphImageView {
             physical_image,
-            subresource_range
+            subresource_range,
+            view_type,
         };
 
         // Get the ID that matches the view, or insert a new view, generating a new ID
@@ -2523,7 +2533,9 @@ impl RenderGraphPlan {
             &graph,
             &node_execution_order,
             &image_constraint_results,
-            &assign_virtual_images_result, /*, &determine_image_layouts_result*/
+            &assign_virtual_images_result,
+            swapchain_info,
+            /*, &determine_image_layouts_result*/
         );
 
         //

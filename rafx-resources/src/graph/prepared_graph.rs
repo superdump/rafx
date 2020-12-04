@@ -155,15 +155,13 @@ impl RenderGraphCacheInner {
                 image_resources.insert(id, cached_image.image.clone());
             } else {
                 // No unused image available, create one
+                let extent = key.specification.extents.into_vk_extent_3d(&key.swapchain_surface_info);
                 let image = VkImage::new(
                     device_context,
                     rafx_shell_vulkan::vk_mem::MemoryUsage::GpuOnly,
+                    key.specification.create_flags,
                     key.specification.usage_flags,
-                    vk::Extent3D {
-                        width: key.swapchain_surface_info.extents.width,
-                        height: key.swapchain_surface_info.extents.height,
-                        depth: 1,
-                    },
+                    extent,
                     key.specification.format,
                     vk::ImageTiling::OPTIMAL,
                     key.specification.samples,
@@ -225,7 +223,7 @@ impl RenderGraphCacheInner {
                 format: specification.format.into(),
                 components: Default::default(),
                 subresource_range: view.subresource_range.clone(),
-                view_type: dsc::ImageViewType::Type2D,
+                view_type: view.view_type,
             };
 
             log::trace!("get_or_create_image_view for {:?}", view.physical_image);
@@ -282,8 +280,8 @@ impl RenderGraphCacheInner {
                 .collect();
 
             let framebuffer_meta = dsc::FramebufferMeta {
-                width: swapchain_surface_info.extents.width,
-                height: swapchain_surface_info.extents.height,
+                width: pass.extents.width,
+                height: pass.extents.height,
                 layers: 1,
             };
 
@@ -473,7 +471,7 @@ impl PreparedRenderGraph {
                 .framebuffer(self.framebuffer_resources[pass_index].get_raw().framebuffer)
                 .render_area(vk::Rect2D {
                     offset: vk::Offset2D { x: 0, y: 0 },
-                    extent: self.swapchain_surface_info.extents,
+                    extent: pass.extents,
                 })
                 .clear_values(&pass.clear_values);
 

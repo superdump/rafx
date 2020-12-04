@@ -159,7 +159,7 @@ pub struct PrepassImageBarrier {
 }
 
 /// Metadata required to create a renderpass
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RenderGraphPass {
     pub(super) attachments: Vec<RenderGraphPassAttachment>,
     pub(super) subpasses: Vec<RenderGraphSubpass>,
@@ -167,6 +167,7 @@ pub struct RenderGraphPass {
     // For when we want to do layout transitions on non-attachments
     //pre_pass_image_barriers: Vec<PrepassImageBarrier>
     pub(super) pre_pass_barrier: Option<PrepassBarrier>,
+    pub(super) extents: Option<vk::Extent2D>,
 }
 
 pub struct RenderGraphOutputPass {

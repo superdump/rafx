@@ -37,6 +37,7 @@ impl VkImage {
     pub fn new(
         device_context: &VkDeviceContext,
         memory_usage: vk_mem::MemoryUsage,
+        image_create_flags: vk::ImageCreateFlags,
         image_usage: vk::ImageUsageFlags,
         extent: vk::Extent3D,
         format: vk::Format,
@@ -66,7 +67,8 @@ impl VkImage {
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .usage(image_usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .samples(samples);
+            .samples(samples)
+            .flags(image_create_flags);
 
         //let allocator = device.allocator().clone();
         let (image, allocation, allocation_info) = device_context

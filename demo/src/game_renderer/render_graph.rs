@@ -54,7 +54,7 @@ fn shadow_map_pass(
             stencil: 0,
         }),
         RenderGraphImageConstraint::default(),
-        Some(dsc::ImageSubresourceRange::default_no_mips_single_layer(dsc::ImageAspectFlag::Depth.into(), layer as u32)),
+        RenderGraphImageSubresourceRange::NoMipsSingleLayer(layer as u32),
     );
     graph.set_image_name(depth, "depth");
 
@@ -113,8 +113,10 @@ pub fn build_render_graph(
                     shadow_map_node,
                     RenderGraphImageConstraint {
                         format: Some(depth_format),
+                        extents: Some(RenderGraphImageExtents::Custom(render_view.extents_width(), render_view.extents_height(), 1)),
                         ..Default::default()
                     },
+                    dsc::ImageViewType::Type2D
                 );
 
                 let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, render_view, depth_image, 0);
@@ -128,8 +130,10 @@ pub fn build_render_graph(
                         format: Some(depth_format),
                         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
                         layer_count: Some(6),
+                        extents: Some(RenderGraphImageExtents::Custom(render_view[0].extents_width(), render_view[0].extents_height(), 1)),
                         ..Default::default()
                     },
+                    dsc::ImageViewType::Cube
                 );
 
                 for i in 0..6 {
@@ -147,6 +151,7 @@ pub fn build_render_graph(
             node: RenderGraphNodeId,
             color: RenderGraphImageUsageId,
             depth: RenderGraphImageUsageId,
+            shadow_maps: Vec<RenderGraphImageUsageId>,
         }
 
         let node = graph.add_node("Opaque", RenderGraphQueue::DefaultGraphics);
@@ -179,15 +184,17 @@ pub fn build_render_graph(
         );
         graph.set_image_name(depth, "depth");
 
+        let mut shadow_maps = Vec::with_capacity(shadow_map_passes.len());
         for shadow_map_pass in &shadow_map_passes {
-            match shadow_map_pass {
+            let sampled_image = match shadow_map_pass {
                 ShadowMapImageResources::Single(image) => {
-                    graph.sample_image(node, *image, Default::default(), None);
+                    graph.sample_image(node, *image, Default::default(), RenderGraphImageSubresourceRange::AllMipsAllLayers, dsc::ImageViewType::Type2D)
                 },
                 ShadowMapImageResources::Cube(cube_map_image) => {
-                    graph.sample_image(node, *cube_map_image, Default::default(), None);
+                    graph.sample_image(node, *cube_map_image, Default::default(), RenderGraphImageSubresourceRange::AllMipsAllLayers, dsc::ImageViewType::Cube)
                 }
-            }
+            };
+            shadow_maps.push(sampled_image);
         }
 
         graph_callbacks.add_renderphase_dependency::<OpaqueRenderPhase>(node);
@@ -201,7 +208,7 @@ pub fn build_render_graph(
             Ok(())
         });
 
-        OpaquePass { node, color, depth }
+        OpaquePass { node, color, depth, shadow_maps }
     };
 
     let bloom_extract_pass = {
@@ -243,7 +250,8 @@ pub fn build_render_graph(
                 samples: Some(vk::SampleCountFlags::TYPE_1),
                 ..Default::default()
             },
-            None,
+            Default::default(),
+            Default::default()
         );
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -333,7 +341,7 @@ pub fn build_render_graph(
             ));
             graph.set_image_name(blur_dst.unwrap(), "blur_dst");
 
-            let sample_image = graph.sample_image(node, blur_src, Default::default(), None);
+            let sample_image = graph.sample_image(node, blur_src, Default::default(), Default::default(), Default::default());
             graph.set_image_name(blur_src, "blur_src");
 
             let bloom_blur_material_pass = bloom_blur_material_pass.clone();
@@ -427,10 +435,10 @@ pub fn build_render_graph(
         );
         graph.set_image_name(color, "color");
 
-        let sdr_image = graph.sample_image(node, bloom_extract_pass.sdr_image, Default::default(), None);
+        let sdr_image = graph.sample_image(node, bloom_extract_pass.sdr_image, Default::default(), Default::default(), Default::default());
         graph.set_image_name(sdr_image, "sdr");
 
-        let hdr_image = graph.sample_image(node, bloom_blur_pass.color, Default::default(), None);
+        let hdr_image = graph.sample_image(node, bloom_blur_pass.color, Default::default(), Default::default(), Default::default());
         graph.set_image_name(hdr_image, "hdr");
 
         graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -504,8 +512,14 @@ pub fn build_render_graph(
 
         // This node has a single color attachment
         let node = graph.add_node("Ui", RenderGraphQueue::DefaultGraphics);
-        let color =
-            graph.modify_color_attachment(node, bloom_combine_pass.color, 0, None, Default::default(), None);
+        let color = graph.modify_color_attachment(
+            node,
+            bloom_combine_pass.color,
+            0,
+            None,
+            Default::default(),
+            Default::default()
+        );
         graph.set_image_name(color, "color");
 
         // Adding a phase dependency insures that we create all the pipelines for materials
@@ -537,10 +551,13 @@ pub fn build_render_graph(
             aspect_flags: vk::ImageAspectFlags::COLOR,
             usage_flags: swapchain_info.image_usage_flags,
             create_flags: Default::default(),
+            extents: RenderGraphImageExtents::MatchSurface,
             //subresource_range: dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into())
             layer_count: 1,
             mip_count: 1
         },
+        Default::default(),
+        Default::default(),
         dsc::ImageLayout::PresentSrcKhr,
         vk::AccessFlags::empty(),
         vk::PipelineStageFlags::empty(),
@@ -558,17 +575,34 @@ pub fn build_render_graph(
         graph_callbacks,
     )?;
 
-    let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
-    for shadow_map_pass in shadow_map_passes {
-        match shadow_map_pass {
-            ShadowMapImageResources::Single(image) => {
-                shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
-            },
-            ShadowMapImageResources::Cube(cube_map_image) => {
-                shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
-            }
-        }
-    }
+    // let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
+    // for shadow_map_pass in shadow_map_passes {
+    //     match shadow_map_pass {
+    //         ShadowMapImageResources::Single(image) => {
+    //             shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
+    //         },
+    //         ShadowMapImageResources::Cube(cube_map_image) => {
+    //             shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
+    //         }
+    //     }
+    // }
+
+    // let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
+    // for shadow_map_image_view in opaque_pass.shadow_maps {
+    //     match shadow_map_pass {
+    //         ShadowMapImageResources::Single(image) => {
+    //             shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
+    //         },
+    //         ShadowMapImageResources::Cube(cube_map_image) => {
+    //             shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
+    //         }
+    //     }
+    // }
+
+    let shadow_map_image_views = opaque_pass.shadow_maps
+        .iter()
+        .map(|&x| executor.image_view_resource(x).unwrap())
+        .collect();
 
     Ok(BuildRenderGraphResult {
         shadow_map_image_views,

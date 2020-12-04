@@ -261,6 +261,7 @@ pub fn enqueue_load_images(
         let image = ManuallyDrop::new(VkImage::new(
             device_context,
             vk_mem::MemoryUsage::GpuOnly,
+            vk::ImageCreateFlags::empty(),
             image_usage,
             extent,
             format,
