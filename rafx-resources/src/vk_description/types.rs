@@ -2262,6 +2262,7 @@ pub struct RectI32 {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Dimensions {
     MatchSwapchain,
+    MatchFramebuffer,
     Raw(RectDecimal),
 }
 
@@ -2269,6 +2270,7 @@ impl Dimensions {
     fn as_rect_f32(
         &self,
         swapchain_surface_info: &SwapchainSurfaceInfo,
+        framebuffer_meta: &FramebufferMeta,
     ) -> RectF32 {
         match self {
             Dimensions::MatchSwapchain => RectF32 {
@@ -2276,6 +2278,12 @@ impl Dimensions {
                 y: 0.0,
                 width: swapchain_surface_info.extents.width as f32,
                 height: swapchain_surface_info.extents.height as f32,
+            },
+            Dimensions::MatchFramebuffer => RectF32 {
+                x: 0.0,
+                y: 0.0,
+                width: framebuffer_meta.width as f32,
+                height: framebuffer_meta.height as f32,
             },
             Dimensions::Raw(rect) => RectF32 {
                 x: rect.x.to_f32(),
@@ -2289,6 +2297,7 @@ impl Dimensions {
     fn as_rect_i32(
         &self,
         swapchain_surface_info: &SwapchainSurfaceInfo,
+        framebuffer_meta: &FramebufferMeta,
     ) -> RectI32 {
         match self {
             Dimensions::MatchSwapchain => RectI32 {
@@ -2296,6 +2305,12 @@ impl Dimensions {
                 y: 0,
                 width: swapchain_surface_info.extents.width,
                 height: swapchain_surface_info.extents.height,
+            },
+            Dimensions::MatchFramebuffer => RectI32 {
+                x: 0,
+                y: 0,
+                width: framebuffer_meta.width,
+                height: framebuffer_meta.height,
             },
             Dimensions::Raw(rect) => RectI32 {
                 x: rect.x.to_i32(),
@@ -2324,8 +2339,9 @@ impl Viewport {
     pub fn as_builder(
         &self,
         swapchain_surface_info: &SwapchainSurfaceInfo,
+        framebuffer_meta: &FramebufferMeta,
     ) -> vk::ViewportBuilder {
-        let rect_f32 = self.dimensions.as_rect_f32(swapchain_surface_info);
+        let rect_f32 = self.dimensions.as_rect_f32(swapchain_surface_info, framebuffer_meta);
         vk::Viewport::builder()
             .x(rect_f32.x)
             .y(rect_f32.y)
@@ -2345,8 +2361,9 @@ impl Scissors {
     pub fn to_rect2d(
         &self,
         swapchain_surface_info: &SwapchainSurfaceInfo,
+        framebuffer_meta: &FramebufferMeta,
     ) -> vk::Rect2D {
-        let rect_i32 = self.dimensions.as_rect_i32(swapchain_surface_info);
+        let rect_i32 = self.dimensions.as_rect_i32(swapchain_surface_info, framebuffer_meta);
         vk::Rect2D {
             offset: vk::Offset2D {
                 x: rect_i32.x,

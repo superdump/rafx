@@ -265,7 +265,8 @@ pub fn build_render_graph(
                 .graphics_pipeline_cache()
                 .get_or_create_graphics_pipeline(
                     &bloom_extract_material_pass,
-                    args.renderpass,
+                    args.renderpass_resource,
+                    &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
                     &EMPTY_VERTEX_LAYOUT,
                 )?;
 
@@ -356,7 +357,8 @@ pub fn build_render_graph(
                     .graphics_pipeline_cache()
                     .get_or_create_graphics_pipeline(
                         &bloom_blur_material_pass,
-                        args.renderpass,
+                        args.renderpass_resource,
+                        &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
                         &EMPTY_VERTEX_LAYOUT,
                     )?;
 
@@ -453,7 +455,8 @@ pub fn build_render_graph(
                 .graphics_pipeline_cache()
                 .get_or_create_graphics_pipeline(
                     &bloom_combine_material_pass,
-                    args.renderpass,
+                    args.renderpass_resource,
+                    &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
                     &EMPTY_VERTEX_LAYOUT,
                 )?;
 

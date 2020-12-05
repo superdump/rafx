@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 struct CachedGraphicsPipelineKey {
     material_pass: ResourceId,
     renderpass: ResourceId,
+    framebuffer_meta: dsc::FramebufferMeta,
     vertex_data_set_layout: VertexDataSetLayoutHash,
 }
 
@@ -200,10 +201,11 @@ impl GraphicsPipelineCache {
         &self,
         material_pass: &ResourceArc<MaterialPassResource>,
         renderpass: &ResourceArc<RenderPassResource>,
+        framebuffer_meta: &dsc::FramebufferMeta,
         vertex_data_set_layout: &VertexDataSetLayout,
     ) -> Option<ResourceArc<GraphicsPipelineResource>> {
         // VkResult is always Ok if returning cached pipelines
-        self.graphics_pipeline(material_pass, renderpass, vertex_data_set_layout, false)
+        self.graphics_pipeline(material_pass, renderpass, framebuffer_meta, vertex_data_set_layout, false)
             .map(|x| x.unwrap())
     }
 
@@ -211,10 +213,11 @@ impl GraphicsPipelineCache {
         &self,
         material_pass: &ResourceArc<MaterialPassResource>,
         renderpass: &ResourceArc<RenderPassResource>,
+        framebuffer_meta: &dsc::FramebufferMeta,
         vertex_data_set_layout: &VertexDataSetLayout,
     ) -> VkResult<ResourceArc<GraphicsPipelineResource>> {
         // graphics_pipeline never returns none if create_if_missing is true
-        self.graphics_pipeline(material_pass, renderpass, vertex_data_set_layout, true)
+        self.graphics_pipeline(material_pass, renderpass, framebuffer_meta, vertex_data_set_layout, true)
             .ok_or(vk::Result::ERROR_UNKNOWN)?
     }
 
@@ -222,12 +225,14 @@ impl GraphicsPipelineCache {
         &self,
         material_pass: &ResourceArc<MaterialPassResource>,
         renderpass: &ResourceArc<RenderPassResource>,
+        framebuffer_meta: &dsc::FramebufferMeta,
         vertex_data_set_layout: &VertexDataSetLayout,
         create_if_missing: bool,
     ) -> Option<VkResult<ResourceArc<GraphicsPipelineResource>>> {
         let key = CachedGraphicsPipelineKey {
             material_pass: material_pass.get_hash(),
             renderpass: renderpass.get_hash(),
+            framebuffer_meta: framebuffer_meta.clone(),
             vertex_data_set_layout: vertex_data_set_layout.hash(),
         };
 
@@ -311,6 +316,7 @@ impl GraphicsPipelineCache {
                     let pipeline = inner.resource_lookup_set.get_or_create_graphics_pipeline(
                         &material_pass,
                         &renderpass,
+                        framebuffer_meta,
                         Arc::new(vertex_input_state),
                     );
 

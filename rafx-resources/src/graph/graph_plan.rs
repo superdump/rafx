@@ -2089,7 +2089,6 @@ fn create_output_passes(
     passes: Vec<RenderGraphPass>,
     node_barriers: FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>,
     subpass_dependencies: &Vec<Vec<dsc::SubpassDependency>>,
-    swapchain_info: &SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphOutputPass> {
     let mut renderpasses = Vec::with_capacity(passes.len());
     for (index, pass) in passes.into_iter().enumerate() {
@@ -2201,7 +2200,7 @@ fn create_output_passes(
         let output_pass = RenderGraphOutputPass {
             subpass_nodes,
             description: Arc::new(renderpass_desc),
-            extents: swapchain_info.extents,
+            extents: pass.extents.unwrap(),
             attachment_images,
             clear_values,
             pre_pass_barrier: pass.pre_pass_barrier,
@@ -2626,7 +2625,7 @@ impl RenderGraphPlan {
         // required to push them through the command queue
         //
         let renderpasses =
-            create_output_passes(&graph, passes, node_barriers, &subpass_dependencies, swapchain_info);
+            create_output_passes(&graph, passes, node_barriers, &subpass_dependencies);
 
         //
         // Separate the output images from the intermediate images (the rendergraph will be

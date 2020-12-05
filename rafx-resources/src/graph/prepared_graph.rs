@@ -266,7 +266,6 @@ impl RenderGraphCacheInner {
         &mut self,
         graph: &RenderGraphPlan,
         resources: &ResourceLookupSet,
-        swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
         image_resources: &FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>,
         render_pass_resources: &Vec<ResourceArc<RenderPassResource>>,
     ) -> VkResult<Vec<ResourceArc<FramebufferResource>>> {
@@ -355,7 +354,8 @@ impl<'a> RenderGraphContext<'a> {
 
 pub struct VisitRenderpassArgs<'a> {
     pub command_buffer: vk::CommandBuffer,
-    pub renderpass: &'a ResourceArc<RenderPassResource>,
+    pub renderpass_resource: &'a ResourceArc<RenderPassResource>,
+    pub framebuffer_resource: &'a ResourceArc<FramebufferResource>,
     pub subpass_index: usize,
     pub graph_context: RenderGraphContext<'a>,
 }
@@ -369,7 +369,6 @@ pub struct PreparedRenderGraph {
     render_pass_resources: Vec<ResourceArc<RenderPassResource>>,
     framebuffer_resources: Vec<ResourceArc<FramebufferResource>>,
     graph_plan: RenderGraphPlan,
-    swapchain_surface_info: SwapchainSurfaceInfo,
 }
 
 impl PreparedRenderGraph {
@@ -404,7 +403,6 @@ impl PreparedRenderGraph {
         let framebuffer_resources = cache.allocate_framebuffers(
             &graph_plan,
             resources,
-            swapchain_surface_info,
             &image_view_resources,
             &render_pass_resources,
         )?;
@@ -417,7 +415,6 @@ impl PreparedRenderGraph {
             render_pass_resources,
             framebuffer_resources,
             graph_plan,
-            swapchain_surface_info: swapchain_surface_info.clone(),
         })
     }
 
@@ -466,6 +463,7 @@ impl PreparedRenderGraph {
         for (pass_index, pass) in self.graph_plan.passes.iter().enumerate() {
             profiling::scope!("pass", pass.debug_name.unwrap_or("unnamed"));
             log::trace!("Execute pass name: {:?}", pass.debug_name);
+            println!("EXTENTS {:?}: {:?}", pass.debug_name, pass.extents);
             let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
                 .render_pass(self.render_pass_resources[pass_index].get_raw().renderpass)
                 .framebuffer(self.framebuffer_resources[pass_index].get_raw().framebuffer)
@@ -521,7 +519,8 @@ impl PreparedRenderGraph {
                 );
 
                 let args = VisitRenderpassArgs {
-                    renderpass: &self.render_pass_resources[pass_index],
+                    renderpass_resource: &self.render_pass_resources[pass_index],
+                    framebuffer_resource: &self.framebuffer_resources[pass_index],
                     graph_context: render_graph_context,
                     subpass_index,
                     command_buffer,
