@@ -616,9 +616,9 @@ impl GameRenderer {
             .add_render_phase::<UiRenderPhase>()
             .build();
 
-        const CAMERA_XY_DISTANCE: f32 = 10.0;
+        const CAMERA_XY_DISTANCE: f32 = 12.0;
         const CAMERA_Z: f32 = 6.0;
-        const CAMERA_ROTATE_SPEED: f32 = -0.20;
+        const CAMERA_ROTATE_SPEED: f32 = -0.10;
         const CAMERA_LOOP_OFFSET: f32 = -0.3;
         let loop_time = time_state.total_time().as_secs_f32();
         let eye = glam::Vec3::new(
@@ -735,8 +735,8 @@ impl GameRenderer {
         #[rustfmt::skip]
         // The eye offset and up vector
         let cube_map_view_directions = [
-            (glam::Vec3::unit_x(), glam::Vec3::unit_y() * -1.0),
-            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_y() * -1.0),
+            (glam::Vec3::unit_x(), glam::Vec3::unit_y()),
+            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_y()),
             (glam::Vec3::unit_y(), glam::Vec3::unit_z() * -1.0),
             (glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
             (glam::Vec3::unit_z(), glam::Vec3::unit_y()),
@@ -751,9 +751,9 @@ impl GameRenderer {
                 position: glam::Vec3,
                 cube_map_view_directions: &(glam::Vec3, glam::Vec3)
             ) -> RenderView {
-                let view = glam::Mat4::look_at_rh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
+                let view = glam::Mat4::look_at_lh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
 
-                let proj = perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 100.0, 0.01);
+                let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, 100.0, 0.01);
                 let proj = matrix_flip_y(proj);
 
                 render_view_set.create_view(

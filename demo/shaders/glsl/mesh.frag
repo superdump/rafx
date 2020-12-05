@@ -259,7 +259,7 @@ float do_calculate_percent_lit_cube(vec3 light_position_ws, int index, float bia
 
 
     //return min(max(0.001, light_depth), 0.999);
-    return texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, light_depth + 0.001)).r;
+    return texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, light_depth + 0.00005)).r;
 
 
     // RAW DEPTH FROM CUBE MAP
