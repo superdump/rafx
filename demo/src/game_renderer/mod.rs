@@ -735,9 +735,9 @@ impl GameRenderer {
         #[rustfmt::skip]
         // The eye offset and up vector
         let cube_map_view_directions = [
-            (glam::Vec3::unit_x(), glam::Vec3::unit_z()),
-            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_z()),
-            (glam::Vec3::unit_y(), glam::Vec3::unit_z()),
+            (glam::Vec3::unit_x(), glam::Vec3::unit_y() * -1.0),
+            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_y() * -1.0),
+            (glam::Vec3::unit_y(), glam::Vec3::unit_z() * -1.0),
             (glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
             (glam::Vec3::unit_z(), glam::Vec3::unit_y()),
             (glam::Vec3::unit_z() * -1.0, glam::Vec3::unit_y()),

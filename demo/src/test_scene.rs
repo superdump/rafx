@@ -130,7 +130,7 @@ pub fn populate_test_mesh_entities(
             meshes
         };
 
-        for i in 0..6 {
+        for i in 0..3 {
             let position = Vec3::new(((i / 3) * 3) as f32, ((i % 3) * 3) as f32, 0.0);
             let cube_mesh = cube_meshes[i % cube_meshes.len()].clone();
 
@@ -179,7 +179,8 @@ pub fn populate_test_lights(
     add_point_light(
         resources,
         world,
-        glam::Vec3::new(-3.0, 3.0, 2.0),
+        //glam::Vec3::new(-3.0, 3.0, 2.0),
+        glam::Vec3::new(0.0, 0.0, 3.0),
         PointLightComponent {
             color: [0.0, 1.0, 0.0, 1.0].into(),
             intensity: 130.0,

@@ -238,13 +238,55 @@ vec4 normal_map(
     return normalize(vec4(normal, 0.0));
 }
 
+float VectorToDepthValue(vec3 light_direction/*, float f, float n*/)
+{
+    // Find the absolute value of the largest component of the vector, since our projection is 90 degrees, this is
+    // guaranteed to give us the Z component of whatever face we will sample from
+    vec3 light_direction_abs = abs(light_direction);
+    float LocalZcomp = max(light_direction_abs.x, max(light_direction_abs.y, light_direction_abs.z));
+
+
+    const float f = 0.01;
+    const float n = 100.0;
+    float NormZComp = (f+n) / (f-n) - (2*f*n)/(f-n)/LocalZcomp;
+    return (NormZComp + 1.0) * 0.5;
+}
 
 float do_calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
     vec3 light_to_surface_dir = in_position_ws.xyz - light_position_ws;
-    float distance_from_closest_object_to_light = texture(samplerCube(shadow_map_images_cube[index], smp_depth), light_to_surface_dir).r;
-    float distance = length(light_to_surface_dir);
-    float shadow = distance_from_closest_object_to_light > distance ? 1.0 : 0.0;
-    return shadow;
+    float light_depth = VectorToDepthValue(light_to_surface_dir);
+
+
+
+    //return min(max(0.001, light_depth), 0.999);
+    return texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, light_depth + 0.001)).r;
+
+
+    // RAW DEPTH FROM CUBE MAP
+    //float compare = texture(samplerCube(shadow_map_images_cube[index], smp_depth), light_to_surface_dir).r;// * 10.0;
+    //return compare;
+
+    //float distance = length(light_to_surface_dir);
+    // convert distance to something that is comparable with the depth map?
+
+
+    //float distance_from_closest_object_to_light = texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, )).r;
+
+
+
+    //float shadow = distance_from_closest_object_to_light > distance ? 1.0 : 0.0;
+    //return shadow;
+
+
+    /*
+        float shadow = texture(
+            sampler2DShadow(shadow_map_images[index], smp_depth),
+            vec3(
+                sample_location,
+                distance_from_light + bias
+            )
+        ).r;
+        */
 }
 
 float calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
@@ -790,7 +832,7 @@ vec4 pbr_path(
             1.0
         );
 
-
+        //total_light += vec3(percent_lit, percent_lit, percent_lit);
         total_light += percent_lit * point_light_pbr(
             per_view_data.point_lights[i],
             surface_to_eye_vs,
