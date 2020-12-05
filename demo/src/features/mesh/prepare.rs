@@ -190,7 +190,12 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
         // Create per-view descriptors for all per-view descriptor layouts that are in our materials
         //
         for &view in views {
-            let mut per_view_frag_data = self.create_per_view_frag_data(view, &prepared_directional_lights, &prepared_spot_lights, &prepared_point_lights);
+            let mut per_view_frag_data = self.create_per_view_frag_data(
+                view,
+                &prepared_directional_lights,
+                &prepared_spot_lights,
+                &prepared_point_lights
+            );
             // per_view_frag_data.shadow_map_count =
             //     self.shadow_map_data
             //         .shadow_map_render_views

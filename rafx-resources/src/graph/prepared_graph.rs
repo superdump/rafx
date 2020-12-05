@@ -463,7 +463,6 @@ impl PreparedRenderGraph {
         for (pass_index, pass) in self.graph_plan.passes.iter().enumerate() {
             profiling::scope!("pass", pass.debug_name.unwrap_or("unnamed"));
             log::trace!("Execute pass name: {:?}", pass.debug_name);
-            println!("EXTENTS {:?}: {:?}", pass.debug_name, pass.extents);
             let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
                 .render_pass(self.render_pass_resources[pass_index].get_raw().renderpass)
                 .framebuffer(self.framebuffer_resources[pass_index].get_raw().framebuffer)

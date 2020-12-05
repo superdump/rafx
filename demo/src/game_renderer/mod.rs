@@ -780,7 +780,7 @@ impl GameRenderer {
 
             let index = shadow_map_render_views.len();
             shadow_map_render_views.push(ShadowMapRenderView::Cube(cube_map_views));
-            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
+            let old = shadow_map_lookup.insert(LightId::PointLight(*entity), index);
             assert!(old.is_none());
         }
 
