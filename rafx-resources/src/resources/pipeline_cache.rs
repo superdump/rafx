@@ -57,6 +57,21 @@ pub struct GraphicsPipelineCacheInner {
     lock_call_count_previous_frame: u64,
     #[cfg(debug_assertions)]
     lock_call_count: u64,
+
+    #[cfg(debug_assertions)]
+    pipeline_create_count_previous_frame: u64,
+    #[cfg(debug_assertions)]
+    pipeline_create_count: u64,
+}
+
+#[derive(Debug)]
+pub struct GraphicsPipelineCacheMetrics {
+    pipeline_count: usize,
+
+    #[cfg(debug_assertions)]
+    lock_call_count_previous_frame: u64,
+    #[cfg(debug_assertions)]
+    pipeline_create_count_previous_frame: u64,
 }
 
 #[derive(Clone)]
@@ -91,11 +106,30 @@ impl GraphicsPipelineCache {
             lock_call_count_previous_frame: 0,
             #[cfg(debug_assertions)]
             lock_call_count: 0,
+            #[cfg(debug_assertions)]
+            pipeline_create_count_previous_frame: 0,
+            #[cfg(debug_assertions)]
+            pipeline_create_count: 0,
         };
 
         GraphicsPipelineCache {
             render_registry: render_registry.clone(),
             inner: Arc::new(Mutex::new(inner)),
+        }
+    }
+
+    pub fn metrics(&self) -> GraphicsPipelineCacheMetrics {
+        let mut guard = self.inner.lock().unwrap();
+        let inner = &mut *guard;
+        #[cfg(debug_assertions)]
+        {
+            inner.lock_call_count += 1;
+        }
+
+        GraphicsPipelineCacheMetrics {
+            pipeline_count: guard.cached_pipelines.len(),
+            #[cfg(debug_assertions)] lock_call_count_previous_frame: guard.lock_call_count_previous_frame,
+            #[cfg(debug_assertions)] pipeline_create_count_previous_frame: guard.pipeline_create_count_previous_frame
         }
     }
 
@@ -114,8 +148,12 @@ impl GraphicsPipelineCache {
         let mut guard = self.inner.lock().unwrap();
         #[cfg(debug_assertions)]
         {
+            // add one for this call
             guard.lock_call_count_previous_frame = guard.lock_call_count + 1;
             guard.lock_call_count = 0;
+
+            guard.pipeline_create_count_previous_frame = guard.pipeline_create_count;
+            guard.pipeline_create_count = 0;
         }
         guard.current_frame_index += 1;
         Self::drop_stale_pipelines(&mut *guard);
@@ -244,7 +282,6 @@ impl GraphicsPipelineCache {
             inner.lock_call_count += 1;
         }
 
-        // Find the swapchain index for the given renderpass
         inner
             .cached_pipelines
             .get(&key)
@@ -313,6 +350,11 @@ impl GraphicsPipelineCache {
                     );
                     log::trace!("  produces vertex input state:\n{:#?}", vertex_input_state);
 
+                    #[cfg(debug_assertions)]
+                    {
+                        inner.pipeline_create_count += 1;
+                    }
+
                     let pipeline = inner.resource_lookup_set.get_or_create_graphics_pipeline(
                         &material_pass,
                         &renderpass,
@@ -368,6 +410,11 @@ impl GraphicsPipelineCache {
                     if !inner.cached_pipelines.contains_key(&key) {
                         if let Some(renderpass) = renderpass.renderpass.upgrade() {
                             if let Some(material_pass) = material_pass.upgrade() {
+                                #[cfg(debug_assertions)]
+                                {
+                                    guard.pipeline_create_count += 1;
+                                }
+
                                 let pipeline = inner
                                     .resource_lookup_set
                                     .get_or_create_graphics_pipeline(&material_pass, &renderpass)?;
