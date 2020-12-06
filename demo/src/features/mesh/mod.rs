@@ -53,8 +53,6 @@ pub struct ShadowMapData {
     pub shadow_map_lookup: FnvHashMap<LightId, usize>,
     pub shadow_map_render_views: Vec<ShadowMapRenderView>,
     pub shadow_map_image_views: Vec<ResourceArc<ImageViewResource>>,
-    // pub shadow_cube_map_render_views: Vec<RenderView>,
-    // pub shadow_cube_map_images: Vec<ResourceArc<ImageViewResource>>,
 }
 
 pub struct ExtractedDirectionalLight {
@@ -73,23 +71,6 @@ pub struct ExtractedSpotLight {
     position: PositionComponent,
     entity: legion::Entity,
 }
-
-// pub struct PreparedDirectionalLight {
-//     light: DirectionalLightComponent,
-//     shadow_map_index: Option<usize>,
-// }
-//
-// pub struct PreparedPointLight {
-//     light: PointLightComponent,
-//     position: PositionComponent,
-//     shadow_map_index: Option<usize>,
-// }
-//
-// pub struct PreparedSpotLight {
-//     light: SpotLightComponent,
-//     position: PositionComponent,
-//     shadow_map_index: Option<usize>,
-// }
 
 pub fn create_mesh_extract_job(
     shadow_map_data: ShadowMapData

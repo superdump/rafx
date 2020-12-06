@@ -91,7 +91,6 @@ impl RenderGraphBuilder {
     pub(super) fn add_image_create(
         &mut self,
         create_node: RenderGraphNodeId,
-        //attachment_type: RenderGraphAttachmentType,
         constraint: RenderGraphImageConstraint,
         preferred_layout: dsc::ImageLayout,
         subresource_range: RenderGraphImageSubresourceRange,
@@ -130,7 +129,6 @@ impl RenderGraphBuilder {
                 //image: image_id,
                 image: usage_id,
                 constraint,
-                //attachment_type,
             });
 
         usage_id
@@ -154,19 +152,10 @@ impl RenderGraphBuilder {
         )
     }
 
-    // pub fn add_image_view(
-    //     &mut self,
-    //     create_node: RenderGraphNodeId,
-    //
-    // ) -> RenderGraphImageUsageId {
-    //     unimplemented!();
-    // }
-
     pub(super) fn add_image_read(
         &mut self,
         read_node: RenderGraphNodeId,
         image: RenderGraphImageUsageId,
-        attachment_type: RenderGraphAttachmentType,
         constraint: RenderGraphImageConstraint,
         subresource_range: RenderGraphImageSubresourceRange,
         view_type: dsc::ImageViewType,
@@ -197,7 +186,6 @@ impl RenderGraphBuilder {
             .push(RenderGraphImageRead {
                 image: usage_id,
                 constraint,
-                attachment_type,
             });
 
         usage_id
@@ -207,7 +195,6 @@ impl RenderGraphBuilder {
         &mut self,
         modify_node: RenderGraphNodeId,
         image: RenderGraphImageUsageId,
-        attachment_type: RenderGraphAttachmentType,
         constraint: RenderGraphImageConstraint,
         subresource_range: RenderGraphImageSubresourceRange,
         view_type: dsc::ImageViewType,
@@ -221,15 +208,11 @@ impl RenderGraphBuilder {
     ) -> (RenderGraphImageUsageId, RenderGraphImageUsageId) {
         let read_version_id = self.image_usages[image.0].version;
 
-        //let subresource_range = self.image_usages[image.0].subresource_range.clone();
-        //let view_type = self.image_usages[image.0].view_type;
-
         let read_usage_id = self.add_image_usage(
             RenderGraphImageUser::Node(modify_node),
             read_version_id,
             RenderGraphImageUsageType::ModifyRead,
             preferred_layout,
-            //subresource_range.clone(),
             subresource_range.clone(),
             view_type.clone(),
             // read_access_flags,
@@ -269,7 +252,6 @@ impl RenderGraphBuilder {
                 input: read_usage_id,
                 output: write_usage_id,
                 constraint,
-                attachment_type,
             });
 
         (read_usage_id, write_usage_id)
@@ -469,13 +451,11 @@ impl RenderGraphBuilder {
     ) {
         constraint.aspect_flags |= vk::ImageAspectFlags::COLOR;
         constraint.usage_flags |= vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::Color(color_attachment_index);
 
         // Add the read to the graph
         let read_image = self.add_image_read(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -506,13 +486,11 @@ impl RenderGraphBuilder {
     ) {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let read_image = self.add_image_read(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -545,13 +523,11 @@ impl RenderGraphBuilder {
     ) {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let read_image = self.add_image_read(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -586,13 +562,11 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::COLOR;
         constraint.usage_flags |= vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::Color(color_attachment_index);
 
         // Add the read to the graph
         let (read_image, write_image) = self.add_image_modify(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -629,13 +603,11 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let (read_image, write_image) = self.add_image_modify(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -676,13 +648,11 @@ impl RenderGraphBuilder {
     ) -> RenderGraphImageUsageId {
         constraint.aspect_flags |= vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL;
         constraint.usage_flags |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
-        let attachment_type = RenderGraphAttachmentType::DepthStencil;
 
         // Add the read to the graph
         let (read_image, write_image) = self.add_image_modify(
             node,
             image,
-            attachment_type,
             constraint,
             subresource_range,
             dsc::ImageViewType::Type2D,
@@ -729,7 +699,7 @@ impl RenderGraphBuilder {
         let usage = self.add_image_read(
             node,
             image,
-            RenderGraphAttachmentType::NotAttached,
+            //RenderGraphAttachmentType::NotAttached,
             constraint,
             subresource_range,
             view_type,
@@ -741,10 +711,6 @@ impl RenderGraphBuilder {
 
         self.node_mut(node).sampled_images.push(usage);
         usage
-    }
-
-    pub fn subresource_image() {
-
     }
 
     pub fn set_output_image(
@@ -767,16 +733,6 @@ impl RenderGraphBuilder {
         }
 
         let output_image_id = RenderGraphOutputImageId(self.output_images.len());
-
-        // let subresource_range = subresource_range.clone().unwrap_or_else(|| {
-        //     dsc::ImageSubresourceRange::default_all_mips_all_layers(
-        //         dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
-        //         specification.mip_count,
-        //         specification.layer_count,
-        //     )
-        // });
-        //
-        // let view_type = view_type.unwrap_or(dsc::ImageViewType::Type2D);
 
         let version_id = self.image_version_id(image_id);
         let usage_id = self.add_image_usage(

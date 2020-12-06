@@ -6,7 +6,7 @@ team environment.
 
 The asset pipeline is designed with user workflow in mind (including dedicated artists!), supporting workflow-friendly
 features like hot reloading assets, including on remote devices. The architecture of the renderer is intended to support
-advance use-cases such as streaming, LODs, visibility systems, and multi-threaded draw call submission. 
+advanced use-cases such as streaming, LODs, visibility systems, and multi-threaded draw call submission. 
 
 Extending and using this crate directly requires some understanding of vulkan. However, there are many tools to make
 iteration much faster such as a **render graph** and **auto-generated shader bindings**.
@@ -60,7 +60,7 @@ The demo includes:
  * imgui
  * HDR Pipeline with Bloom
  * Point, Spot, and Directional Lights
- * Multiple Spot/Directional light soft shadows
+ * Multiple Spot/Directional/Point light soft shadows
 
 ## Running the Demo
 

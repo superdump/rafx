@@ -12,9 +12,6 @@ use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
 use crate::features::mesh::ShadowMapRenderView;
 
-//TODO: Add support for clearing when using modify
-//TODO: Add support for creating views for the subresource ranged calls
-
 lazy_static::lazy_static! {
     pub static ref EMPTY_VERTEX_LAYOUT : VertexDataSetLayout = {
         VertexDataSetLayout::new(vec![])
@@ -568,7 +565,6 @@ pub fn build_render_graph(
             usage_flags: swapchain_info.image_usage_flags,
             create_flags: Default::default(),
             extents: RenderGraphImageExtents::MatchSurface,
-            //subresource_range: dsc::ImageSubresourceRange::default_no_mips_or_layers(dsc::ImageAspectFlag::Color.into())
             layer_count: 1,
             mip_count: 1
         },
@@ -590,30 +586,6 @@ pub fn build_render_graph(
         swapchain_surface_info,
         graph_callbacks,
     )?;
-
-    // let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
-    // for shadow_map_pass in shadow_map_passes {
-    //     match shadow_map_pass {
-    //         ShadowMapImageResources::Single(image) => {
-    //             shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
-    //         },
-    //         ShadowMapImageResources::Cube(cube_map_image) => {
-    //             shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
-    //         }
-    //     }
-    // }
-
-    // let mut shadow_map_image_views = Vec::with_capacity(shadow_map_passes.len());
-    // for shadow_map_image_view in opaque_pass.shadow_maps {
-    //     match shadow_map_pass {
-    //         ShadowMapImageResources::Single(image) => {
-    //             shadow_map_image_views.push(executor.image_view_resource(image).unwrap())
-    //         },
-    //         ShadowMapImageResources::Cube(cube_map_image) => {
-    //             shadow_map_image_views.push(executor.image_view_resource(cube_map_image).unwrap())
-    //         }
-    //     }
-    // }
 
     let shadow_map_image_views = opaque_pass.shadow_maps
         .iter()

@@ -292,6 +292,10 @@ float do_calculate_percent_lit_cube(vec3 light_position_ws, vec3 light_position_
     vec3 surface_to_light_dir_vs = normalize(light_position_vs - in_position_vs);
     float bias_angle_factor = 1.0 - max(0, dot(in_normal_vs, surface_to_light_dir_vs));
     bias_angle_factor = pow(bias_angle_factor, 3);
+
+    // TODO HERE: Want to rework bias to take input from outside the shader, also not sure if the depth bias +
+    // slope scale depth bias is better or the max(MIN_BIAS, MAX_BIAS * slope_factor) is better
+    // Good info here: https://digitalrune.github.io/DigitalRune-Documentation/html/3f4d959e-9c98-4a97-8d85-7a73c26145d7.htm
     //float bias = max(
     //    SHADOW_MAP_BIAS_MAX * bias_angle_factor * bias_angle_factor * bias_angle_factor, 
     //    0.03 //SHADOW_MAP_BIAS_MIN * 0.5
@@ -961,7 +965,7 @@ vec4 pbr_path(
         );
 
 #ifdef DEBUG_RENDER_PERCENT_LIT
-        //total_light += percent_lit;
+        total_light += percent_lit;
 #else
         total_light += percent_lit * point_light_pbr(
             per_view_data.point_lights[i],

@@ -186,6 +186,9 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
             });
         }
 
+        //
+        // Assign all point lights a CUBE shadow map slot
+        //
         let mut prepared_point_lights = Vec::with_capacity(self.point_lights.len());
         for point_light in &self.point_lights {
             prepared_point_lights.push(PreparedPointLight {

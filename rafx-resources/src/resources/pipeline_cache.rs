@@ -127,9 +127,9 @@ impl GraphicsPipelineCache {
         }
 
         GraphicsPipelineCacheMetrics {
-            pipeline_count: guard.cached_pipelines.len(),
-            #[cfg(debug_assertions)] lock_call_count_previous_frame: guard.lock_call_count_previous_frame,
-            #[cfg(debug_assertions)] pipeline_create_count_previous_frame: guard.pipeline_create_count_previous_frame
+            pipeline_count: inner.cached_pipelines.len(),
+            #[cfg(debug_assertions)] lock_call_count_previous_frame: inner.lock_call_count_previous_frame,
+            #[cfg(debug_assertions)] pipeline_create_count_previous_frame: inner.pipeline_create_count_previous_frame
         }
     }
 

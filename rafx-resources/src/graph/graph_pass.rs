@@ -111,7 +111,6 @@ pub struct RenderGraphPassAttachment {
     pub(super) virtual_image: VirtualImageId,
     pub(super) image: Option<PhysicalImageId>,
     pub(super) image_view: Option<PhysicalImageViewId>,
-    //pub(super) subresource_range: dsc::ImageSubresourceRange,
     pub(super) load_op: vk::AttachmentLoadOp,
     pub(super) stencil_load_op: vk::AttachmentLoadOp,
     pub(super) store_op: vk::AttachmentStoreOp,

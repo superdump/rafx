@@ -256,7 +256,8 @@ impl From<RenderGraphImageSpecification> for RenderGraphImageConstraint {
 
 impl RenderGraphImageConstraint {
     pub fn try_convert_to_specification(self) -> Option<RenderGraphImageSpecification> {
-        if /*self.samples.is_none() ||*/ self.format.is_none() /*|| self.subresource_range.is_none()*/ {
+        // Format is the only thing we can't default sensibly
+        if self.format.is_none() {
             None
         } else {
             Some(RenderGraphImageSpecification {

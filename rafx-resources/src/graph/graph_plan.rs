@@ -266,9 +266,6 @@ fn determine_image_constraints(
 
     log::trace!("  Set up input images");
 
-    //TODO: Not propagating backwards from sampling
-    //TODO: Not propagating forwards from k
-
     //
     // Propagate input image state specifications into images. Inputs are fully specified and
     // their constraints will never be overwritten
@@ -844,31 +841,6 @@ fn assign_virtual_images(
     }
 }
 
-// #[profiling::function]
-// fn assign_image_views(
-//     graph: &RenderGraphBuilder,
-//     node_execution_order: &[RenderGraphNodeId],
-// ) {
-//     log::trace!("Create image views for usages");
-//     for node in node_execution_order {
-//         let node = graph.node(*node);
-//         log::trace!("  node {:?} {:?}", node.id().0, node.name());
-//
-//
-//
-//         for create in node.image_creates {
-//             // The view is always matching the image constraint
-//             //create.constraint.mip_count
-//             //create.constraint.samples
-//
-//         }
-//
-//         for read in node.image_reads {
-//
-//         }
-//     }
-// }
-
 //TODO: Redundant with can_passes_merge
 fn can_merge_nodes(
     graph: &RenderGraphBuilder,
@@ -895,21 +867,6 @@ fn can_merge_nodes(
     false
 }
 
-// fn get_subresource_range_of_usage(
-//     graph: &RenderGraphBuilder,
-//     image_constraints: &DetermineImageConstraintsResult,
-//     usage: RenderGraphImageUsageId,
-// ) -> dsc::ImageSubresourceRange {
-//     graph.image_usages[usage.0].subresource_range.clone().unwrap_or_else(|| {
-//         let specification = &image_constraints.images[&usage];
-//         dsc::ImageSubresourceRange::default_all_mips_all_layers(
-//             dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
-//             specification.mip_count,
-//             specification.layer_count,
-//         )
-//     })
-// }
-
 //
 // This walks through the nodes and creates passes/subpasses. Most of the info to create them is
 // determined here along with stage/access/queue family barrier info. (The barrier info is used
@@ -922,7 +879,6 @@ fn build_physical_passes(
     image_constraints: &DetermineImageConstraintsResult,
     virtual_images: &AssignVirtualImagesResult,
     swapchain_surface_info: &dsc::SwapchainSurfaceInfo
-    //determine_image_layouts_result: &DetermineImageLayoutsResult
 ) -> Vec<RenderGraphPass> {
     let mut pass_node_sets = Vec::default();
 
@@ -963,7 +919,6 @@ fn build_physical_passes(
             attachments: &mut Vec<RenderGraphPassAttachment>,
             usage: RenderGraphImageUsageId,
             virtual_image: VirtualImageId,
-            //subresource_range: dsc::ImageSubresourceRange
         ) -> (usize, bool) {
             if let Some(position) = attachments
                 .iter()
@@ -1090,8 +1045,6 @@ fn build_physical_passes(
                     let specification = image_constraints.images.get(&write_image).unwrap();
                     log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
 
-                    //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, write_image);
-
                     set_extent(&mut pass.extents, specification, swapchain_surface_info);
                     let (pass_attachment_index, is_first_usage) =
                         find_or_insert_attachment(&mut pass.attachments, write_image, *virtual_image/*, subresource_range*/);
@@ -1125,11 +1078,8 @@ fn build_physical_passes(
                     .usage_to_virtual
                     .get(&read_or_write_usage)
                     .unwrap();
-                //let version_id = graph.image_version_id(read_or_write_usage);
                 let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
                 log::trace!("      virtual attachment (depth): {:?}", virtual_image);
-
-                //let subresource_range = get_subresource_range_of_usage(graph, image_constraints, read_or_write_usage);
 
                 set_extent(&mut pass.extents, specification, swapchain_surface_info);
                 let (pass_attachment_index, is_first_usage) =
@@ -1189,8 +1139,8 @@ fn build_physical_passes(
 
         if pass.subpasses.is_empty() {
             log::trace!("    Not generating a pass - no attachments");
-            assert!(pass.attachments.is_empty());
-            assert!(pass.extents.is_none());
+            debug_assert!(pass.attachments.is_empty());
+            debug_assert!(pass.extents.is_none());
             continue;
         }
 
@@ -1295,9 +1245,6 @@ fn assign_physical_images(
                     &mut reuse_requirements,
                     &mut reuse_requirements_lookup,
                 );
-
-                // the subresource is on the usage..
-                //modify.input
             }
 
             for read in &node.image_reads {
@@ -1497,30 +1444,6 @@ fn assign_physical_images(
     }
 }
 
-// #[profiling::function]
-// fn assign_image_views(
-//     graph: &RenderGraphBuilder,
-//     image_constraints: &DetermineImageConstraintsResult,
-//     virtual_images: &AssignVirtualImagesResult,
-//     physical_images: &AssignPhysicalImagesResult,
-//     passes: &mut [RenderGraphPass],
-// ) -> AssignPhysicalImagesResult {
-//
-//     for modify in &node.image_modifies {
-//         // does this need a view?
-//     }
-//
-//     for (pass_index, pass) in passes.iter().enumerate() {
-//         for subpass in &pass.subpasses {
-//             let node = graph.node(subpass.node);
-//
-//             for read in &node.image_reads {
-//                 //read.image
-//             }
-//         }
-//     }
-// }
-
 #[profiling::function]
 fn build_node_barriers(
     graph: &RenderGraphBuilder,
@@ -1686,9 +1609,6 @@ fn build_pass_barriers(
 ) -> Vec<Vec<dsc::SubpassDependency>> {
     log::trace!("-- build_pass_barriers --");
     const MAX_PIPELINE_FLAG_BITS: usize = 15;
-    // #[allow(non_snake_case)]
-    // let ALL_GRAPHICS: vk::PipelineStageFlags =
-    //     vk::PipelineStageFlags::from_raw(0b111_1111_1110);
 
     //
     // We will walk through all nodes keeping track of memory access as we go
@@ -1902,14 +1822,6 @@ fn build_pass_barriers(
                         new_layout: image_barrier.layout,
                         subresource_range
                     });
-
-                    // image_transitions.push((
-                    //     physical_image_id,
-                    //     image_state.layout,
-                    //     image_barrier.layout,
-                    //     physical_images,
-                    //     subresource_range,
-                    // ));
                 }
 
                 image_state.layout = image_barrier.layout;
@@ -2534,7 +2446,6 @@ impl RenderGraphPlan {
             &image_constraint_results,
             &assign_virtual_images_result,
             swapchain_info,
-            /*, &determine_image_layouts_result*/
         );
 
         //
