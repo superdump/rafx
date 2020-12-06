@@ -679,7 +679,7 @@ impl GameRenderer {
             let view =
                 glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
 
-            let near_plane = 0.01;
+            let near_plane = 0.25;
             let far_plane = 100.0;
             let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, far_plane, near_plane);
             let proj = matrix_flip_y(proj);
@@ -709,7 +709,7 @@ impl GameRenderer {
                 glam::Vec3::new(0.0, 0.0, 1.0),
             );
 
-            let near_plane = 0.01;
+            let near_plane = 0.25;
             let far_plane = 100.0;
             let ortho_projection_size = 10.0;
             let proj = glam::Mat4::orthographic_rh(
@@ -749,18 +749,19 @@ impl GameRenderer {
         ];
 
         let mut query = <(Entity, Read<PointLightComponent>, Read<PositionComponent>)>::query();
-        for (entity, _light, position) in query.iter(world) {
+        for (entity, light, position) in query.iter(world) {
             fn cubemap_face(
                 phase_mask: RenderPhaseMask,
                 render_view_set: &RenderViewSet,
+                light: &PointLightComponent,
                 position: glam::Vec3,
                 cube_map_view_directions: &(glam::Vec3, glam::Vec3)
             ) -> RenderView {
                 //NOTE: Cubemaps always use LH
                 let view = glam::Mat4::look_at_lh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
 
-                let near = 0.01;
-                let far = 100.0;
+                let near = 0.25;
+                let far = light.range;
                 let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, far, near);
                 let proj = matrix_flip_y(proj);
 
@@ -778,12 +779,12 @@ impl GameRenderer {
 
             #[rustfmt::skip]
             let cube_map_views = [
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[0]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[1]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[2]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[3]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[4]),
-                cubemap_face(shadow_map_phase_mask, &render_view_set, position.position, &cube_map_view_directions[5]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[0]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[1]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[2]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[3]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[4]),
+                cubemap_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[5]),
             ];
 
             let index = shadow_map_render_views.len();

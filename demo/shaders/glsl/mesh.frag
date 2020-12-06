@@ -34,8 +34,10 @@ const float PI = 3.14159265359;
 //
 // These were tuned with near/far distances of 0.1 to 100.0 reversed Z
 //
-const float SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 0.01;
+const float SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 0.4;
 const float DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 1.0;
+//const float POINT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER = 0.01;
+// Cube maps have their own codepath so no constant here yet
 
 // The max is used when light is hitting at an angle (near orthogonal to normal). Min is used when light is hitting
 // directly
@@ -60,6 +62,13 @@ const float SHADOW_MAP_BIAS_MIN = 0.0005;
 //#define PCF_SAMPLE_1
 //#define PCF_SAMPLE_9
 #define PCF_SAMPLE_25
+
+#define PCF_CUBE_SAMPLE_1
+//#define PCF_CUBE_SAMPLE_8
+//#define PCF_CUBE_SAMPLE_20
+//#define PCF_CUBE_SAMPLE_64
+
+//#define DEBUG_RENDER_PERCENT_LIT
 
 //
 // Per-Frame Pass
@@ -248,8 +257,6 @@ vec4 normal_map(
     return normalize(vec4(normal, 0.0));
 }
 
-//TODO: PCF cube map shadows
-//TODO: Tune bias in cube maps
 //TODO: Set up dummy texture so all bindings can be populated
 //TODO: Fix bias adjustment in spotlights?
 
@@ -272,38 +279,154 @@ float calculate_cubemap_equivalent_depth(vec3 light_to_surface_ws, float near, f
     return (depth_value + 1.0) * 0.5;
 }
 
-float do_calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
+float do_calculate_percent_lit_cube(vec3 light_position_ws, vec3 light_position_vs, vec3 normal_vs, int index, float bias_multiplier) {
     // Determine the equivalent depth value that would come out of the shadow cubemap if this surface
     // was the sampled depth. We have 6 different view/projections but those are defined by the spec.
     // The only thing we need from outside the shader is the near/far plane of the projections
-    vec3 light_to_surface = in_position_ws.xyz - light_position_ws;
+    float near_plane = per_view_data.shadow_map_cube_data[index].cube_map_projection_near_z;
+    float far_plane = per_view_data.shadow_map_cube_data[index].cube_map_projection_far_z;
+    vec3 light_to_surface_ws = in_position_ws.xyz - light_position_ws;
+    
+    // Tune with single-PCF
+    // bias_angle_factor is high when the light angle is almost orthogonal to the normal
+    vec3 surface_to_light_dir_vs = normalize(light_position_vs - in_position_vs);
+    float bias_angle_factor = 1.0 - max(0, dot(in_normal_vs, surface_to_light_dir_vs));
+    bias_angle_factor = pow(bias_angle_factor, 3);
+    //float bias = max(
+    //    SHADOW_MAP_BIAS_MAX * bias_angle_factor * bias_angle_factor * bias_angle_factor, 
+    //    0.03 //SHADOW_MAP_BIAS_MIN * 0.5
+    //) * POINT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER;
+
+    //return bias_angle_factor;
+    float bias = 0.0002 + (0.0010 * bias_angle_factor);
+
+#ifdef PCF_CUBE_SAMPLE_1
     float depth_of_surface = calculate_cubemap_equivalent_depth(
-        light_to_surface, 
-        per_view_data.shadow_map_cube_data[index].cube_map_projection_near_z, 
-        per_view_data.shadow_map_cube_data[index].cube_map_projection_far_z
+        light_to_surface_ws, 
+        near_plane, 
+        far_plane
     );
 
-    float compare = texture(
+    float shadow = texture(
         samplerCubeShadow(shadow_map_images_cube[index], smp_depth), 
         vec4(
-            light_to_surface, 
-            depth_of_surface + 0.00005
+            light_to_surface_ws, 
+            depth_of_surface + bias
         )
     ).r;
-    return compare;
+#endif
+
+#ifdef PCF_CUBE_SAMPLE_20
+    //float bias = 0.00020;
+
+    vec3 sampleOffsetDirections[20] = vec3[]
+    (
+        vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
+        vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+        vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+        vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+        vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+    );
+
+    float shadow = 0.0;
+    int samples = 20;
+    float diskRadius = 0.01;
+    //float diskRadius = (1.0 + (view_distance / far_plane)) / 25.0;
+
+    for(int i = 0; i < samples; ++i)
+    {
+        vec3 offset = sampleOffsetDirections[i] * diskRadius;
+        float depth_of_surface = calculate_cubemap_equivalent_depth(
+            light_to_surface_ws + offset, 
+            near_plane, 
+            far_plane
+        );
+
+        shadow += texture(
+            samplerCubeShadow(shadow_map_images_cube[index], smp_depth), 
+            vec4(
+                light_to_surface_ws + offset, 
+                depth_of_surface + bias
+            )
+        ).r;
+    }
+    shadow /= float(samples);  
+#endif
+
+#ifdef PCF_CUBE_SAMPLE_8
+    float shadow  = 0.0;
+    //float bias    = 0.0002;
+    float samples = 2.0;
+    float offset  = 0.05;
+    for(float x = -offset; x < offset; x += offset / (samples * 0.5))
+    {
+        for(float y = -offset; y < offset; y += offset / (samples * 0.5))
+        {
+            for(float z = -offset; z < offset; z += offset / (samples * 0.5))
+            {
+                float depth_of_surface = calculate_cubemap_equivalent_depth(
+                    light_to_surface_ws + vec3(x, y, z), 
+                    near_plane, 
+                    far_plane
+                );
+
+                shadow += texture(
+                    samplerCubeShadow(shadow_map_images_cube[index], smp_depth), 
+                    vec4(
+                        light_to_surface_ws + vec3(x, y, z), 
+                        depth_of_surface + bias
+                    )
+                ).r;
+            }
+        }
+    }
+    shadow /= (samples * samples * samples);
+#endif
+
+#ifdef PCF_CUBE_SAMPLE_64
+    float shadow  = 0.0;
+    //float bias    = 0.0002;
+    float samples = 4.0;
+    float offset  = 0.05;
+    for(float x = -offset; x < offset; x += offset / (samples * 0.5))
+    {
+        for(float y = -offset; y < offset; y += offset / (samples * 0.5))
+        {
+            for(float z = -offset; z < offset; z += offset / (samples * 0.5))
+            {
+                float depth_of_surface = calculate_cubemap_equivalent_depth(
+                    light_to_surface_ws + vec3(x, y, z), 
+                    near_plane, 
+                    far_plane
+                );
+
+                shadow += texture(
+                    samplerCubeShadow(shadow_map_images_cube[index], smp_depth), 
+                    vec4(
+                        light_to_surface_ws + vec3(x, y, z), 
+                        depth_of_surface + bias
+                    )
+                ).r;
+            }
+        }
+    }
+    shadow /= (samples * samples * samples);
+#endif
+
+    return shadow;
 }
 
-float calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
+float calculate_percent_lit_cube(vec3 light_position_ws, vec3 light_position_vs, vec3 normal_vs, int index, float bias_multiplier) {
     if (index == -1) {
         return 1.0;
     }
 
-    return do_calculate_percent_lit_cube(light_position_ws, index, bias_multiplier);
+    return do_calculate_percent_lit_cube(light_position_ws, light_position_vs, normal_vs, index, bias_multiplier);
 }
 
 //TODO: Not sure about surface to light dir for spot lights... don't think it will do anything except give slightly bad
 // bias results though
-float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
+float do_calculate_percent_lit(vec3 normal_vs, int index, float bias_multiplier) {
     // Determine the equiavlent depth value that would come out of the shadow map if this surface was
     // the sampled depth
     //  - [shadowmap view/proj matrix] * [surface position]
@@ -317,13 +440,13 @@ float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
     float depth_of_surface = projected.z;
 
     // Determine the direction of the light so we can apply more bias when light is near orthogonal to the normal
-    // TODO: This is broken for spot lights
-    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
-    vec3 surface_to_light_dir = -light_dir;
+    // TODO: This is broken for spot lights. And is this mixing vs and ws data? Also we shouldn't consider normal maps here
+    vec3 light_dir_vs = mat3(per_object_data.model_view) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
+    vec3 surface_to_light_dir_vs = -light_dir_vs;
 
     // Tune with single-PCF
     // bias_angle_factor is high when the light angle is almost orthogonal to the normal
-    float bias_angle_factor = 1.0 - dot(normal, surface_to_light_dir);
+    float bias_angle_factor = 1.0 - dot(normal_vs, surface_to_light_dir_vs);
     float bias = max(SHADOW_MAP_BIAS_MAX * bias_angle_factor * bias_angle_factor * bias_angle_factor, SHADOW_MAP_BIAS_MIN) * bias_multiplier;
 
     // Non-PCF form (broken last time I tried it)
@@ -827,16 +950,19 @@ vec4 pbr_path(
     vec3 total_light = vec3(0.0);
     for (uint i = 0; i < per_view_data.point_light_count; ++i) {
         // TODO: Early out by distance?
-        // Need to use cube maps to detect percent lit
-        //float percent_lit = 1.0;
+
 
         float percent_lit = calculate_percent_lit_cube(
             per_view_data.point_lights[i].position_ws,
+            per_view_data.point_lights[i].position_vs,
+            normal_vs,
             per_view_data.point_lights[i].shadow_map,
             1.0
         );
 
-        //total_light += vec3(percent_lit, percent_lit, percent_lit);
+#ifdef DEBUG_RENDER_PERCENT_LIT
+        //total_light += percent_lit;
+#else
         total_light += percent_lit * point_light_pbr(
             per_view_data.point_lights[i],
             surface_to_eye_vs,
@@ -847,6 +973,7 @@ vec4 pbr_path(
             roughness,
             metalness
         );
+#endif
     }
 
     // Spot Lights
@@ -857,6 +984,10 @@ vec4 pbr_path(
             per_view_data.spot_lights[i].shadow_map,
             SPOT_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
         );
+
+#ifdef DEBUG_RENDER_PERCENT_LIT
+        total_light += percent_lit;
+#else
         total_light += percent_lit * spot_light_pbr(
             per_view_data.spot_lights[i],
             surface_to_eye_vs,
@@ -867,6 +998,7 @@ vec4 pbr_path(
             roughness,
             metalness
         );
+#endif
     }
 
     // directional Lights
@@ -876,6 +1008,10 @@ vec4 pbr_path(
             per_view_data.directional_lights[i].shadow_map,
             DIRECTIONAL_LIGHT_SHADOW_MAP_BIAS_MULTIPLIER
         );
+
+#ifdef DEBUG_RENDER_PERCENT_LIT
+        total_light += percent_lit;
+#else
         total_light += percent_lit * directional_light_pbr(
             per_view_data.directional_lights[i],
             surface_to_eye_vs,
@@ -886,13 +1022,19 @@ vec4 pbr_path(
             roughness,
             metalness
         );
+#endif
     }
 
     //
     // There are still issues here, not sure how alpha interacts and gamma looks terrible
     //
     vec3 ambient = per_view_data.ambient_light.rgb * base_color.rgb; //TODO: Multiply ao in here
+    
+#ifdef DEBUG_RENDER_PERCENT_LIT
+    vec3 color = total_light;
+#else
     vec3 color = ambient + total_light + emissive_color.rgb;
+#endif
     return vec4(color, base_color.a);
 
     // tonemapping

@@ -180,10 +180,10 @@ pub fn populate_test_lights(
         resources,
         world,
         //glam::Vec3::new(-3.0, 3.0, 2.0),
-        glam::Vec3::new(0.0, 0.0, 3.0),
+        glam::Vec3::new(5.0, 5.0, 2.0),
         PointLightComponent {
-            color: [1.0, 1.0, 1.0, 1.0].into(),
-            intensity: 130.0,
+            color: [0.0, 1.0, 0.0, 1.0].into(),
+            intensity: 50.0,
             range: 25.0,
         },
     );
@@ -207,18 +207,18 @@ pub fn populate_test_lights(
     // //
     // // KEY LIGHT
     // //
-    // let light_from = glam::Vec3::new(-5.0, 5.0, 5.0);
-    // let light_to = glam::Vec3::zero();
-    // let light_direction = (light_to - light_from).normalize();
-    // add_directional_light(
-    //     resources,
-    //     world,
-    //     DirectionalLightComponent {
-    //         direction: light_direction,
-    //         intensity: 1.0,
-    //         color: [1.0, 1.0, 1.0, 1.0].into(),
-    //     },
-    // );
+    let light_from = glam::Vec3::new(-5.0, 5.0, 5.0);
+    let light_to = glam::Vec3::zero();
+    let light_direction = (light_to - light_from).normalize();
+    add_directional_light(
+        resources,
+        world,
+        DirectionalLightComponent {
+            direction: light_direction,
+            intensity: 1.0,
+            color: [0.0, 0.0, 1.0, 1.0].into(),
+        },
+    );
 
     //
     // KEY LIGHT
@@ -232,14 +232,14 @@ pub fn populate_test_lights(
     //     DirectionalLightComponent {
     //         direction: light_direction,
     //         intensity: 2.0,
-    //         color: [1.0, 1.0, 1.0, 1.0].into(),
+    //         color: [0.0, 0.0, 1.0, 1.0].into(),
     //     },
     // );
 
     //
     // SPOT LIGHT
     //
-    let light_from = glam::Vec3::new(-3.0, -3.0, 500.0);
+    let light_from = glam::Vec3::new(-3.0, -3.0, 5.0);
     let light_to = glam::Vec3::zero();
     let light_direction = (light_to - light_from).normalize();
     add_spot_light(

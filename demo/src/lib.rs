@@ -206,12 +206,13 @@ pub fn run(args: &DemoArgs) {
                 }
         */
 
+        /*
         {
             let time_state = resources.get::<TimeState>().unwrap();
             let mut query = <(Write<PositionComponent>, Read<PointLightComponent>)>::query();
             for (position, light) in query.iter_mut(&mut world) {
-                const LIGHT_XY_DISTANCE: f32 = 3.0;
-                const LIGHT_Z: f32 = 3.0;
+                const LIGHT_XY_DISTANCE: f32 = 6.0;
+                const LIGHT_Z: f32 = 3.5;
                 const LIGHT_ROTATE_SPEED: f32 = 0.5;
                 const LIGHT_LOOP_OFFSET: f32 = 2.0;
                 let loop_time = time_state.total_time().as_secs_f32();
@@ -228,6 +229,7 @@ pub fn run(args: &DemoArgs) {
                 position.position = light_from;
             }
         }
+        */
 
         //
         // imgui debug draw,
