@@ -689,7 +689,7 @@ impl RenderGraphBuilder {
         image: RenderGraphImageUsageId,
         mut constraint: RenderGraphImageConstraint,
         subresource_range: RenderGraphImageSubresourceRange,
-        view_type: dsc::ImageViewType
+        view_type: dsc::ImageViewType,
     ) -> RenderGraphImageUsageId {
         // Don't assume color, we might sample a depth image
         //constraint.aspect_flags |= vk::ImageAspectFlags::COLOR;

@@ -2,9 +2,9 @@ use ash::vk;
 use legion::*;
 use rafx::assets::AssetManager;
 use rafx::graph::VisitRenderpassArgs;
+use rafx::resources::vk_description as dsc;
 use rafx::resources::{RenderPassResource, ResourceArc, ResourceContext};
 use rafx::vulkan::VkDeviceContext;
-use rafx::resources::vk_description as dsc;
 
 pub struct RenderJobExtractContext {
     pub world: &'static World,
@@ -84,7 +84,12 @@ impl RenderJobWriteContext {
                 .clone(),
             visit_renderpass_args.command_buffer,
             visit_renderpass_args.renderpass_resource.clone(),
-            visit_renderpass_args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta.clone(),
+            visit_renderpass_args
+                .framebuffer_resource
+                .get_raw()
+                .framebuffer_key
+                .framebuffer_meta
+                .clone(),
             visit_renderpass_args.subpass_index,
         )
     }

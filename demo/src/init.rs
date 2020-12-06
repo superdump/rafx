@@ -112,7 +112,7 @@ pub fn rendering_init(
     resources.insert(DebugDraw3DResource::new());
 
     #[cfg(debug_assertions)]
-    let use_vulkan_debug_layer = false;
+    let use_vulkan_debug_layer = true;
     #[cfg(not(debug_assertions))]
     let use_vulkan_debug_layer = false;
 

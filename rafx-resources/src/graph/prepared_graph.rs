@@ -1,12 +1,13 @@
 use super::PhysicalImageId;
+use crate::graph::graph_image::PhysicalImageViewId;
 use crate::graph::graph_node::RenderGraphNodeId;
 use crate::graph::graph_plan::RenderGraphPlan;
 use crate::graph::{RenderGraphBuilder, RenderGraphImageSpecification, RenderGraphImageUsageId};
 use crate::resources::FramebufferResource;
 use crate::resources::RenderPassResource;
 use crate::resources::ResourceLookupSet;
+use crate::vk_description::SwapchainSurfaceInfo;
 use crate::{vk_description as dsc, ImageResource};
-use crate::vk_description::{SwapchainSurfaceInfo};
 use crate::{ImageViewResource, ResourceArc, ResourceContext};
 use ash::prelude::VkResult;
 use ash::version::DeviceV1_0;
@@ -16,7 +17,6 @@ use rafx_nodes::{RenderPhase, RenderPhaseIndex};
 use rafx_shell_vulkan::{VkDeviceContext, VkImage};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
-use crate::graph::graph_image::PhysicalImageViewId;
 
 pub struct ResourceCache<T: Eq + Hash> {
     resources: FnvHashMap<T, u64>,
@@ -110,7 +110,8 @@ impl RenderGraphCacheInner {
         swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
     ) -> VkResult<FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>> {
         log::trace!("Allocate images for rendergraph");
-        let mut image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>> = Default::default();
+        let mut image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>> =
+            Default::default();
 
         // Keeps track of what index in the cache we will use next. This starts at 0 for each key
         // and increments every time we use an image. If the next image is >= length of images, we
@@ -155,7 +156,10 @@ impl RenderGraphCacheInner {
                 image_resources.insert(id, cached_image.image.clone());
             } else {
                 // No unused image available, create one
-                let extent = key.specification.extents.into_vk_extent_3d(&key.swapchain_surface_info);
+                let extent = key
+                    .specification
+                    .extents
+                    .into_vk_extent_3d(&key.swapchain_surface_info);
                 let image = VkImage::new(
                     device_context,
                     rafx_shell_vulkan::vk_mem::MemoryUsage::GpuOnly,
@@ -201,13 +205,15 @@ impl RenderGraphCacheInner {
         resources: &ResourceLookupSet,
         image_resources: &FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>,
     ) -> VkResult<FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>> {
-        let mut image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>> =
-           Default::default();
+        let mut image_view_resources: FnvHashMap<
+            PhysicalImageViewId,
+            ResourceArc<ImageViewResource>,
+        > = Default::default();
 
         // For output images, the physical id just needs to be associated with the image provided by
         // the user
         for (id, image) in &graph.output_images {
-           image_view_resources.insert(*id, image.dst_image.clone());
+            image_view_resources.insert(*id, image.dst_image.clone());
         }
 
         for (id, view) in graph.image_views.iter().enumerate() {
@@ -229,7 +235,10 @@ impl RenderGraphCacheInner {
             log::trace!("get_or_create_image_view for {:?}", view.physical_image);
             let image_resource = &image_resources[&view.physical_image];
 
-            let old = image_view_resources.insert(id, resources.get_or_create_image_view(image_resource, &image_view_meta)?);
+            let old = image_view_resources.insert(
+                id,
+                resources.get_or_create_image_view(image_resource, &image_view_meta)?,
+            );
             assert!(old.is_none());
         }
 
@@ -391,11 +400,8 @@ impl PreparedRenderGraph {
             swapchain_surface_info,
         )?;
 
-        let image_view_resources = cache.allocate_image_views(
-            &graph_plan,
-            resources,
-            &image_resources,
-        )?;
+        let image_view_resources =
+            cache.allocate_image_views(&graph_plan, resources, &image_resources)?;
 
         let render_pass_resources =
             cache.allocate_render_passes(&graph_plan, resources, swapchain_surface_info)?;

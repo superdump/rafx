@@ -1,3 +1,4 @@
+use crate::features::mesh::ShadowMapRenderView;
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, UiRenderPhase};
 use crate::render_contexts::RenderJobWriteContext;
 use crate::VkDeviceContext;
@@ -10,7 +11,6 @@ use rafx::resources::ResourceContext;
 use rafx::resources::{vk_description as dsc, VertexDataSetLayout};
 use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
-use crate::features::mesh::ShadowMapRenderView;
 
 lazy_static::lazy_static! {
     pub static ref EMPTY_VERTEX_LAYOUT : VertexDataSetLayout = {
@@ -59,14 +59,10 @@ fn shadow_map_pass(
 
     let render_view = render_view.clone();
     graph_callbacks.set_renderpass_callback(node, move |args, user_context| {
-        let mut write_context =
-            RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
+        let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
         user_context
             .prepared_render_data
-            .write_view_phase::<ShadowMapRenderPhase>(
-                &render_view,
-                &mut write_context,
-            );
+            .write_view_phase::<ShadowMapRenderPhase>(&render_view, &mut write_context);
         Ok(())
     });
 
@@ -75,7 +71,7 @@ fn shadow_map_pass(
 
 enum ShadowMapImageResources {
     Single(RenderGraphImageUsageId),
-    Cube(RenderGraphImageUsageId)
+    Cube(RenderGraphImageUsageId),
 }
 
 pub fn build_render_graph(
@@ -112,36 +108,59 @@ pub fn build_render_graph(
     for shadow_map_view in shadow_map_views {
         match shadow_map_view {
             ShadowMapRenderView::Single(render_view) => {
-                let shadow_map_node = graph.add_node("create shadowmap", RenderGraphQueue::DefaultGraphics);
+                let shadow_map_node =
+                    graph.add_node("create shadowmap", RenderGraphQueue::DefaultGraphics);
                 let depth_image = graph.add_image(
                     shadow_map_node,
                     RenderGraphImageConstraint {
                         format: Some(depth_format),
-                        extents: Some(RenderGraphImageExtents::Custom(render_view.extents_width(), render_view.extents_height(), 1)),
+                        extents: Some(RenderGraphImageExtents::Custom(
+                            render_view.extents_width(),
+                            render_view.extents_height(),
+                            1,
+                        )),
                         ..Default::default()
                     },
-                    dsc::ImageViewType::Type2D
+                    dsc::ImageViewType::Type2D,
                 );
 
-                let shadow_map_pass = shadow_map_pass(&mut graph, &mut graph_callbacks, render_view, depth_image, 0);
+                let shadow_map_pass = shadow_map_pass(
+                    &mut graph,
+                    &mut graph_callbacks,
+                    render_view,
+                    depth_image,
+                    0,
+                );
                 shadow_map_passes.push(ShadowMapImageResources::Single(shadow_map_pass.depth));
-            },
+            }
             ShadowMapRenderView::Cube(render_view) => {
-                let cube_map_node = graph.add_node("create cube shadowmap", RenderGraphQueue::DefaultGraphics);
+                let cube_map_node =
+                    graph.add_node("create cube shadowmap", RenderGraphQueue::DefaultGraphics);
                 let mut cube_map_image = graph.add_image(
                     cube_map_node,
                     RenderGraphImageConstraint {
                         format: Some(depth_format),
                         create_flags: vk::ImageCreateFlags::CUBE_COMPATIBLE,
                         layer_count: Some(6),
-                        extents: Some(RenderGraphImageExtents::Custom(render_view[0].extents_width(), render_view[0].extents_height(), 1)),
+                        extents: Some(RenderGraphImageExtents::Custom(
+                            render_view[0].extents_width(),
+                            render_view[0].extents_height(),
+                            1,
+                        )),
                         ..Default::default()
                     },
-                    dsc::ImageViewType::Cube
+                    dsc::ImageViewType::Cube,
                 );
 
                 for i in 0..6 {
-                    cube_map_image = shadow_map_pass(&mut graph, &mut graph_callbacks, &render_view[i], cube_map_image, i).depth;
+                    cube_map_image = shadow_map_pass(
+                        &mut graph,
+                        &mut graph_callbacks,
+                        &render_view[i],
+                        cube_map_image,
+                        i,
+                    )
+                    .depth;
                 }
 
                 //
@@ -191,12 +210,20 @@ pub fn build_render_graph(
         let mut shadow_maps = Vec::with_capacity(shadow_map_passes.len());
         for shadow_map_pass in &shadow_map_passes {
             let sampled_image = match shadow_map_pass {
-                ShadowMapImageResources::Single(image) => {
-                    graph.sample_image(node, *image, Default::default(), RenderGraphImageSubresourceRange::AllMipsAllLayers, dsc::ImageViewType::Type2D)
-                },
-                ShadowMapImageResources::Cube(cube_map_image) => {
-                    graph.sample_image(node, *cube_map_image, Default::default(), RenderGraphImageSubresourceRange::AllMipsAllLayers, dsc::ImageViewType::Cube)
-                }
+                ShadowMapImageResources::Single(image) => graph.sample_image(
+                    node,
+                    *image,
+                    Default::default(),
+                    RenderGraphImageSubresourceRange::AllMipsAllLayers,
+                    dsc::ImageViewType::Type2D,
+                ),
+                ShadowMapImageResources::Cube(cube_map_image) => graph.sample_image(
+                    node,
+                    *cube_map_image,
+                    Default::default(),
+                    RenderGraphImageSubresourceRange::AllMipsAllLayers,
+                    dsc::ImageViewType::Cube,
+                ),
             };
             shadow_maps.push(sampled_image);
         }
@@ -212,7 +239,12 @@ pub fn build_render_graph(
             Ok(())
         });
 
-        OpaquePass { node, color, depth, shadow_maps }
+        OpaquePass {
+            node,
+            color,
+            depth,
+            shadow_maps,
+        }
     };
 
     let previous_pass_color = if enable_hdr {
@@ -256,7 +288,7 @@ pub fn build_render_graph(
                     ..Default::default()
                 },
                 Default::default(),
-                Default::default()
+                Default::default(),
             );
 
             graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -271,7 +303,11 @@ pub fn build_render_graph(
                     .get_or_create_graphics_pipeline(
                         &bloom_extract_material_pass,
                         args.renderpass_resource,
-                        &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
+                        &args
+                            .framebuffer_resource
+                            .get_raw()
+                            .framebuffer_key
+                            .framebuffer_meta,
                         &EMPTY_VERTEX_LAYOUT,
                     )?;
 
@@ -283,12 +319,14 @@ pub fn build_render_graph(
 
                 let descriptor_set_layouts =
                     &pipeline.get_raw().pipeline_layout.get_raw().descriptor_sets;
-                let bloom_extract_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
-                    &descriptor_set_layouts[shaders::bloom_extract_frag::TEX_DESCRIPTOR_SET_INDEX],
-                    shaders::bloom_extract_frag::DescriptorSet0Args {
-                        tex: sample_image.as_ref().unwrap(),
-                    },
-                )?;
+                let bloom_extract_material_dyn_set = descriptor_set_allocator
+                    .create_descriptor_set(
+                        &descriptor_set_layouts
+                            [shaders::bloom_extract_frag::TEX_DESCRIPTOR_SET_INDEX],
+                        shaders::bloom_extract_frag::DescriptorSet0Args {
+                            tex: sample_image.as_ref().unwrap(),
+                        },
+                    )?;
 
                 // Explicit flush since we're going to use the descriptors immediately
                 descriptor_set_allocator.flush_changes()?;
@@ -347,7 +385,13 @@ pub fn build_render_graph(
                 ));
                 graph.set_image_name(blur_dst.unwrap(), "blur_dst");
 
-                let sample_image = graph.sample_image(node, blur_src, Default::default(), Default::default(), Default::default());
+                let sample_image = graph.sample_image(
+                    node,
+                    blur_src,
+                    Default::default(),
+                    Default::default(),
+                    Default::default(),
+                );
                 graph.set_image_name(blur_src, "blur_src");
 
                 let bloom_blur_material_pass = bloom_blur_material_pass.clone();
@@ -363,7 +407,11 @@ pub fn build_render_graph(
                         .get_or_create_graphics_pipeline(
                             &bloom_blur_material_pass,
                             args.renderpass_resource,
-                            &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
+                            &args
+                                .framebuffer_resource
+                                .get_raw()
+                                .framebuffer_key
+                                .framebuffer_meta,
                             &EMPTY_VERTEX_LAYOUT,
                         )?;
 
@@ -376,16 +424,18 @@ pub fn build_render_graph(
                         .resource_context()
                         .create_descriptor_set_allocator();
 
-                    let bloom_blur_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
-                        &descriptor_set_layouts[shaders::bloom_blur_frag::TEX_DESCRIPTOR_SET_INDEX],
-                        shaders::bloom_blur_frag::DescriptorSet0Args {
-                            tex: sample_image.as_ref().unwrap(),
-                            config: &shaders::bloom_blur_frag::ConfigUniform {
-                                horizontal: blur_pass_index % 2,
-                                ..Default::default()
+                    let bloom_blur_material_dyn_set = descriptor_set_allocator
+                        .create_descriptor_set(
+                            &descriptor_set_layouts
+                                [shaders::bloom_blur_frag::TEX_DESCRIPTOR_SET_INDEX],
+                            shaders::bloom_blur_frag::DescriptorSet0Args {
+                                tex: sample_image.as_ref().unwrap(),
+                                config: &shaders::bloom_blur_frag::ConfigUniform {
+                                    horizontal: blur_pass_index % 2,
+                                    ..Default::default()
+                                },
                             },
-                        },
-                    )?;
+                        )?;
 
                     // Explicit flush since we're going to use the descriptors immediately
                     descriptor_set_allocator.flush_changes()?;
@@ -442,10 +492,22 @@ pub fn build_render_graph(
             );
             graph.set_image_name(color, "color");
 
-            let sdr_image = graph.sample_image(node, bloom_extract_pass.sdr_image, Default::default(), Default::default(), Default::default());
+            let sdr_image = graph.sample_image(
+                node,
+                bloom_extract_pass.sdr_image,
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            );
             graph.set_image_name(sdr_image, "sdr");
 
-            let hdr_image = graph.sample_image(node, bloom_blur_pass.color, Default::default(), Default::default(), Default::default());
+            let hdr_image = graph.sample_image(
+                node,
+                bloom_blur_pass.color,
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            );
             graph.set_image_name(hdr_image, "hdr");
 
             graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
@@ -461,7 +523,11 @@ pub fn build_render_graph(
                     .get_or_create_graphics_pipeline(
                         &bloom_combine_material_pass,
                         args.renderpass_resource,
-                        &args.framebuffer_resource.get_raw().framebuffer_key.framebuffer_meta,
+                        &args
+                            .framebuffer_resource
+                            .get_raw()
+                            .framebuffer_key
+                            .framebuffer_meta,
                         &EMPTY_VERTEX_LAYOUT,
                     )?;
 
@@ -473,13 +539,15 @@ pub fn build_render_graph(
 
                 let descriptor_set_layouts =
                     &pipeline.get_raw().pipeline_layout.get_raw().descriptor_sets;
-                let bloom_combine_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
-                    &descriptor_set_layouts[shaders::bloom_combine_frag::IN_COLOR_DESCRIPTOR_SET_INDEX],
-                    shaders::bloom_combine_frag::DescriptorSet0Args {
-                        in_color: &sdr_image,
-                        in_blur: &hdr_image,
-                    },
-                )?;
+                let bloom_combine_material_dyn_set = descriptor_set_allocator
+                    .create_descriptor_set(
+                        &descriptor_set_layouts
+                            [shaders::bloom_combine_frag::IN_COLOR_DESCRIPTOR_SET_INDEX],
+                        shaders::bloom_combine_frag::DescriptorSet0Args {
+                            in_color: &sdr_image,
+                            in_blur: &hdr_image,
+                        },
+                    )?;
 
                 descriptor_set_allocator.flush_changes()?;
 
@@ -531,7 +599,7 @@ pub fn build_render_graph(
             0,
             None,
             Default::default(),
-            Default::default()
+            Default::default(),
         );
         graph.set_image_name(color, "color");
 
@@ -566,7 +634,7 @@ pub fn build_render_graph(
             create_flags: Default::default(),
             extents: RenderGraphImageExtents::MatchSurface,
             layer_count: 1,
-            mip_count: 1
+            mip_count: 1,
         },
         Default::default(),
         Default::default(),
@@ -587,7 +655,8 @@ pub fn build_render_graph(
         graph_callbacks,
     )?;
 
-    let shadow_map_image_views = opaque_pass.shadow_maps
+    let shadow_map_image_views = opaque_pass
+        .shadow_maps
         .iter()
         .map(|&x| executor.image_view_resource(x).unwrap())
         .collect();

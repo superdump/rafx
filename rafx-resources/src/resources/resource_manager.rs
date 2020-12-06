@@ -1,6 +1,6 @@
 use super::dyn_resource_allocator;
-use super::resource_lookup;
 use super::pipeline_cache;
+use super::resource_lookup;
 use crate::{
     DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef, DynResourceAllocatorSet,
     GraphicsPipelineCache,
@@ -165,7 +165,7 @@ impl ResourceManager {
         ResourceManagerMetrics {
             dyn_resource_metrics,
             resource_metrics,
-            graphics_pipeline_cache_metrics
+            graphics_pipeline_cache_metrics,
         }
     }
 

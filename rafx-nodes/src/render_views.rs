@@ -98,11 +98,14 @@ pub struct RenderViewDepthRange {
 }
 
 impl RenderViewDepthRange {
-    pub fn new(near: f32, far: f32) -> Self {
+    pub fn new(
+        near: f32,
+        far: f32,
+    ) -> Self {
         RenderViewDepthRange {
             near,
             far: Some(far),
-            reversed: false
+            reversed: false,
         }
     }
 
@@ -110,15 +113,18 @@ impl RenderViewDepthRange {
         RenderViewDepthRange {
             near,
             far: None,
-            reversed: false
+            reversed: false,
         }
     }
 
-    pub fn new_reverse(near: f32, far: f32) -> Self {
+    pub fn new_reverse(
+        near: f32,
+        far: f32,
+    ) -> Self {
         RenderViewDepthRange {
             near,
             far: Some(far),
-            reversed: true
+            reversed: true,
         }
     }
 
@@ -126,7 +132,7 @@ impl RenderViewDepthRange {
         RenderViewDepthRange {
             near,
             far: None,
-            reversed: true
+            reversed: true,
         }
     }
 
@@ -215,13 +221,21 @@ impl RenderView {
         self.inner.view_index
     }
 
-    pub fn extents(&self) -> (u32, u32) { self.inner.extents }
+    pub fn extents(&self) -> (u32, u32) {
+        self.inner.extents
+    }
 
-    pub fn extents_width(&self) -> u32 { self.inner.extents.0 }
+    pub fn extents_width(&self) -> u32 {
+        self.inner.extents.0
+    }
 
-    pub fn extents_height(&self) -> u32 { self.inner.extents.1 }
+    pub fn extents_height(&self) -> u32 {
+        self.inner.extents.1
+    }
 
-    pub fn depth_range(&self) -> &RenderViewDepthRange { &self.inner.depth_range }
+    pub fn depth_range(&self) -> &RenderViewDepthRange {
+        &self.inner.depth_range
+    }
 
     pub fn debug_name(&self) -> &str {
         &self.inner.debug_name

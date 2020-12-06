@@ -1,7 +1,7 @@
 use crate::resources::resource_arc::{ResourceId, ResourceWithHash, WeakResourceArc};
 use crate::resources::ResourceArc;
 use crate::vk_description as dsc;
-use crate::vk_description::{SwapchainSurfaceInfo, FramebufferMeta};
+use crate::vk_description::{FramebufferMeta, SwapchainSurfaceInfo};
 use ash::prelude::VkResult;
 use ash::vk;
 use bitflags::_core::sync::atomic::AtomicU64;
@@ -1066,7 +1066,7 @@ impl ResourceLookupSet {
                     &pipeline_key.material_pass_key.shader_module_metas,
                     &material_pass.get_raw().shader_module_vk_objs,
                     &pipeline_key.renderpass_key.swapchain_surface_info,
-                    &pipeline_key.framebuffer_meta
+                    &pipeline_key.framebuffer_meta,
                 )?;
                 log::trace!("Created pipelines {:?}", pipelines);
 

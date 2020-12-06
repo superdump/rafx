@@ -147,10 +147,18 @@ pub type ImageAspectFlags = BitFlags<ImageAspectFlag>;
 impl ImageAspectFlag {
     pub fn from_vk_image_aspect_flags(vk_flags: vk::ImageAspectFlags) -> ImageAspectFlags {
         let mut flags = ImageAspectFlags::empty();
-        if vk_flags.contains(vk::ImageAspectFlags::COLOR) { flags |= ImageAspectFlag::Color; }
-        if vk_flags.contains(vk::ImageAspectFlags::DEPTH) { flags |= ImageAspectFlag::Depth; }
-        if vk_flags.contains(vk::ImageAspectFlags::STENCIL) { flags |= ImageAspectFlag::Stencil; }
-        if vk_flags.contains(vk::ImageAspectFlags::METADATA) { flags |= ImageAspectFlag::Metadata; }
+        if vk_flags.contains(vk::ImageAspectFlags::COLOR) {
+            flags |= ImageAspectFlag::Color;
+        }
+        if vk_flags.contains(vk::ImageAspectFlags::DEPTH) {
+            flags |= ImageAspectFlag::Depth;
+        }
+        if vk_flags.contains(vk::ImageAspectFlags::STENCIL) {
+            flags |= ImageAspectFlag::Stencil;
+        }
+        if vk_flags.contains(vk::ImageAspectFlags::METADATA) {
+            flags |= ImageAspectFlag::Metadata;
+        }
         flags
     }
 }
@@ -193,7 +201,10 @@ impl ImageSubresourceRange {
         }
     }
 
-    pub fn default_no_mips_single_layer(aspect_mask: ImageAspectFlags, layer: u32) -> Self {
+    pub fn default_no_mips_single_layer(
+        aspect_mask: ImageAspectFlags,
+        layer: u32,
+    ) -> Self {
         ImageSubresourceRange {
             aspect_mask,
             base_mip_level: 0,
@@ -203,7 +214,11 @@ impl ImageSubresourceRange {
         }
     }
 
-    pub fn default_all_mips_all_layers(aspect_mask: ImageAspectFlags, mip_count: u32, layer_count: u32) -> Self {
+    pub fn default_all_mips_all_layers(
+        aspect_mask: ImageAspectFlags,
+        mip_count: u32,
+        layer_count: u32,
+    ) -> Self {
         ImageSubresourceRange {
             aspect_mask,
             base_mip_level: 0,
@@ -2341,7 +2356,9 @@ impl Viewport {
         swapchain_surface_info: &SwapchainSurfaceInfo,
         framebuffer_meta: &FramebufferMeta,
     ) -> vk::ViewportBuilder {
-        let rect_f32 = self.dimensions.as_rect_f32(swapchain_surface_info, framebuffer_meta);
+        let rect_f32 = self
+            .dimensions
+            .as_rect_f32(swapchain_surface_info, framebuffer_meta);
         vk::Viewport::builder()
             .x(rect_f32.x)
             .y(rect_f32.y)
@@ -2363,7 +2380,9 @@ impl Scissors {
         swapchain_surface_info: &SwapchainSurfaceInfo,
         framebuffer_meta: &FramebufferMeta,
     ) -> vk::Rect2D {
-        let rect_i32 = self.dimensions.as_rect_i32(swapchain_surface_info, framebuffer_meta);
+        let rect_i32 = self
+            .dimensions
+            .as_rect_i32(swapchain_surface_info, framebuffer_meta);
         vk::Rect2D {
             offset: vk::Offset2D {
                 x: rect_i32.x,

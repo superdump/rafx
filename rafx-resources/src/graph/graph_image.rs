@@ -67,26 +67,32 @@ pub enum RenderGraphImageUser {
 pub enum RenderGraphImageExtents {
     MatchSurface,
     // (width, height, depth)
-    Custom(u32, u32, u32)
+    Custom(u32, u32, u32),
 }
 
 impl RenderGraphImageExtents {
-    pub fn into_vk_extent_3d(self, swapchain_surface_info: &dsc::SwapchainSurfaceInfo) -> vk::Extent3D {
+    pub fn into_vk_extent_3d(
+        self,
+        swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
+    ) -> vk::Extent3D {
         match self {
             RenderGraphImageExtents::MatchSurface => vk::Extent3D {
                 width: swapchain_surface_info.extents.width,
                 height: swapchain_surface_info.extents.height,
-                depth: 1
+                depth: 1,
             },
             RenderGraphImageExtents::Custom(width, height, depth) => vk::Extent3D {
                 width,
                 height,
-                depth
-            }
+                depth,
+            },
         }
     }
 
-    pub fn into_vk_extent_2d(self, swapchain_surface_info: &dsc::SwapchainSurfaceInfo) -> vk::Extent2D {
+    pub fn into_vk_extent_2d(
+        self,
+        swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
+    ) -> vk::Extent2D {
         let extent_3d = self.into_vk_extent_3d(swapchain_surface_info);
         vk::Extent2D {
             width: extent_3d.width,
@@ -109,33 +115,34 @@ pub enum RenderGraphImageSubresourceRange {
     NoMipsSingleLayer(u32),
     // Mip 0 layer 0
     NoMipsNoLayers,
-    Custom(dsc::ImageSubresourceRange)
+    Custom(dsc::ImageSubresourceRange),
 }
 
 impl RenderGraphImageSubresourceRange {
-    pub fn into_subresource_range(&self, specification: &RenderGraphImageSpecification) -> dsc::ImageSubresourceRange {
+    pub fn into_subresource_range(
+        &self,
+        specification: &RenderGraphImageSpecification,
+    ) -> dsc::ImageSubresourceRange {
         match self {
             RenderGraphImageSubresourceRange::AllMipsAllLayers => {
                 dsc::ImageSubresourceRange::default_all_mips_all_layers(
                     dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
                     specification.mip_count,
-                    specification.layer_count
+                    specification.layer_count,
                 )
-            },
+            }
             RenderGraphImageSubresourceRange::NoMipsSingleLayer(layer) => {
                 dsc::ImageSubresourceRange::default_no_mips_single_layer(
                     dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
-                    *layer
+                    *layer,
                 )
-            },
+            }
             RenderGraphImageSubresourceRange::NoMipsNoLayers => {
                 dsc::ImageSubresourceRange::default_no_mips_no_layers(
                     dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
                 )
-            },
-            RenderGraphImageSubresourceRange::Custom(custom) => {
-                custom.clone()
             }
+            RenderGraphImageSubresourceRange::Custom(custom) => custom.clone(),
         }
     }
 }
@@ -166,7 +173,8 @@ pub type RenderGraphResourceName = &'static str;
 /// Immutable, fully-specified attributes of an image. A *constraint* is partially specified and
 /// the graph will use constraints to solve for the specification
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RenderGraphImageSpecification { // Rename to RenderGraphImageUsageSpecification?
+pub struct RenderGraphImageSpecification {
+    // Rename to RenderGraphImageUsageSpecification?
     pub samples: vk::SampleCountFlags,
     pub format: vk::Format,
     pub aspect_flags: vk::ImageAspectFlags,
@@ -227,7 +235,8 @@ impl RenderGraphImageSpecification {
 /// Constraints on an image. Constraints are set per-field and start out None (i.e. unconstrained)
 /// The rendergraph will derive specifications from the constraints
 #[derive(Default, Clone, Debug)]
-pub struct RenderGraphImageConstraint { // Rename to RenderGraphImageUsageConstraint?
+pub struct RenderGraphImageConstraint {
+    // Rename to RenderGraphImageUsageConstraint?
     pub samples: Option<vk::SampleCountFlags>,
     pub format: Option<vk::Format>,
     pub aspect_flags: vk::ImageAspectFlags,
@@ -265,7 +274,9 @@ impl RenderGraphImageConstraint {
                 format: self.format.unwrap(),
                 layer_count: self.layer_count.unwrap_or(1),
                 mip_count: self.mip_count.unwrap_or(1),
-                extents: self.extents.unwrap_or(RenderGraphImageExtents::MatchSurface),
+                extents: self
+                    .extents
+                    .unwrap_or(RenderGraphImageExtents::MatchSurface),
                 aspect_flags: self.aspect_flags,
                 usage_flags: self.usage_flags,
                 create_flags: self.create_flags,
@@ -286,10 +297,16 @@ impl RenderGraphImageConstraint {
         if self.format.is_some() && other.format.is_some() && self.format != other.format {
             return false;
         }
-        if self.layer_count.is_some() && other.layer_count.is_some() && self.layer_count != other.layer_count {
+        if self.layer_count.is_some()
+            && other.layer_count.is_some()
+            && self.layer_count != other.layer_count
+        {
             return false;
         }
-        if self.mip_count.is_some() && other.mip_count.is_some() && self.mip_count != other.mip_count {
+        if self.mip_count.is_some()
+            && other.mip_count.is_some()
+            && self.mip_count != other.mip_count
+        {
             return false;
         }
         if self.extents.is_some() && other.extents.is_some() && self.extents != other.extents {
@@ -352,13 +369,19 @@ impl RenderGraphImageConstraint {
             self.format = other.format;
         }
 
-        if self.layer_count.is_some() && other.layer_count.is_some() && self.layer_count != other.layer_count {
+        if self.layer_count.is_some()
+            && other.layer_count.is_some()
+            && self.layer_count != other.layer_count
+        {
             complete_merge = false;
         } else if other.layer_count.is_some() {
             self.layer_count = other.layer_count;
         }
 
-        if self.mip_count.is_some() && other.mip_count.is_some() && self.mip_count != other.mip_count {
+        if self.mip_count.is_some()
+            && other.mip_count.is_some()
+            && self.mip_count != other.mip_count
+        {
             complete_merge = false;
         } else if other.mip_count.is_some() {
             self.mip_count = other.mip_count;

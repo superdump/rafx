@@ -128,8 +128,10 @@ impl GraphicsPipelineCache {
 
         GraphicsPipelineCacheMetrics {
             pipeline_count: inner.cached_pipelines.len(),
-            #[cfg(debug_assertions)] lock_call_count_previous_frame: inner.lock_call_count_previous_frame,
-            #[cfg(debug_assertions)] pipeline_create_count_previous_frame: inner.pipeline_create_count_previous_frame
+            #[cfg(debug_assertions)]
+            lock_call_count_previous_frame: inner.lock_call_count_previous_frame,
+            #[cfg(debug_assertions)]
+            pipeline_create_count_previous_frame: inner.pipeline_create_count_previous_frame,
         }
     }
 
@@ -243,8 +245,14 @@ impl GraphicsPipelineCache {
         vertex_data_set_layout: &VertexDataSetLayout,
     ) -> Option<ResourceArc<GraphicsPipelineResource>> {
         // VkResult is always Ok if returning cached pipelines
-        self.graphics_pipeline(material_pass, renderpass, framebuffer_meta, vertex_data_set_layout, false)
-            .map(|x| x.unwrap())
+        self.graphics_pipeline(
+            material_pass,
+            renderpass,
+            framebuffer_meta,
+            vertex_data_set_layout,
+            false,
+        )
+        .map(|x| x.unwrap())
     }
 
     pub fn get_or_create_graphics_pipeline(
@@ -255,8 +263,14 @@ impl GraphicsPipelineCache {
         vertex_data_set_layout: &VertexDataSetLayout,
     ) -> VkResult<ResourceArc<GraphicsPipelineResource>> {
         // graphics_pipeline never returns none if create_if_missing is true
-        self.graphics_pipeline(material_pass, renderpass, framebuffer_meta, vertex_data_set_layout, true)
-            .ok_or(vk::Result::ERROR_UNKNOWN)?
+        self.graphics_pipeline(
+            material_pass,
+            renderpass,
+            framebuffer_meta,
+            vertex_data_set_layout,
+            true,
+        )
+        .ok_or(vk::Result::ERROR_UNKNOWN)?
     }
 
     pub fn graphics_pipeline(

@@ -4,8 +4,8 @@ use crate::components::{
 };
 use crate::features::mesh::prepare::MeshPrepareJob;
 use crate::features::mesh::{
-    ExtractedFrameNodeMeshData, MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet,
-    ExtractedDirectionalLight, ExtractedPointLight, ExtractedSpotLight, ShadowMapData,
+    ExtractedDirectionalLight, ExtractedFrameNodeMeshData, ExtractedPointLight, ExtractedSpotLight,
+    MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet, ShadowMapData,
 };
 use crate::game_asset_manager::GameAssetManager;
 use crate::render_contexts::{
@@ -108,7 +108,8 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
         let mut query = <(Entity, Read<PositionComponent>, Read<PointLightComponent>)>::query();
         let point_lights = query
             .iter(extract_context.world)
-            .map(|(e, p, l)| ExtractedPointLight {entity: *e,
+            .map(|(e, p, l)| ExtractedPointLight {
+                entity: *e,
                 light: l.clone(),
                 position: p.clone(),
             })

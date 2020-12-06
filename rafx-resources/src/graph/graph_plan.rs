@@ -651,7 +651,6 @@ fn insert_resolves(
     }
 }
 
-
 //
 // The graph is built with the assumption that every image is immutable. However in most cases we
 // can easily pass the same image through multiple passes saving memory and the need to copy data.
@@ -742,21 +741,22 @@ fn assign_virtual_images(
             //
             //TODO: This could be smarter to handle the case of a resource being read and then
             // later written
+            //TODO: Could handle non-overlapping subresource ranges being written
             let written_image_version_info = graph.image_version_info(written_image);
-            // let mut read_count = 0;
-            // let mut read_ranges = vec![];
-            // let mut write_count = 0;
-            // let mut write_ranges = vec![];
-            // for usage in &written_image_version_info.read_usages {
-            //     if graph.image_usages[usage.0].usage_type.is_read_only() {
-            //         read_count += 1;
-            //         read_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
-            //     } else {
-            //         write_count += 1;
-            //         write_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
-            //     }
-            // }
-            //
+            let mut read_count = 0;
+            //let mut read_ranges = vec![];
+            let mut write_count = 0;
+            //let mut write_ranges = vec![];
+            for usage in &written_image_version_info.read_usages {
+                if graph.image_usages[usage.0].usage_type.is_read_only() {
+                    read_count += 1;
+                //read_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
+                } else {
+                    write_count += 1;
+                    //write_ranges.push(graph.image_usages[usage.0].subresource_range.clone());
+                }
+            }
+
             // let mut has_overlapping_write = false;
             // for i in 0..write_ranges.len() {
             //     for j in 0..i {
@@ -783,14 +783,14 @@ fn assign_virtual_images(
                 let specifications_match = *written_spec == *usage_spec;
 
                 // We can't share images unless it's a read or it's an exclusive write
-                // let is_read_or_exclusive_write = (read_count > 0
-                //     && graph.image_usages[usage_resource_id.0]
-                //         .usage_type
-                //         .is_read_only())
-                //     || write_count <= 1;
+                let is_read_or_exclusive_write = (read_count > 0
+                    && graph.image_usages[usage_resource_id.0]
+                        .usage_type
+                        .is_read_only())
+                    || write_count <= 1;
 
                 let read_type = graph.image_usages[usage_resource_id.0].usage_type;
-                if specifications_match /*&& is_read_or_exclusive_write*/ {
+                if specifications_match && is_read_or_exclusive_write {
                     // it's a shared read or an exclusive write
                     log::trace!(
                         "    Usage {:?} will share an image with {:?} ({:?} -> {:?})",
@@ -807,13 +807,13 @@ fn assign_virtual_images(
                     // allocate new image
                     let virtual_image = virtual_image_id_allocator.allocate();
                     log::trace!(
-                        "    Allocate image {:?} for {:?} ({:?} -> {:?})  (specifications_match match: {})",
+                        "    Allocate image {:?} for {:?} ({:?} -> {:?})  (specifications_match match: {} is_read_or_exclusive_write: {})",
                         virtual_image,
                         usage_resource_id,
                         write_type,
                         read_type,
                         specifications_match,
-                        //is_read_or_exclusive_write
+                        is_read_or_exclusive_write
                     );
                     if !specifications_match {
                         log::trace!("      written: {:?}", written_spec);
@@ -878,7 +878,7 @@ fn build_physical_passes(
     node_execution_order: &[RenderGraphNodeId],
     image_constraints: &DetermineImageConstraintsResult,
     virtual_images: &AssignVirtualImagesResult,
-    swapchain_surface_info: &dsc::SwapchainSurfaceInfo
+    swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphPass> {
     let mut pass_node_sets = Vec::default();
 
@@ -955,7 +955,9 @@ fn build_physical_passes(
             specification: &RenderGraphImageSpecification,
             swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
         ) {
-            let size = specification.extents.into_vk_extent_2d(swapchain_surface_info);
+            let size = specification
+                .extents
+                .into_vk_extent_2d(swapchain_surface_info);
             if extent.is_some() {
                 assert_eq!(*extent, Some(size))
             } else {
@@ -970,7 +972,8 @@ fn build_physical_passes(
             let subpass_node = graph.node(node_id);
 
             // Don't create a subpass if there are no attachments
-            if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none() {
+            if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none()
+            {
                 assert!(subpass_node.resolve_attachments.is_empty());
                 log::trace!("      Not generating a subpass - no attachments");
                 continue;
@@ -1000,8 +1003,11 @@ fn build_physical_passes(
                     log::trace!("      virtual attachment (color): {:?}", virtual_image);
 
                     set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                    let (pass_attachment_index, is_first_usage) =
-                        find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
+                    let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                        &mut pass.attachments,
+                        read_or_write_usage,
+                        *virtual_image, /*, subresource_range*/
+                    );
                     subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
 
                     let mut attachment = &mut pass.attachments[pass_attachment_index];
@@ -1046,8 +1052,11 @@ fn build_physical_passes(
                     log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
 
                     set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                    let (pass_attachment_index, is_first_usage) =
-                        find_or_insert_attachment(&mut pass.attachments, write_image, *virtual_image/*, subresource_range*/);
+                    let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                        &mut pass.attachments,
+                        write_image,
+                        *virtual_image, /*, subresource_range*/
+                    );
                     subpass.resolve_attachments[resolve_attachment_index] =
                         Some(pass_attachment_index);
 
@@ -1082,8 +1091,11 @@ fn build_physical_passes(
                 log::trace!("      virtual attachment (depth): {:?}", virtual_image);
 
                 set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                let (pass_attachment_index, is_first_usage) =
-                    find_or_insert_attachment(&mut pass.attachments, read_or_write_usage, *virtual_image/*, subresource_range*/);
+                let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                    &mut pass.attachments,
+                    read_or_write_usage,
+                    *virtual_image, /*, subresource_range*/
+                );
                 subpass.depth_attachment = Some(pass_attachment_index);
 
                 let mut attachment = &mut pass.attachments[pass_attachment_index];
@@ -1407,7 +1419,9 @@ fn assign_physical_images(
     //
     for (&usage, &physical_image) in &usage_to_physical {
         let image_specification = image_constraints.specification(usage).unwrap();
-        let subresource_range = graph.image_usages[usage.0].subresource_range.into_subresource_range(image_specification);
+        let subresource_range = graph.image_usages[usage.0]
+            .subresource_range
+            .into_subresource_range(image_specification);
         let view_type = graph.image_usages[usage.0].view_type;
         let image_view = RenderGraphImageView {
             physical_image,
@@ -1416,11 +1430,13 @@ fn assign_physical_images(
         };
 
         // Get the ID that matches the view, or insert a new view, generating a new ID
-        let image_view_id = *image_subresource_to_view.entry(image_view.clone()).or_insert_with(|| {
-            let image_view_id = PhysicalImageViewId(image_views.len());
-            image_views.push(image_view);
-            image_view_id
-        });
+        let image_view_id = *image_subresource_to_view
+            .entry(image_view.clone())
+            .or_insert_with(|| {
+                let image_view_id = PhysicalImageViewId(image_views.len());
+                image_views.push(image_view);
+                image_view_id
+            });
 
         let old = usage_to_image_view.insert(usage, image_view_id);
         assert!(old.is_none());
@@ -1812,7 +1828,7 @@ fn build_pass_barriers(
                 let subresource_range = dsc::ImageSubresourceRange::default_all_mips_all_layers(
                     dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
                     specification.mip_count,
-                    specification.layer_count
+                    specification.layer_count,
                 );
 
                 if layout_change && !use_external_dependency_for_pass_initial_layout_transition {
@@ -1820,7 +1836,7 @@ fn build_pass_barriers(
                         physical_image_id: *physical_image_id,
                         old_layout: image_state.layout,
                         new_layout: image_barrier.layout,
-                        subresource_range
+                        subresource_range,
                     });
                 }
 
@@ -1921,8 +1937,7 @@ fn build_pass_barriers(
                             dst_access: invalidate_dst_access_flags,
                             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                            subresource_range: image_transition.subresource_range.into()
-
+                            subresource_range: image_transition.subresource_range.into(),
                         }
                     })
                     .collect();
@@ -2116,7 +2131,7 @@ fn create_output_passes(
             attachment_images,
             clear_values,
             pre_pass_barrier: pass.pre_pass_barrier,
-            debug_name
+            debug_name,
         };
 
         renderpasses.push(output_pass);
@@ -2557,7 +2572,9 @@ impl RenderGraphPlan {
                 },
             );
 
-            output_image_physical_ids.insert(assign_physical_images_result.image_views[output_image_view.0].physical_image);
+            output_image_physical_ids.insert(
+                assign_physical_images_result.image_views[output_image_view.0].physical_image,
+            );
         }
 
         let mut intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification> =

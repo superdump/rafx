@@ -1,10 +1,10 @@
-use crate::graph::graph_image::{PhysicalImageId, VirtualImageId, PhysicalImageViewId};
-use crate::graph::{RenderGraphNodeId, RenderGraphImageUsageId};
+use crate::graph::graph_image::{PhysicalImageId, PhysicalImageViewId, VirtualImageId};
+use crate::graph::graph_node::RenderGraphNodeName;
+use crate::graph::{RenderGraphImageUsageId, RenderGraphNodeId};
 use crate::vk_description as dsc;
 use ash::vk;
 use fnv::FnvHashMap;
 use std::sync::Arc;
-use crate::graph::graph_node::RenderGraphNodeName;
 
 /// Represents the invalidate or flush of a RenderGraphPassImageBarriers
 #[derive(Debug)]

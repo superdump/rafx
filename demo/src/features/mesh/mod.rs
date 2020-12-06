@@ -46,7 +46,7 @@ pub enum LightId {
 #[derive(Clone)]
 pub enum ShadowMapRenderView {
     Single(RenderView), // width, height of texture
-    Cube([RenderView; 6])
+    Cube([RenderView; 6]),
 }
 
 pub struct ShadowMapData {

@@ -1,3 +1,4 @@
+use crate::features::mesh::ShadowMapRenderView;
 use crate::game_renderer::render_graph::RenderGraphUserContext;
 use crate::game_renderer::GameRenderer;
 use crate::render_contexts::{RenderJobPrepareContext, RenderJobWriteContext};
@@ -7,7 +8,6 @@ use rafx::graph::RenderGraphExecutor;
 use rafx::nodes::{FramePacket, PrepareJobSet, RenderRegistry, RenderView};
 use rafx::resources::ResourceContext;
 use rafx::vulkan::{FrameInFlight, VkDeviceContext};
-use crate::features::mesh::ShadowMapRenderView;
 
 pub struct RenderFrameJob {
     pub game_renderer: GameRenderer,
@@ -88,7 +88,7 @@ impl RenderFrameJob {
                 match shadow_map_view {
                     ShadowMapRenderView::Single(view) => {
                         prepare_views.push(view);
-                    },
+                    }
                     ShadowMapRenderView::Cube(views) => {
                         for view in views {
                             prepare_views.push(view);
@@ -99,7 +99,12 @@ impl RenderFrameJob {
 
             let prepare_context =
                 RenderJobPrepareContext::new(device_context.clone(), resource_context.clone());
-            prepare_job_set.prepare(&prepare_context, &frame_packet, &prepare_views, &render_registry)
+            prepare_job_set.prepare(
+                &prepare_context,
+                &frame_packet,
+                &prepare_views,
+                &render_registry,
+            )
         };
         let t1 = std::time::Instant::now();
         log::trace!(

@@ -1,6 +1,8 @@
 use crate::asset_resource::AssetResource;
 use crate::features::debug3d::create_debug3d_extract_job;
-use crate::features::mesh::{create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData, ShadowMapRenderView};
+use crate::features::mesh::{
+    create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData, ShadowMapRenderView,
+};
 use crate::features::sprite::{create_sprite_extract_job, SpriteRenderNodeSet};
 use crate::imgui_support::Sdl2ImguiManager;
 use crate::phases::TransparentRenderPhase;
@@ -11,7 +13,10 @@ use ash::prelude::VkResult;
 use legion::*;
 use rafx::assets::image_utils;
 use rafx::assets::AssetManager;
-use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry, RenderView, RenderViewSet, VisibilityResult, RenderPhaseMask, RenderViewDepthRange};
+use rafx::nodes::{
+    AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMask, RenderPhaseMaskBuilder,
+    RenderRegistry, RenderView, RenderViewDepthRange, RenderViewSet, VisibilityResult,
+};
 use rafx::resources::vk_description as dsc;
 use rafx::resources::{ImageViewResource, ResourceArc};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
@@ -35,11 +40,13 @@ mod render_graph;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;
-use crate::components::{DirectionalLightComponent, PositionComponent, SpotLightComponent, PointLightComponent};
+use crate::components::{
+    DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
+};
 use crate::features::imgui::create_imgui_extract_job;
+use arrayvec::ArrayVec;
 use fnv::FnvHashMap;
 pub use swapchain_handling::SwapchainLifetimeListener;
-use arrayvec::ArrayVec;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
 pub fn perspective_rh(
@@ -391,7 +398,7 @@ impl GameRenderer {
 
         enum ShadowMapVisibility {
             Single(RenderViewVisibility),
-            Cube(ArrayVec<[RenderViewVisibility; 6]>)
+            Cube(ArrayVec<[RenderViewVisibility; 6]>),
         }
 
         let mut shadow_map_visibility_results = Vec::default();
@@ -399,7 +406,7 @@ impl GameRenderer {
             fn create_render_view_visibility(
                 static_visibility_node_set: &mut StaticVisibilityNodeSet,
                 dynamic_visibility_node_set: &mut DynamicVisibilityNodeSet,
-                render_view: &RenderView
+                render_view: &RenderView,
             ) -> RenderViewVisibility {
                 let static_visibility =
                     static_visibility_node_set.calculate_static_visibility(&render_view);
@@ -424,18 +431,49 @@ impl GameRenderer {
             }
 
             match render_view {
-                ShadowMapRenderView::Single(view) => {
-                    shadow_map_visibility_results.push(ShadowMapVisibility::Single(create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, view)))
-                },
+                ShadowMapRenderView::Single(view) => shadow_map_visibility_results.push(
+                    ShadowMapVisibility::Single(create_render_view_visibility(
+                        static_visibility_node_set,
+                        dynamic_visibility_node_set,
+                        view,
+                    )),
+                ),
                 ShadowMapRenderView::Cube(views) => {
-                    shadow_map_visibility_results.push(ShadowMapVisibility::Cube([
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[0]),
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[1]),
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[2]),
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[3]),
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[4]),
-                        create_render_view_visibility(static_visibility_node_set, dynamic_visibility_node_set, &views[5]),
-                    ].into()));
+                    shadow_map_visibility_results.push(ShadowMapVisibility::Cube(
+                        [
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[0],
+                            ),
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[1],
+                            ),
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[2],
+                            ),
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[3],
+                            ),
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[4],
+                            ),
+                            create_render_view_visibility(
+                                static_visibility_node_set,
+                                dynamic_visibility_node_set,
+                                &views[5],
+                            ),
+                        ]
+                        .into(),
+                    ));
                 }
             }
         }
@@ -470,21 +508,15 @@ impl GameRenderer {
                 ShadowMapVisibility::Single(view) => {
                     frame_packet_builder.add_view(
                         &view.render_view,
-                        &[
-                            view.static_visibility,
-                            view.dynamic_visibility,
-                        ],
+                        &[view.static_visibility, view.dynamic_visibility],
                     );
-                },
+                }
                 ShadowMapVisibility::Cube(views) => {
                     for view in views {
                         let static_visibility = view.static_visibility;
                         frame_packet_builder.add_view(
                             &view.render_view,
-                            &[
-                                static_visibility,
-                                view.dynamic_visibility,
-                            ],
+                            &[static_visibility, view.dynamic_visibility],
                         );
                     }
                 }
@@ -526,7 +558,10 @@ impl GameRenderer {
             bloom_combine_material_pass,
         )?;
 
-        assert_eq!(shadow_map_render_views.len(), render_graph.shadow_map_image_views.len());
+        assert_eq!(
+            shadow_map_render_views.len(),
+            render_graph.shadow_map_image_views.len()
+        );
         let shadow_map_data = ShadowMapData {
             shadow_map_lookup,
             shadow_map_render_views: shadow_map_render_views.clone(),
@@ -575,7 +610,7 @@ impl GameRenderer {
                 match shadow_map_view {
                     ShadowMapRenderView::Single(view) => {
                         extract_views.push(view);
-                    },
+                    }
                     ShadowMapRenderView::Cube(views) => {
                         for view in views {
                             extract_views.push(view);
@@ -755,10 +790,14 @@ impl GameRenderer {
                 render_view_set: &RenderViewSet,
                 light: &PointLightComponent,
                 position: glam::Vec3,
-                cube_map_view_directions: &(glam::Vec3, glam::Vec3)
+                cube_map_view_directions: &(glam::Vec3, glam::Vec3),
             ) -> RenderView {
                 //NOTE: Cubemaps always use LH
-                let view = glam::Mat4::look_at_lh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
+                let view = glam::Mat4::look_at_lh(
+                    position,
+                    position + cube_map_view_directions.0,
+                    cube_map_view_directions.1,
+                );
 
                 let near = 0.25;
                 let far = light.range;
@@ -775,7 +814,6 @@ impl GameRenderer {
                     "shadow_map".to_string(),
                 )
             }
-
 
             #[rustfmt::skip]
             let cube_map_views = [

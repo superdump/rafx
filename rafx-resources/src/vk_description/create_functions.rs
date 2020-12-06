@@ -233,7 +233,11 @@ pub fn create_graphics_pipelines(
         .viewport_state
         .viewports
         .iter()
-        .map(|viewport| viewport.as_builder(swapchain_surface_info, framebuffer_meta).build())
+        .map(|viewport| {
+            viewport
+                .as_builder(swapchain_surface_info, framebuffer_meta)
+                .build()
+        })
         .collect();
 
     let viewport_state = vk::PipelineViewportStateCreateInfo::builder()

@@ -28,7 +28,7 @@ pub struct CommandPool {
     device_context: VkDeviceContext,
     command_pool: vk::CommandPool,
     command_pool_meta: CommandPoolMeta,
-    allocated_command_buffers: Vec<vk::CommandBuffer>
+    allocated_command_buffers: Vec<vk::CommandBuffer>,
 }
 
 impl CommandPool {
@@ -59,7 +59,7 @@ impl CommandPool {
             device_context: device_context.clone(),
             command_pool,
             command_pool_meta,
-            allocated_command_buffers: Default::default()
+            allocated_command_buffers: Default::default(),
         })
     }
 
@@ -100,7 +100,9 @@ impl CommandPool {
 
         unsafe {
             // First free the command buffers
-            self.device_context.device().free_command_buffers(self.command_pool, &self.allocated_command_buffers);
+            self.device_context
+                .device()
+                .free_command_buffers(self.command_pool, &self.allocated_command_buffers);
             self.allocated_command_buffers.clear();
 
             // Reset all command buffers
