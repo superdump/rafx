@@ -16,6 +16,7 @@ pub use submit_nodes::ViewSubmitNodes;
 mod render_views;
 pub use render_views::RenderPhaseMask;
 pub use render_views::RenderPhaseMaskBuilder;
+pub use render_views::RenderViewDepthRange;
 pub use render_views::RenderView;
 pub use render_views::RenderViewCount;
 pub use render_views::RenderViewIndex;

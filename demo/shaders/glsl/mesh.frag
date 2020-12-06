@@ -70,6 +70,8 @@ struct PointLight {
     vec4 color;
     float range;
     float intensity;
+
+    // Index into shadow_map_images_cube and per_view_data.shadow_map_cube_data
     int shadow_map;
 };
 
@@ -78,6 +80,8 @@ struct DirectionalLight {
     vec3 direction_vs;
     vec4 color;
     float intensity;
+
+    // Index into shadow_map_images and per_view_data.shadow_map_2d_data
     int shadow_map;
 };
 
@@ -90,12 +94,20 @@ struct SpotLight {
     float spotlight_half_angle;
     float range;
     float intensity;
+
+    // Index into shadow_map_images and per_view_data.shadow_map_2d_data
     int shadow_map;
 };
 
 struct ShadowMap2DData {
     mat4 shadow_map_view_proj;
     vec3 shadow_map_light_dir;
+};
+
+struct ShadowMapCubeData {
+    // We just need the cubemap's near/far z values, not the whole projection matrix
+    float cube_map_projection_near_z;
+    float cube_map_projection_far_z;
 };
 
 // @[export]
@@ -108,8 +120,8 @@ layout (set = 0, binding = 0) uniform PerViewData {
     PointLight point_lights[16];
     DirectionalLight directional_lights[16];
     SpotLight spot_lights[16];
-    //uint shadow_map_count;
     ShadowMap2DData shadow_map_2d_data[32];
+    ShadowMapCubeData shadow_map_cube_data[16];
 } per_view_data;
 
 
@@ -220,11 +232,9 @@ layout (location = 5) in vec4 in_position_ws;
 
 layout (location = 0) out vec4 out_color;
 
-//TODO: It seems like passing texture/sampler through like this breaks reflection metadata
+// Passing texture/sampler through like this breaks reflection metadata so for now just grab global data
 vec4 normal_map(
     mat3 tangent_binormal_normal,
-    //texture2D t,
-    //sampler s,
     vec2 uv
 ) {
     // Sample the normal and unflatten it from the texture (i.e. convert
@@ -238,55 +248,49 @@ vec4 normal_map(
     return normalize(vec4(normal, 0.0));
 }
 
-float VectorToDepthValue(vec3 light_direction/*, float f, float n*/)
+//TODO: PCF cube map shadows
+//TODO: Tune bias in cube maps
+//TODO: Set up dummy texture so all bindings can be populated
+//TODO: Fix bias adjustment in spotlights?
+
+// Determine the depth value that would be returned from a cubemap if the depth sample was of the given surface
+// Since cubemaps have defined projections, we just need the near plane and far plane.
+float calculate_cubemap_equivalent_depth(vec3 light_to_surface_ws, float near, float far)
 {
-    // Find the absolute value of the largest component of the vector, since our projection is 90 degrees, this is
-    // guaranteed to give us the Z component of whatever face we will sample from
-    vec3 light_direction_abs = abs(light_direction);
-    float LocalZcomp = max(light_direction_abs.x, max(light_direction_abs.y, light_direction_abs.z));
+    // Find the absolute value of the largest component of the vector. Since our projection is 90 degrees, this is
+    // guaranteed to give us the Z component of whatever face we are sampling from
+    vec3 light_to_surface_ws_abs = abs(light_to_surface_ws);
+    float face_local_z_depth = max(light_to_surface_ws_abs.x, max(light_to_surface_ws_abs.y, light_to_surface_ws_abs.z));
 
-
-    const float f = 0.01;
-    const float n = 100.0;
-    float NormZComp = (f+n) / (f-n) - (2*f*n)/(f-n)/LocalZcomp;
-    return (NormZComp + 1.0) * 0.5;
+    // Determine the equivalent depth value we would expect to find in the cubemap. This is the z-portion of the
+    // projection matrix. First we apply the projection and perspective divide. Then we convert from [-1, 1] range
+    // to a [0, 1] range that the depth buffer expects
+    //
+    // Good info here:
+    // https://stackoverflow.com/questions/10786951/omnidirectional-shadow-mapping-with-depth-cubemap
+    float depth_value = (far+near) / (far-near) - (2*far*near)/(far-near)/face_local_z_depth;
+    return (depth_value + 1.0) * 0.5;
 }
 
 float do_calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
-    vec3 light_to_surface_dir = in_position_ws.xyz - light_position_ws;
-    float light_depth = VectorToDepthValue(light_to_surface_dir);
+    // Determine the equivalent depth value that would come out of the shadow cubemap if this surface
+    // was the sampled depth. We have 6 different view/projections but those are defined by the spec.
+    // The only thing we need from outside the shader is the near/far plane of the projections
+    vec3 light_to_surface = in_position_ws.xyz - light_position_ws;
+    float depth_of_surface = calculate_cubemap_equivalent_depth(
+        light_to_surface, 
+        per_view_data.shadow_map_cube_data[index].cube_map_projection_near_z, 
+        per_view_data.shadow_map_cube_data[index].cube_map_projection_far_z
+    );
 
-
-
-    //return min(max(0.001, light_depth), 0.999);
-    return texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, light_depth + 0.00005)).r;
-
-
-    // RAW DEPTH FROM CUBE MAP
-    //float compare = texture(samplerCube(shadow_map_images_cube[index], smp_depth), light_to_surface_dir).r;// * 10.0;
-    //return compare;
-
-    //float distance = length(light_to_surface_dir);
-    // convert distance to something that is comparable with the depth map?
-
-
-    //float distance_from_closest_object_to_light = texture(samplerCubeShadow(shadow_map_images_cube[index], smp_depth), vec4(light_to_surface_dir, )).r;
-
-
-
-    //float shadow = distance_from_closest_object_to_light > distance ? 1.0 : 0.0;
-    //return shadow;
-
-
-    /*
-        float shadow = texture(
-            sampler2DShadow(shadow_map_images[index], smp_depth),
-            vec3(
-                sample_location,
-                distance_from_light + bias
-            )
-        ).r;
-        */
+    float compare = texture(
+        samplerCubeShadow(shadow_map_images_cube[index], smp_depth), 
+        vec4(
+            light_to_surface, 
+            depth_of_surface + 0.00005
+        )
+    ).r;
+    return compare;
 }
 
 float calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_multiplier) {
@@ -300,19 +304,21 @@ float calculate_percent_lit_cube(vec3 light_position_ws, int index, float bias_m
 //TODO: Not sure about surface to light dir for spot lights... don't think it will do anything except give slightly bad
 // bias results though
 float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
+    // Determine the equiavlent depth value that would come out of the shadow map if this surface was
+    // the sampled depth
+    //  - [shadowmap view/proj matrix] * [surface position]
+    //  - perspective divide
+    //  - Convert XY's [-1, 1] range to [0, 1] UV coordinate range so we can sample the shadow map
+    //  - Use the Z which represents the depth of the surface from the shadow map's projection's point of view
+    //    It is [0, 1] range already so no adjustment needed
     vec4 shadow_map_pos = per_view_data.shadow_map_2d_data[index].shadow_map_view_proj * in_position_ws;
-    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
-
-    // homogenous coordinate normalization
     vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
+    vec2 sample_location_uv = projected.xy * 0.5 + 0.5;
+    float depth_of_surface = projected.z;
 
-    // Z is 0..1 already, so depth is simply z
-    float distance_from_light = projected.z;
-
-    // Convert [-1, 1] range to [0, 1] range so we can sample the shadow map
-    vec2 sample_location = projected.xy * 0.5 + 0.5;
-
-    // I found in practice this a constant value was working fine in my scene, so can consider removing this later
+    // Determine the direction of the light so we can apply more bias when light is near orthogonal to the normal
+    // TODO: This is broken for spot lights
+    vec3 light_dir = mat3(per_object_data.model_view) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
     vec3 surface_to_light_dir = -light_dir;
 
     // Tune with single-PCF
@@ -320,27 +326,25 @@ float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
     float bias_angle_factor = 1.0 - dot(normal, surface_to_light_dir);
     float bias = max(SHADOW_MAP_BIAS_MAX * bias_angle_factor * bias_angle_factor * bias_angle_factor, SHADOW_MAP_BIAS_MIN) * bias_multiplier;
 
-    // Non-PCF form
+    // Non-PCF form (broken last time I tried it)
 #ifdef PCF_DISABLED
     float distance_from_closest_object_to_light = texture(
         sampler2D(shadow_map_images[index], smp_depth),
-        sample_location
+        sample_location_uv
     ).r;
-    float shadow = distance_from_light + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
+    float shadow = depth_of_surface + bias < distance_from_closest_object_to_light ? 1.0 : 0.0;
 #endif
-
 
     // PCF form single sample
 #ifdef PCF_SAMPLE_1
     float shadow = texture(
         sampler2DShadow(shadow_map_images[index], smp_depth),
         vec3(
-            sample_location,
-            distance_from_light + bias
+            sample_location_uv,
+            depth_of_surface + bias
         )
     ).r;
 #endif
-
 
     // PCF reasonable sample count
 #ifdef PCF_SAMPLE_9
@@ -353,8 +357,8 @@ float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
             shadow += texture(
                 sampler2DShadow(shadow_map_images[index], smp_depth),
                 vec3(
-                    sample_location + vec2(x, y) * texelSize,
-                    distance_from_light + bias
+                    sample_location_uv + vec2(x, y) * texelSize,
+                    depth_of_surface + bias
                 )
             ).r;
         }
@@ -374,8 +378,8 @@ float do_calculate_percent_lit(vec3 normal, int index, float bias_multiplier) {
             shadow += texture(
                 sampler2DShadow(shadow_map_images[index], smp_depth),
                 vec3(
-                    sample_location + vec2(x, y) * texelSize,
-                    distance_from_light + bias
+                    sample_location_uv + vec2(x, y) * texelSize,
+                    depth_of_surface + bias
                 )
             ).r;
         }

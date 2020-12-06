@@ -98,6 +98,7 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
         let mut shadow_map_2d_image_views = [None; MAX_SHADOW_MAPS_2D];
 
         let mut shadow_map_cube_count = 0;
+        let mut shadow_map_cube_data = [shaders::mesh_frag::ShadowMapCubeDataStd140::default(); MAX_SHADOW_MAPS_CUBE];
         let mut shadow_map_cube_image_views = [None; MAX_SHADOW_MAPS_CUBE];
 
         // This maps the index in the combined list to indices in the 2d/cube maps
@@ -132,6 +133,14 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
                         log::warn!("More cube shadow maps than the mesh shader can support");
                         continue;
                     }
+
+                    // Shader not set up for infinite far plane
+                    let (near, far) = views[0].depth_range().finite_planes_after_reverse().unwrap();
+                    shadow_map_cube_data[shadow_map_cube_count] = shaders::mesh_frag::ShadowMapCubeDataStd140 {
+                        cube_map_projection_near_z: near,
+                        cube_map_projection_far_z: far,
+                        ..Default::default()
+                    };
 
                     // Don't need the view/projection for cube maps
                     shadow_map_cube_image_views[shadow_map_cube_count] = Some(&self.shadow_map_data.shadow_map_image_views[index]);
@@ -196,12 +205,9 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for MeshPrepareJ
                 &prepared_spot_lights,
                 &prepared_point_lights
             );
-            // per_view_frag_data.shadow_map_count =
-            //     self.shadow_map_data
-            //         .shadow_map_render_views
-            //         .len()
-            //         .min(per_view_frag_data.shadow_maps.len()) as u32;
+
             per_view_frag_data.shadow_map_2d_data = shadow_map_2d_data;
+            per_view_frag_data.shadow_map_cube_data = shadow_map_cube_data;
 
             if view.phase_is_relevant::<OpaqueRenderPhase>()
                 || view.phase_is_relevant::<ShadowMapRenderPhase>()

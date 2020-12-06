@@ -11,7 +11,7 @@ use ash::prelude::VkResult;
 use legion::*;
 use rafx::assets::image_utils;
 use rafx::assets::AssetManager;
-use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry, RenderView, RenderViewSet, VisibilityResult, RenderPhaseMask};
+use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMaskBuilder, RenderRegistry, RenderView, RenderViewSet, VisibilityResult, RenderPhaseMask, RenderViewDepthRange};
 use rafx::resources::vk_description as dsc;
 use rafx::resources::{ImageViewResource, ResourceArc};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
@@ -634,10 +634,11 @@ impl GameRenderer {
 
         let view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
 
+        let near_plane = 0.01;
         let proj = glam::Mat4::perspective_infinite_reverse_rh(
             std::f32::consts::FRAC_PI_4,
             aspect_ratio,
-            0.01,
+            near_plane,
         );
         // Flip it on Y
         let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
@@ -646,8 +647,8 @@ impl GameRenderer {
             eye,
             view,
             proj,
-            extents_width,
-            extents_height,
+            (extents_width, extents_height),
+            RenderViewDepthRange::new_infinite_reverse(near_plane),
             main_camera_render_phase_mask,
             "main".to_string(),
         )
@@ -678,15 +679,17 @@ impl GameRenderer {
             let view =
                 glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
 
-            let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, 100.0, 0.01);
+            let near_plane = 0.01;
+            let far_plane = 100.0;
+            let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, far_plane, near_plane);
             let proj = matrix_flip_y(proj);
 
             let view = render_view_set.create_view(
                 eye_position,
                 view,
                 proj,
-                SHADOW_MAP_RESOLUTION,
-                SHADOW_MAP_RESOLUTION,
+                (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
+                RenderViewDepthRange::new_reverse(near_plane, far_plane),
                 shadow_map_phase_mask,
                 "shadow_map".to_string(),
             );
@@ -706,22 +709,24 @@ impl GameRenderer {
                 glam::Vec3::new(0.0, 0.0, 1.0),
             );
 
+            let near_plane = 0.01;
+            let far_plane = 100.0;
             let ortho_projection_size = 10.0;
             let proj = glam::Mat4::orthographic_rh(
                 -ortho_projection_size,
                 ortho_projection_size,
                 ortho_projection_size,
                 -ortho_projection_size,
-                100.0,
-                0.01,
+                far_plane,
+                near_plane,
             );
 
             let view = render_view_set.create_view(
                 eye_position,
                 view,
                 proj,
-                SHADOW_MAP_RESOLUTION,
-                SHADOW_MAP_RESOLUTION,
+                (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
+                RenderViewDepthRange::new_reverse(near_plane, far_plane),
                 shadow_map_phase_mask,
                 "shadow_map".to_string(),
             );
@@ -733,7 +738,7 @@ impl GameRenderer {
         }
 
         #[rustfmt::skip]
-        // The eye offset and up vector
+        // The eye offset and up vector. The directions are per the specification of cubemaps
         let cube_map_view_directions = [
             (glam::Vec3::unit_x(), glam::Vec3::unit_y()),
             (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_y()),
@@ -751,17 +756,20 @@ impl GameRenderer {
                 position: glam::Vec3,
                 cube_map_view_directions: &(glam::Vec3, glam::Vec3)
             ) -> RenderView {
+                //NOTE: Cubemaps always use LH
                 let view = glam::Mat4::look_at_lh(position, position + cube_map_view_directions.0, cube_map_view_directions.1);
 
-                let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, 100.0, 0.01);
+                let near = 0.01;
+                let far = 100.0;
+                let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, far, near);
                 let proj = matrix_flip_y(proj);
 
                 render_view_set.create_view(
                     position,
                     view,
                     proj,
-                    SHADOW_MAP_RESOLUTION,
-                    SHADOW_MAP_RESOLUTION,
+                    (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
+                    RenderViewDepthRange::new_reverse(near, far),
                     phase_mask,
                     "shadow_map".to_string(),
                 )

@@ -53,8 +53,8 @@ impl RenderViewSet {
         eye_position: Vec3,
         view: Mat4,
         proj: Mat4,
-        extents_width: u32,
-        extents_height: u32,
+        extents: (u32, u32),
+        depth_range: RenderViewDepthRange,
         render_phase_mask: RenderPhaseMask,
         debug_name: String,
     ) -> RenderView {
@@ -64,8 +64,8 @@ impl RenderViewSet {
             eye_position,
             view,
             proj,
-            extents_width,
-            extents_height,
+            extents,
+            depth_range,
             render_phase_mask,
             debug_name,
         )
@@ -84,11 +84,73 @@ pub struct RenderViewInner {
     view_proj: Mat4,
     view_dir: Vec3,
     view_index: RenderViewIndex,
-    extents_width: u32,
-    extents_height: u32,
+    // XY of the plane in screen coordinates, the size the framebuffer would be for 1:1
+    extents: (u32, u32),
+    depth_range: RenderViewDepthRange,
     render_phase_mask: RenderPhaseMask,
     debug_name: String,
+}
 
+pub struct RenderViewDepthRange {
+    pub near: f32,
+    pub far: Option<f32>, // If none, it's an infinite projection
+    pub reversed: bool,
+}
+
+impl RenderViewDepthRange {
+    pub fn new(near: f32, far: f32) -> Self {
+        RenderViewDepthRange {
+            near,
+            far: Some(far),
+            reversed: false
+        }
+    }
+
+    pub fn new_infinite(near: f32) -> Self {
+        RenderViewDepthRange {
+            near,
+            far: None,
+            reversed: false
+        }
+    }
+
+    pub fn new_reverse(near: f32, far: f32) -> Self {
+        RenderViewDepthRange {
+            near,
+            far: Some(far),
+            reversed: true
+        }
+    }
+
+    pub fn new_infinite_reverse(near: f32) -> Self {
+        RenderViewDepthRange {
+            near,
+            far: None,
+            reversed: true
+        }
+    }
+
+    // If the view is a reversed view, return the values reversed. This is handy for cases where
+    // the math works nicely by flipping the near/far for a reverse.
+    pub fn planes_after_reverse(&self) -> (Option<f32>, Option<f32>) {
+        if self.reversed {
+            (self.far, Some(self.near))
+        } else {
+            (Some(self.near), self.far)
+        }
+    }
+
+    pub fn finite_planes_after_reverse(&self) -> Option<(f32, f32)> {
+        if self.reversed {
+            Some((self.far?, self.near))
+        } else {
+            Some((self.near, self.far?))
+        }
+    }
+
+    pub fn planes_before_reverse(&self) -> (f32, Option<f32>) {
+        (self.near, self.far)
+    }
 }
 
 #[derive(Clone)]
@@ -102,8 +164,8 @@ impl RenderView {
         eye_position: Vec3,
         view: Mat4,
         proj: Mat4,
-        extents_width: u32,
-        extents_height: u32,
+        extents: (u32, u32),
+        depth_range: RenderViewDepthRange,
         render_phase_mask: RenderPhaseMask,
         debug_name: String,
     ) -> RenderView {
@@ -118,8 +180,8 @@ impl RenderView {
             view_proj: proj * view,
             view_dir,
             view_index,
-            extents_width,
-            extents_height,
+            extents,
+            depth_range,
             render_phase_mask,
             debug_name,
         };
@@ -153,9 +215,13 @@ impl RenderView {
         self.inner.view_index
     }
 
-    pub fn extents_width(&self) -> u32 { self.inner.extents_width }
+    pub fn extents(&self) -> (u32, u32) { self.inner.extents }
 
-    pub fn extents_height(&self) -> u32 { self.inner.extents_height }
+    pub fn extents_width(&self) -> u32 { self.inner.extents.0 }
+
+    pub fn extents_height(&self) -> u32 { self.inner.extents.1 }
+
+    pub fn depth_range(&self) -> &RenderViewDepthRange { &self.inner.depth_range }
 
     pub fn debug_name(&self) -> &str {
         &self.inner.debug_name
