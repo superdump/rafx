@@ -10,27 +10,6 @@ use ash::vk;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::sync::Arc;
 
-/// The specification for the image by image usage
-pub struct DetermineImageConstraintsResult {
-    images: FnvHashMap<RenderGraphImageUsageId, RenderGraphImageSpecification>,
-}
-
-impl DetermineImageConstraintsResult {
-    pub fn specification(
-        &self,
-        image: RenderGraphImageUsageId,
-    ) -> Option<&RenderGraphImageSpecification> {
-        self.images.get(&image)
-    }
-}
-
-/// Assignment of usages to actual images. This allows a single image to be passed through a
-/// sequence of reads and writes
-#[derive(Debug)]
-pub struct AssignVirtualImagesResult {
-    usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
-}
-
 // Recursively called to topologically sort the nodes to determine execution order. See
 // determine_node_order which kicks this off.
 // https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
@@ -161,6 +140,34 @@ fn visit_node(
         }
     }
 
+    for read in &node.buffer_reads {
+        let upstream_node = graph.buffer_version_info(read.buffer).creator_node;
+        if !merge_candidates.contains(&upstream_node) {
+            visit_node(
+                graph,
+                upstream_node,
+                visited,
+                visiting,
+                visiting_stack,
+                ordered_list,
+            );
+        }
+    }
+
+    for modify in &node.buffer_modifies {
+        let upstream_node = graph.buffer_version_info(modify.input).creator_node;
+        if !merge_candidates.contains(&upstream_node) {
+            visit_node(
+                graph,
+                upstream_node,
+                visited,
+                visiting,
+                visiting_stack,
+                ordered_list,
+            );
+        }
+    }
+
     //
     // Now visit the nodes we delayed visiting
     //
@@ -223,6 +230,27 @@ fn determine_node_order(graph: &RenderGraphBuilder) -> Vec<RenderGraphNodeId> {
         );
     }
 
+    // Iterate all the buffers we need to output. This will visit all the nodes we need to execute,
+    // potentially leaving out nodes we can cull.
+    for output_buffer_id in &graph.output_buffers {
+        // Find the node that creates the output buffer
+        let output_node = graph.buffer_version_info(output_buffer_id.usage).creator_node;
+        log::trace!(
+            "Traversing dependencies of output buffer created by node {:?} {:?}",
+            output_node,
+            graph.node(output_node).name()
+        );
+
+        visit_node(
+            graph,
+            output_node,
+            &mut visited,
+            &mut visiting,
+            &mut visiting_stack,
+            &mut ordered_list,
+        );
+    }
+
     ordered_list
 }
 
@@ -245,6 +273,28 @@ fn can_passes_merge(
     false
 }
 
+/// The specification for the image by image usage
+pub struct DetermineConstraintsResult {
+    images: FnvHashMap<RenderGraphImageUsageId, RenderGraphImageSpecification>,
+    buffers: FnvHashMap<RenderGraphBufferUsageId, RenderGraphBufferSpecification>,
+}
+
+impl DetermineConstraintsResult {
+    pub fn image_specification(
+        &self,
+        image: RenderGraphImageUsageId,
+    ) -> Option<&RenderGraphImageSpecification> {
+        self.images.get(&image)
+    }
+
+    pub fn buffer_specification(
+        &self,
+        buffer: RenderGraphBufferUsageId,
+    ) -> Option<&RenderGraphBufferSpecification> {
+        self.buffers.get(&buffer)
+    }
+}
+
 //
 // This function determines the specifications of all images. This is done by looking at the
 // constraints on the image at every point it is used. This information and how the image is used
@@ -255,14 +305,17 @@ fn can_passes_merge(
 // propagating the constraints. Then walk backwards from the end to the beginning.
 //
 #[profiling::function]
-fn determine_image_constraints(
+fn determine_constraints(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-) -> DetermineImageConstraintsResult {
+) -> DetermineConstraintsResult {
     let mut image_version_states: FnvHashMap<RenderGraphImageUsageId, RenderGraphImageConstraint> =
         Default::default();
 
-    log::trace!("Propagating image constraints");
+    let mut buffer_version_states: FnvHashMap<RenderGraphBufferUsageId, RenderGraphBufferConstraint> =
+        Default::default();
+
+    log::trace!("Propagating constraints");
 
     log::trace!("  Set up input images");
 
@@ -284,7 +337,27 @@ fn determine_image_constraints(
     //     // Don't bother setting usage constraint for 0
     // }
 
-    log::trace!("  Propagate image constraints FORWARD");
+    log::trace!("  Set up input buffers");
+
+    //
+    // Propagate input buffer state specifications into buffers. Inputs are fully specified and
+    // their constraints will never be overwritten
+    //
+    // for input_buffer in &graph.input_buffers {
+    //     log::trace!(
+    //         "    Buffer {:?} {:?}",
+    //         input_buffer,
+    //         graph.buffer_resource(input_buffer.usage).name
+    //     );
+    //     buffer_version_states
+    //         .entry(graph.get_create_usage(input_buffer.usage))
+    //         .or_default()
+    //         .set(&input_buffer.specification);
+    //
+    //     // Don't bother setting usage constraint for 0
+    // }
+
+    log::trace!("  Propagate constraints FORWARD");
 
     //
     // Iterate forward through nodes to determine what states images need to be in. We only need
@@ -304,7 +377,7 @@ fn determine_image_constraints(
             // time. (The code here assumes no input and will not produce correct results if there
             // is an input image)
             //TODO: Input images are broken, we don't properly represent an image being created
-            // OR receiving an input. We probably need to make creator in
+            // vs. receiving an input. We probably need to make creator in
             // RenderGraphImageResourceVersionInfo Option or an enum with input/create options
             //assert!(graph.image_version_info(image_create.image).input_image.is_none());
 
@@ -315,7 +388,7 @@ fn determine_image_constraints(
             );
 
             let version_state = image_version_states
-                .entry(graph.get_image_create_usage(image_create.image))
+                .entry(graph.image_version_create_usage(image_create.image))
                 .or_default();
 
             if !version_state.try_merge(&image_create.constraint) {
@@ -349,50 +422,19 @@ fn determine_image_constraints(
             //let image = graph.image_version_info(image_modify.input);
             //log::trace!("  Modify image {:?} {:?}", image_modify.input, graph.image_resource(image_modify.input).name);
             let input_state = image_version_states
-                .entry(graph.get_image_create_usage(image_modify.input))
+                .entry(graph.image_version_create_usage(image_modify.input))
                 .or_default();
             let mut image_modify_constraint = image_modify.constraint.clone();
 
             // Merge the input image constraints with this node's constraints
-            if !image_modify_constraint.partial_merge(&input_state /*.combined_constraints*/) {
-                // This would need to be resolved by inserting some sort of fixup
-
-                // We will detect this on the backward pass, no need to do anything here
-                /*
-                let required_fixup = ImageConstraintRequiredFixup::Modify(node.id(), image_modify.clone());
-                log::trace!("        *** Found required fixup: {:?}", required_fixup);
-                log::trace!("            {:?}", input_state.constraint);
-                log::trace!("            {:?}", image_modify_constraint);
-                required_fixups.push(required_fixup);
-                */
-                //log::trace!("Image cannot be placed into a form that satisfies all constraints:\n{:#?}\n{:#?}", input_state.combined_constraints, image_modify.constraint);
-            }
-
-            //TODO: Should we set the usage constraint here? For now will wait until backward propagation
+            image_modify_constraint.partial_merge(&input_state);
 
             let output_state = image_version_states
-                .entry(graph.get_image_create_usage(image_modify.output))
+                .entry(graph.image_version_create_usage(image_modify.output))
                 .or_default();
 
             // Now propagate forward to the image version we write
-            if !output_state
-                //.combined_constraints
-                .partial_merge(&image_modify_constraint)
-            {
-                // // This should only happen if modifying an input image
-                // assert!(image.input_image.is_some());
-                // This would need to be resolved by inserting some sort of fixup
-
-                // We will detect this on the backward pass, no need to do anything here
-                /*
-                let required_fixup = ImageConstraintRequiredFixup::Modify(node.id(), image_modify.clone());
-                log::trace!("        *** Found required fixup {:?}", required_fixup);
-                log::trace!("            {:?}", image_modify_constraint);
-                log::trace!("            {:?}", output_state.constraint);
-                required_fixups.push(required_fixup);
-                */
-                //log::trace!("Image cannot be placed into a form that satisfies all constraints:\n{:#?}\n{:#?}", output_state.constraint, input_state.constraint);
-            }
+            output_state.partial_merge(&image_modify_constraint);
 
             log::trace!("        Forward propagate constraints {:?}", output_state);
         }
@@ -410,21 +452,10 @@ fn determine_image_constraints(
             graph.image_resource(output_image.usage).name
         );
         let output_image_version_state = image_version_states
-            .entry(graph.get_image_create_usage(output_image.usage))
+            .entry(graph.image_version_create_usage(output_image.usage))
             .or_default();
         let output_constraint = output_image.specification.clone().into();
-        if !output_image_version_state.partial_merge(&output_constraint) {
-            // This would need to be resolved by inserting some sort of fixup
-            /*
-            log::trace!("      *** Found required OUTPUT fixup");
-            log::trace!(
-                "          {:?}",
-                output_image_version_state //.combined_constraints
-            );
-            log::trace!("          {:?}", output_image.specification);
-            */
-            //log::trace!("Image cannot be placed into a form that satisfies all constraints:\n{:#?}\n{:#?}", output_image_version_state.constraint, output_specification);
-        }
+        output_image_version_state.partial_merge(&output_constraint);
 
         image_version_states.insert(
             output_image.usage,
@@ -455,23 +486,9 @@ fn determine_image_constraints(
             );
 
             let version_state = image_version_states
-                .entry(graph.get_image_create_usage(image_read.image))
+                .entry(graph.image_version_create_usage(image_read.image))
                 .or_default();
-            if !version_state
-                //.combined_constraints
-                .partial_merge(&image_read.constraint)
-            {
-                // This would need to be resolved by inserting some sort of fixup
-                /*
-                log::trace!("        *** Found required READ fixup");
-                log::trace!(
-                    "            {:?}",
-                    version_state /*.combined_constraints*/
-                );
-                log::trace!("            {:?}", image_read.constraint);
-                */
-                //log::trace!("Image cannot be placed into a form that satisfies all constraints:\n{:#?}\n{:#?}", version_state.constraint, image_read.constraint);
-            }
+            version_state.partial_merge(&image_read.constraint);
 
             // If this is an image read with no output, it's possible the constraint on the read is incomplete.
             // So we need to merge the image state that may have information forward-propagated
@@ -479,7 +496,7 @@ fn determine_image_constraints(
             // propagating here because the main forward propagate pass does not handle reads.
             // TODO: We could consider moving this to the forward pass
             let mut image_read_constraint = image_read.constraint.clone();
-            image_read_constraint.partial_merge(&version_state /*.combined_constraints*/);
+            image_read_constraint.partial_merge(&version_state);
             log::trace!(
                 "        Read constraints will be {:?}",
                 image_read_constraint
@@ -512,37 +529,31 @@ fn determine_image_constraints(
             // The output image constraint already takes image_modify.constraint into account from
             // when we propagated image constraints forward
             let output_image_constraint = image_version_states
-                .entry(graph.get_image_create_usage(image_modify.output))
+                .entry(graph.image_version_create_usage(image_modify.output))
                 .or_default()
                 .clone();
             let input_state = image_version_states
-                .entry(graph.get_image_create_usage(image_modify.input))
+                .entry(graph.image_version_create_usage(image_modify.input))
                 .or_default();
-            if !input_state.partial_merge(&output_image_constraint) {
-                // This would need to be resolved by inserting some sort of fixup
-                /*
-                log::trace!("        *** Found required MODIFY fixup");
-                log::trace!(
-                    "            {:?}",
-                    input_state /*.combined_constraints*/
-                );
-                log::trace!("            {:?}", image_modify.constraint);
-                */
-                //log::trace!("Image cannot be placed into a form that satisfies all constraints:\n{:#?}\n{:#?}", input_state.constraint, image_modify.constraint);
-            }
+            input_state.partial_merge(&output_image_constraint);
 
             image_version_states.insert(image_modify.input, output_image_constraint.clone());
         }
     }
 
     let mut image_specs = FnvHashMap::default();
-
     for (k, v) in image_version_states {
         image_specs.insert(k, v.try_convert_to_specification().unwrap());
     }
 
-    DetermineImageConstraintsResult {
+    let mut buffer_specs = FnvHashMap::default();
+    for (k, v) in buffer_version_states {
+        buffer_specs.insert(k, v.try_convert_to_specification().unwrap());
+    }
+
+    DetermineConstraintsResult {
         images: image_specs,
+        buffers: buffer_specs
     }
 }
 
@@ -555,7 +566,7 @@ fn determine_image_constraints(
 fn insert_resolves(
     graph: &mut RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraint_results: &mut DetermineImageConstraintsResult,
+    image_constraint_results: &mut DetermineConstraintsResult,
 ) {
     log::trace!("Insert resolves in graph where necessary");
     for node_id in node_execution_order {
@@ -572,7 +583,7 @@ fn insert_resolves(
                 if let Some(write_image) = color_attachment.write_image {
                     //let write_version = graph.image_usages[write_image.0].version;
                     // Skip if it's not an MSAA image
-                    let write_spec = image_constraint_results.specification(write_image).unwrap();
+                    let write_spec = image_constraint_results.image_specification(write_image).unwrap();
                     if write_spec.samples == vk::SampleCountFlags::TYPE_1 {
                         log::trace!("      already non-MSAA");
                         continue;
@@ -597,7 +608,7 @@ fn insert_resolves(
                             graph.image_usages[read_usage.0].usage_type
                         );
                         let read_spec =
-                            image_constraint_results.specification(*read_usage).unwrap();
+                            image_constraint_results.image_specification(*read_usage).unwrap();
                         if *read_spec == *write_spec {
                             continue;
                         } else if *read_spec == resolve_spec {
@@ -651,6 +662,13 @@ fn insert_resolves(
     }
 }
 
+/// Assignment of usages to actual images. This allows a single image to be passed through a
+/// sequence of reads and writes
+#[derive(Debug)]
+pub struct AssignVirtualImagesResult {
+    usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
+}
+
 //
 // The graph is built with the assumption that every image is immutable. However in most cases we
 // can easily pass the same image through multiple passes saving memory and the need to copy data.
@@ -662,7 +680,7 @@ fn insert_resolves(
 fn assign_virtual_images(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraint_results: &mut DetermineImageConstraintsResult,
+    image_constraint_results: &mut DetermineConstraintsResult,
 ) -> AssignVirtualImagesResult {
     #[derive(Default)]
     struct VirtualImageIdAllocator {
@@ -710,8 +728,8 @@ fn assign_virtual_images(
             // The virtual image in the read portion of a modify must also be the write image.
             // The format of the input/output is guaranteed to match
             assert_eq!(
-                image_constraint_results.specification(modify.input),
-                image_constraint_results.specification(modify.output)
+                image_constraint_results.image_specification(modify.input),
+                image_constraint_results.image_specification(modify.output)
             );
 
             // Assign the image
@@ -768,11 +786,11 @@ fn assign_virtual_images(
             let write_type = graph.image_usages[written_image.0].usage_type;
 
             let written_spec = image_constraint_results
-                .specification(written_image)
+                .image_specification(written_image)
                 .unwrap();
 
             for usage_resource_id in &written_image_version_info.read_usages {
-                let usage_spec = match image_constraint_results.specification(*usage_resource_id) {
+                let usage_spec = match image_constraint_results.image_specification(*usage_resource_id) {
                     Some(usage_spec) => usage_spec,
                     // If the reader of this image was culled, we may not have determined a spec.
                     // If so, skip this usage
@@ -846,7 +864,7 @@ fn can_merge_nodes(
     graph: &RenderGraphBuilder,
     before_node_id: RenderGraphNodeId,
     after_node_id: RenderGraphNodeId,
-    _image_constraints: &DetermineImageConstraintsResult,
+    _image_constraints: &DetermineConstraintsResult,
     _virtual_images: &AssignVirtualImagesResult,
 ) -> bool {
     let _before_node = graph.node(before_node_id);
@@ -876,7 +894,7 @@ fn can_merge_nodes(
 fn build_physical_passes(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraints: &DetermineImageConstraintsResult,
+    image_constraints: &DetermineConstraintsResult,
     virtual_images: &AssignVirtualImagesResult,
     swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphPass> {
@@ -1180,7 +1198,7 @@ struct AssignPhysicalImagesResult {
 #[profiling::function]
 fn assign_physical_images(
     graph: &RenderGraphBuilder,
-    image_constraints: &DetermineImageConstraintsResult,
+    image_constraints: &DetermineConstraintsResult,
     virtual_images: &AssignVirtualImagesResult,
     passes: &mut [RenderGraphPass],
 ) -> AssignPhysicalImagesResult {
@@ -1198,7 +1216,7 @@ fn assign_physical_images(
     //
     fn add_or_modify_reuse_image_requirements(
         virtual_images: &AssignVirtualImagesResult,
-        image_constraints: &DetermineImageConstraintsResult,
+        image_constraints: &DetermineConstraintsResult,
         pass_index: usize,
         usage: RenderGraphImageUsageId,
         reuse_requirements: &mut Vec<PhysicalImageReuseRequirements>,
@@ -1418,7 +1436,7 @@ fn assign_physical_images(
     // Create a list and lookup for all image views that are needed for the graph
     //
     for (&usage, &physical_image) in &usage_to_physical {
-        let image_specification = image_constraints.specification(usage).unwrap();
+        let image_specification = image_constraints.image_specification(usage).unwrap();
         let subresource_range = graph.image_usages[usage.0]
             .subresource_range
             .into_subresource_range(image_specification);
@@ -1464,7 +1482,7 @@ fn assign_physical_images(
 fn build_node_barriers(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    _image_constraints: &DetermineImageConstraintsResult,
+    _image_constraints: &DetermineConstraintsResult,
     physical_images: &AssignPhysicalImagesResult,
     //determine_image_layouts_result: &DetermineImageLayoutsResult,
 ) -> FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers> {
@@ -1618,7 +1636,7 @@ fn build_node_barriers(
 fn build_pass_barriers(
     graph: &RenderGraphBuilder,
     _node_execution_order: &[RenderGraphNodeId],
-    _image_constraints: &DetermineImageConstraintsResult,
+    _image_constraints: &DetermineConstraintsResult,
     physical_images: &AssignPhysicalImagesResult,
     node_barriers: &FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>,
     passes: &mut [RenderGraphPass],
@@ -1942,7 +1960,7 @@ fn build_pass_barriers(
                     })
                     .collect();
 
-                unimplemented!();
+                //unimplemented!();
                 let buffer_barriers = vec![];
 
                 let barrier = PrepassBarrier {
@@ -2147,7 +2165,7 @@ fn create_output_passes(
 #[allow(dead_code)]
 fn print_image_constraints(
     graph: &RenderGraphBuilder,
-    image_constraint_results: &mut DetermineImageConstraintsResult,
+    image_constraint_results: &mut DetermineConstraintsResult,
 ) {
     log::trace!("Image constraints:");
     for (image_index, image_resource) in graph.image_resources.iter().enumerate() {
@@ -2157,14 +2175,14 @@ fn print_image_constraints(
 
             log::trace!(
                 "      Writen as: {:?}",
-                image_constraint_results.specification(version.create_usage)
+                image_constraint_results.image_specification(version.create_usage)
             );
 
             for (usage_index, usage) in version.read_usages.iter().enumerate() {
                 log::trace!(
                     "      Read Usage {}: {:?}",
                     usage_index,
-                    image_constraint_results.specification(*usage)
+                    image_constraint_results.image_specification(*usage)
                 );
             }
         }
@@ -2174,17 +2192,17 @@ fn print_image_constraints(
 #[allow(dead_code)]
 fn print_image_compatibility(
     graph: &RenderGraphBuilder,
-    image_constraint_results: &DetermineImageConstraintsResult,
+    image_constraint_results: &DetermineConstraintsResult,
 ) {
     log::trace!("Image Compatibility Report:");
     for (image_index, image_resource) in graph.image_resources.iter().enumerate() {
         log::trace!("  Image {:?} {:?}", image_index, image_resource.name);
         for (version_index, version) in image_resource.versions.iter().enumerate() {
-            let write_specification = image_constraint_results.specification(version.create_usage);
+            let write_specification = image_constraint_results.image_specification(version.create_usage);
 
             log::trace!("    Version {}: {:?}", version_index, version);
             for (usage_index, usage) in version.read_usages.iter().enumerate() {
-                let read_specification = image_constraint_results.specification(*usage);
+                let read_specification = image_constraint_results.image_specification(*usage);
 
                 // TODO: Skip images we don't use?
 
@@ -2222,7 +2240,7 @@ fn print_node_barriers(
 fn verify_unculled_image_usages_specifications_exist(
     graph: &RenderGraphBuilder,
     node_execution_order: &Vec<RenderGraphNodeId>,
-    image_constraint_results: &DetermineImageConstraintsResult,
+    image_constraint_results: &DetermineConstraintsResult,
 ) {
     for (_image_index, image_resource) in graph.image_resources.iter().enumerate() {
         //log::trace!("  Image {:?} {:?}", image_index, image_resource.name);
@@ -2282,7 +2300,7 @@ fn print_final_images(
 fn print_final_image_usage(
     graph: &RenderGraphBuilder,
     assign_physical_images_result: &AssignPhysicalImagesResult,
-    image_constraint_results: &DetermineImageConstraintsResult,
+    image_constraint_results: &DetermineConstraintsResult,
     renderpasses: &Vec<RenderGraphOutputPass>,
 ) {
     log::debug!("-- IMAGE USAGE --");
@@ -2427,7 +2445,7 @@ impl RenderGraphPlan {
         // building it will panic.
         //
         let mut image_constraint_results =
-            determine_image_constraints(&graph, &node_execution_order);
+            determine_constraints(&graph, &node_execution_order);
 
         // Look at all image versions and ensure a constraint exists for usages where the node was
         // not culled

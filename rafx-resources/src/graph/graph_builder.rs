@@ -1108,7 +1108,7 @@ impl RenderGraphBuilder {
         self.image_usages[usage_id.0].version
     }
 
-    pub(super) fn get_image_create_usage(
+    pub(super) fn image_version_create_usage(
         &self,
         usage: RenderGraphImageUsageId,
     ) -> RenderGraphImageUsageId {
@@ -1174,7 +1174,7 @@ impl RenderGraphBuilder {
     }
 
 
-    pub(super) fn get_buffer_create_usage(
+    pub(super) fn buffer_version_create_usage(
         &self,
         usage: RenderGraphBufferUsageId,
     ) -> RenderGraphBufferUsageId {
