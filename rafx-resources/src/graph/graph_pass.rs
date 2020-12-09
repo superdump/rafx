@@ -5,6 +5,7 @@ use crate::vk_description as dsc;
 use ash::vk;
 use fnv::FnvHashMap;
 use std::sync::Arc;
+use crate::graph::graph_buffer::PhysicalBufferId;
 
 /// Represents the invalidate or flush of a RenderGraphPassImageBarriers
 #[derive(Debug)]
@@ -51,6 +52,59 @@ impl RenderGraphPassImageBarriers {
 pub struct RenderGraphNodeImageBarriers {
     pub(super) barriers: FnvHashMap<PhysicalImageId, RenderGraphPassImageBarriers>,
 }
+
+
+
+
+
+
+/// Represents the invalidate or flush of a RenderGraphPassBufferBarriers
+#[derive(Debug)]
+pub struct RenderGraphBufferBarrier {
+    pub(super) access_flags: vk::AccessFlags,
+    pub(super) stage_flags: vk::PipelineStageFlags,
+}
+
+impl Default for RenderGraphBufferBarrier {
+    fn default() -> Self {
+        RenderGraphBufferBarrier {
+            access_flags: vk::AccessFlags::empty(),
+            stage_flags: vk::PipelineStageFlags::empty(),
+        }
+    }
+}
+
+
+/// Information provided per buffer used in a pass to properly synchronize access to it from
+/// different passes
+#[derive(Debug)]
+pub struct RenderGraphPassBufferBarriers {
+    pub(super) invalidate: RenderGraphBufferBarrier,
+    pub(super) flush: RenderGraphBufferBarrier,
+}
+
+impl RenderGraphPassBufferBarriers {
+    pub(super) fn new() -> Self {
+        RenderGraphPassBufferBarriers {
+            flush: Default::default(),
+            invalidate: Default::default(),
+        }
+    }
+}
+
+/// All the barriers required for a single node (i.e. subpass). Nodes represent passes that may be
+/// merged to be subpasses within a single pass.
+#[derive(Debug)]
+pub struct RenderGraphNodeBufferBarriers {
+    pub(super) barriers: FnvHashMap<PhysicalBufferId, RenderGraphPassBufferBarriers>,
+}
+
+
+
+
+
+
+
 
 const MAX_COLOR_ATTACHMENTS: usize = 4;
 const MAX_RESOLVE_ATTACHMENTS: usize = 4;
@@ -143,6 +197,7 @@ pub struct PrepassBarrier {
     pub src_stage: vk::PipelineStageFlags,
     pub dst_stage: vk::PipelineStageFlags,
     pub image_barriers: Vec<PrepassImageBarrier>,
+    pub buffer_barriers: Vec<PrepassBufferBarrier>,
 }
 
 #[derive(Debug)]
@@ -157,6 +212,15 @@ pub struct PrepassImageBarrier {
     pub subresource_range: dsc::ImageSubresourceRange,
 }
 
+#[derive(Debug)]
+pub struct PrepassBufferBarrier {
+    pub src_access: vk::AccessFlags,
+    pub dst_access: vk::AccessFlags,
+    pub src_queue_family_index: u32,
+    pub dst_queue_family_index: u32,
+    pub buffer: PhysicalBufferId,
+}
+
 /// Metadata required to create a renderpass
 #[derive(Debug, Default)]
 pub struct RenderGraphPass {
@@ -164,7 +228,6 @@ pub struct RenderGraphPass {
     pub(super) subpasses: Vec<RenderGraphSubpass>,
 
     // For when we want to do layout transitions on non-attachments
-    //pre_pass_image_barriers: Vec<PrepassImageBarrier>
     pub(super) pre_pass_barrier: Option<PrepassBarrier>,
     pub(super) extents: Option<vk::Extent2D>,
 }

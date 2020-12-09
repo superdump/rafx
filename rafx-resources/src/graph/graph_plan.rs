@@ -270,19 +270,19 @@ fn determine_image_constraints(
     // Propagate input image state specifications into images. Inputs are fully specified and
     // their constraints will never be overwritten
     //
-    for input_image in &graph.input_images {
-        log::trace!(
-            "    Image {:?} {:?}",
-            input_image,
-            graph.image_resource(input_image.usage).name
-        );
-        image_version_states
-            .entry(graph.get_create_usage(input_image.usage))
-            .or_default()
-            .set(&input_image.specification);
-
-        // Don't bother setting usage constraint for 0
-    }
+    // for input_image in &graph.input_images {
+    //     log::trace!(
+    //         "    Image {:?} {:?}",
+    //         input_image,
+    //         graph.image_resource(input_image.usage).name
+    //     );
+    //     image_version_states
+    //         .entry(graph.get_create_usage(input_image.usage))
+    //         .or_default()
+    //         .set(&input_image.specification);
+    //
+    //     // Don't bother setting usage constraint for 0
+    // }
 
     log::trace!("  Propagate image constraints FORWARD");
 
@@ -315,7 +315,7 @@ fn determine_image_constraints(
             );
 
             let version_state = image_version_states
-                .entry(graph.get_create_usage(image_create.image))
+                .entry(graph.get_image_create_usage(image_create.image))
                 .or_default();
 
             if !version_state.try_merge(&image_create.constraint) {
@@ -349,7 +349,7 @@ fn determine_image_constraints(
             //let image = graph.image_version_info(image_modify.input);
             //log::trace!("  Modify image {:?} {:?}", image_modify.input, graph.image_resource(image_modify.input).name);
             let input_state = image_version_states
-                .entry(graph.get_create_usage(image_modify.input))
+                .entry(graph.get_image_create_usage(image_modify.input))
                 .or_default();
             let mut image_modify_constraint = image_modify.constraint.clone();
 
@@ -371,7 +371,7 @@ fn determine_image_constraints(
             //TODO: Should we set the usage constraint here? For now will wait until backward propagation
 
             let output_state = image_version_states
-                .entry(graph.get_create_usage(image_modify.output))
+                .entry(graph.get_image_create_usage(image_modify.output))
                 .or_default();
 
             // Now propagate forward to the image version we write
@@ -410,7 +410,7 @@ fn determine_image_constraints(
             graph.image_resource(output_image.usage).name
         );
         let output_image_version_state = image_version_states
-            .entry(graph.get_create_usage(output_image.usage))
+            .entry(graph.get_image_create_usage(output_image.usage))
             .or_default();
         let output_constraint = output_image.specification.clone().into();
         if !output_image_version_state.partial_merge(&output_constraint) {
@@ -455,7 +455,7 @@ fn determine_image_constraints(
             );
 
             let version_state = image_version_states
-                .entry(graph.get_create_usage(image_read.image))
+                .entry(graph.get_image_create_usage(image_read.image))
                 .or_default();
             if !version_state
                 //.combined_constraints
@@ -512,11 +512,11 @@ fn determine_image_constraints(
             // The output image constraint already takes image_modify.constraint into account from
             // when we propagated image constraints forward
             let output_image_constraint = image_version_states
-                .entry(graph.get_create_usage(image_modify.output))
+                .entry(graph.get_image_create_usage(image_modify.output))
                 .or_default()
                 .clone();
             let input_state = image_version_states
-                .entry(graph.get_create_usage(image_modify.input))
+                .entry(graph.get_image_create_usage(image_modify.input))
                 .or_default();
             if !input_state.partial_merge(&output_image_constraint) {
                 // This would need to be resolved by inserting some sort of fixup
@@ -645,7 +645,7 @@ fn insert_resolves(
                     from,
                     to
                 );
-                graph.move_read_usage_to_image(usage, from, to)
+                graph.redirect_image_usage(usage, from, to)
             }
         }
     }
@@ -1942,10 +1942,14 @@ fn build_pass_barriers(
                     })
                     .collect();
 
+                unimplemented!();
+                let buffer_barriers = vec![];
+
                 let barrier = PrepassBarrier {
                     src_stage: invalidate_src_pipeline_stage_flags,
                     dst_stage: invalidate_dst_pipeline_stage_flags,
                     image_barriers,
+                    buffer_barriers
                 };
 
                 pass.pre_pass_barrier = Some(barrier);

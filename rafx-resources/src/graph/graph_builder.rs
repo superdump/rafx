@@ -1,6 +1,6 @@
 use super::*;
 use crate::resources::{ImageViewResource, ResourceArc};
-use crate::vk_description as dsc;
+use crate::{vk_description as dsc, BufferResource};
 use crate::vk_description::SwapchainSurfaceInfo;
 
 #[derive(Copy, Clone)]
@@ -9,12 +9,12 @@ pub enum RenderGraphQueue {
     Index(u32),
 }
 
-/// An image that is being provided to the render graph that can be read from
-#[derive(Debug)]
-pub struct RenderGraphInputImage {
-    pub usage: RenderGraphImageUsageId,
-    pub specification: RenderGraphImageSpecification,
-}
+// /// An image that is being provided to the render graph that can be read from
+// #[derive(Debug)]
+// pub struct RenderGraphInputImage {
+//     pub usage: RenderGraphImageUsageId,
+//     pub specification: RenderGraphImageSpecification,
+// }
 
 /// An image that is being provided to the render graph that can be written to
 #[derive(Debug)]
@@ -25,6 +25,25 @@ pub struct RenderGraphOutputImage {
     pub dst_image: ResourceArc<ImageViewResource>,
 
     pub(super) final_layout: dsc::ImageLayout,
+    pub(super) final_access_flags: vk::AccessFlags,
+    pub(super) final_stage_flags: vk::PipelineStageFlags,
+}
+
+// /// A buffer that is being provided to the render graph that can be read from
+// #[derive(Debug)]
+// pub struct RenderGraphInputBuffer {
+//     pub usage: RenderGraphBufferUsageId,
+//     pub specification: RenderGraphBufferSpecification,
+// }
+
+/// A buffer that is being provided to the render graph that can be written to
+#[derive(Debug)]
+pub struct RenderGraphOutputBuffer {
+    pub output_buffer_id: RenderGraphOutputBufferId,
+    pub usage: RenderGraphBufferUsageId,
+    pub specification: RenderGraphBufferSpecification,
+    pub dst_buffer: ResourceArc<BufferResource>,
+
     pub(super) final_access_flags: vk::AccessFlags,
     pub(super) final_stage_flags: vk::PipelineStageFlags,
 }
@@ -43,17 +62,20 @@ pub struct RenderGraphBuilder {
     /// overlap. Additionally, a resource can be bound to input and output images. If this is the
     /// case, we will try to use those images rather than creating new ones.
     pub(super) image_resources: Vec<RenderGraphImageResource>,
+    pub(super) buffer_resources: Vec<RenderGraphBufferResource>,
 
     /// All read/write accesses to images. Image writes create new "versions" of the image. So all
     /// image versions have one writer and 0 or more readers. This indirectly defines the order of
     /// execution for the graph.
     pub(super) image_usages: Vec<RenderGraphImageUsage>,
+    pub(super) buffer_usages: Vec<RenderGraphBufferUsage>,
 
     /// Images that are passed into the graph that can be read from
-    pub(super) input_images: Vec<RenderGraphInputImage>,
+    //pub(super) input_images: Vec<RenderGraphInputImage>,
 
     /// Images that are passed into the graph to be written to.
     pub(super) output_images: Vec<RenderGraphOutputImage>,
+    pub(super) output_buffers: Vec<RenderGraphOutputBuffer>,
 }
 
 impl RenderGraphBuilder {
@@ -132,24 +154,6 @@ impl RenderGraphBuilder {
             });
 
         usage_id
-    }
-
-    pub fn add_image(
-        &mut self,
-        create_node: RenderGraphNodeId,
-        constraint: RenderGraphImageConstraint,
-        view_type: dsc::ImageViewType,
-    ) -> RenderGraphImageUsageId {
-        self.add_image_create(
-            create_node,
-            constraint,
-            dsc::ImageLayout::Undefined,
-            RenderGraphImageSubresourceRange::AllMipsAllLayers,
-            view_type,
-            // vk::AccessFlags::empty(),
-            // vk::PipelineStageFlags::empty(),
-            // vk::ImageAspectFlags::empty(),
-        )
     }
 
     pub(super) fn add_image_read(
@@ -297,6 +301,24 @@ impl RenderGraphBuilder {
 
         assert!(node_resolve_attachments[resolve_attachment_index].is_none());
         node_resolve_attachments[resolve_attachment_index] = Some(resolve_attachment);
+    }
+
+    pub fn create_unattached_image(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        constraint: RenderGraphImageConstraint,
+        view_type: dsc::ImageViewType,
+    ) -> RenderGraphImageUsageId {
+        self.add_image_create(
+            create_node,
+            constraint,
+            dsc::ImageLayout::Undefined,
+            RenderGraphImageSubresourceRange::AllMipsAllLayers,
+            view_type,
+            // vk::AccessFlags::empty(),
+            // vk::PipelineStageFlags::empty(),
+            // vk::ImageAspectFlags::empty(),
+        )
     }
 
     pub fn create_color_attachment(
@@ -764,6 +786,211 @@ impl RenderGraphBuilder {
         output_image_id
     }
 
+
+
+
+
+
+
+    //NOTE: While the buffer aspect flags may seem redundant with subresource_range here, the
+    // subresource_range should indicate the buffer view's supported aspects and the provided
+    // buffer aspect flags the aspects that are actually being used
+    pub(super) fn add_buffer_usage(
+        &mut self,
+        user: RenderGraphBufferUser,
+        version: RenderGraphBufferVersionId,
+        usage_type: RenderGraphBufferUsageType,
+        // _access_flags: vk::AccessFlags,
+        // _stage_flags: vk::PipelineStageFlags,
+        // _buffer_aspect_flags: vk::BufferAspectFlags,
+    ) -> RenderGraphBufferUsageId {
+        let usage_id = RenderGraphBufferUsageId(self.buffer_usages.len());
+        self.buffer_usages.push(RenderGraphBufferUsage {
+            user,
+            usage_type,
+            version,
+            //access_flags,
+            //stage_flags,
+            //buffer_aspect_flags
+        });
+        usage_id
+    }
+
+    // Add an buffer that can be used by nodes
+    pub(super) fn add_buffer_create(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        constraint: RenderGraphBufferConstraint,
+        // access_flags: vk::AccessFlags,
+        // stage_flags: vk::PipelineStageFlags,
+        // buffer_aspect_flags: vk::BufferAspectFlags,
+    ) -> RenderGraphBufferUsageId {
+        let version_id = RenderGraphBufferVersionId {
+            index: self.buffer_resources.len(),
+            version: 0,
+        };
+        let usage_id = self.add_buffer_usage(
+            RenderGraphBufferUser::Node(create_node),
+            version_id,
+            RenderGraphBufferUsageType::Create,
+            // access_flags,
+            // stage_flags,
+            // buffer_aspect_flags,
+        );
+
+        let mut resource = RenderGraphBufferResource::new();
+
+        let version_info = RenderGraphBufferResourceVersionInfo::new(create_node, usage_id);
+        resource.versions.push(version_info);
+
+        // Add it to the graph
+        self.buffer_resources.push(resource);
+
+        self.nodes[create_node.0]
+            .buffer_creates
+            .push(RenderGraphBufferCreate {
+                //buffer: buffer_id,
+                buffer: usage_id,
+                constraint,
+            });
+
+        usage_id
+    }
+
+    pub(super) fn add_buffer_read(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        constraint: RenderGraphBufferConstraint,
+        // access_flags: vk::AccessFlags,
+        // stage_flags: vk::PipelineStageFlags,
+        // buffer_aspect_flags: vk::BufferAspectFlags,
+    ) -> RenderGraphBufferUsageId {
+        let version_id = self.buffer_usages[buffer.0].version;
+
+        let usage_id = self.add_buffer_usage(
+            RenderGraphBufferUser::Node(read_node),
+            version_id,
+            RenderGraphBufferUsageType::Read,
+            // access_flags,
+            // stage_flags,
+            // buffer_aspect_flags,
+        );
+
+        self.buffer_resources[version_id.index].versions[version_id.version]
+            .add_read_usage(usage_id);
+
+        self.nodes[read_node.0]
+            .buffer_reads
+            .push(RenderGraphBufferRead {
+                buffer: usage_id,
+                constraint,
+            });
+
+        usage_id
+    }
+
+    pub(super) fn add_buffer_modify(
+        &mut self,
+        modify_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        constraint: RenderGraphBufferConstraint,
+        // read_access_flags: vk::AccessFlags,
+        // read_stage_flags: vk::PipelineStageFlags,
+        // read_buffer_aspect_flags: vk::BufferAspectFlags,
+        // write_access_flags: vk::AccessFlags,
+        // write_stage_flags: vk::PipelineStageFlags,
+        // write_buffer_aspect_flags: vk::BufferAspectFlags,
+    ) -> (RenderGraphBufferUsageId, RenderGraphBufferUsageId) {
+        let read_version_id = self.buffer_usages[buffer.0].version;
+
+        let read_usage_id = self.add_buffer_usage(
+            RenderGraphBufferUser::Node(modify_node),
+            read_version_id,
+            RenderGraphBufferUsageType::ModifyRead,
+            // read_access_flags,
+            // read_stage_flags,
+            // read_buffer_aspect_flags,
+        );
+
+        self.buffer_resources[read_version_id.index].versions[read_version_id.version]
+            .add_read_usage(read_usage_id);
+
+        // Create a new version and add it to the buffer
+        let version = self.buffer_resources[read_version_id.index].versions.len();
+        let write_version_id = RenderGraphBufferVersionId {
+            index: read_version_id.index,
+            version,
+        };
+        let write_usage_id = self.add_buffer_usage(
+            RenderGraphBufferUser::Node(modify_node),
+            write_version_id,
+            RenderGraphBufferUsageType::ModifyWrite,
+            // write_access_flags,
+            // write_stage_flags,
+            // write_buffer_aspect_flags,
+        );
+
+        let version_info = RenderGraphBufferResourceVersionInfo::new(modify_node, write_usage_id);
+        self.buffer_resources[read_version_id.index]
+            .versions
+            .push(version_info);
+
+        self.nodes[modify_node.0]
+            .buffer_modifies
+            .push(RenderGraphBufferModify {
+                input: read_usage_id,
+                output: write_usage_id,
+                constraint,
+            });
+
+        (read_usage_id, write_usage_id)
+    }
+
+    pub fn set_output_buffer(
+        &mut self,
+        buffer_id: RenderGraphBufferUsageId,
+        dst_buffer: ResourceArc<BufferResource>,
+        specification: RenderGraphBufferSpecification,
+        access_flags: vk::AccessFlags,
+        stage_flags: vk::PipelineStageFlags,
+    ) -> RenderGraphOutputBufferId {
+        if specification.usage_flags == vk::BufferUsageFlags::empty() {
+            panic!("An output buffer with empty BufferUsageFlags in the specification is almost certainly a mistake.");
+        }
+
+        let output_buffer_id = RenderGraphOutputBufferId(self.output_buffers.len());
+
+        let version_id = self.buffer_version_id(buffer_id);
+        let usage_id = self.add_buffer_usage(
+            RenderGraphBufferUser::Output(output_buffer_id),
+            version_id,
+            RenderGraphBufferUsageType::Output,
+            // access_flags,
+            // stage_flags,
+            // specification.aspect_flags,
+        );
+
+        let buffer_version = self.buffer_version_info_mut(buffer_id);
+        buffer_version.read_usages.push(usage_id);
+
+        let output_buffer = RenderGraphOutputBuffer {
+            output_buffer_id,
+            usage: usage_id,
+            specification,
+            dst_buffer,
+            final_access_flags: access_flags,
+            final_stage_flags: stage_flags,
+        };
+
+        self.output_buffers.push(output_buffer);
+        output_buffer_id
+    }
+
+
+
+
+
     // Add a node which can use resources
     pub fn add_node(
         &mut self,
@@ -799,6 +1026,14 @@ impl RenderGraphBuilder {
         name: RenderGraphResourceName,
     ) {
         self.image_resource_mut(image_id).name = Some(name);
+    }
+
+    pub fn set_buffer_name(
+        &mut self,
+        buffer_id: RenderGraphBufferUsageId,
+        name: RenderGraphResourceName,
+    ) {
+        self.buffer_resource_mut(buffer_id).name = Some(name);
     }
 
     // pub fn configure_node(
@@ -873,7 +1108,7 @@ impl RenderGraphBuilder {
         self.image_usages[usage_id.0].version
     }
 
-    pub(super) fn get_create_usage(
+    pub(super) fn get_image_create_usage(
         &self,
         usage: RenderGraphImageUsageId,
     ) -> RenderGraphImageUsageId {
@@ -881,7 +1116,7 @@ impl RenderGraphBuilder {
         self.image_resources[version.index].versions[version.version].create_usage
     }
 
-    pub(super) fn move_read_usage_to_image(
+    pub(super) fn redirect_image_usage(
         &mut self,
         usage: RenderGraphImageUsageId,
         from: RenderGraphImageVersionId,
@@ -890,6 +1125,63 @@ impl RenderGraphBuilder {
         self.image_resources[from.index].versions[from.version].remove_read_usage(usage);
         self.image_resources[to.index].versions[to.version].add_read_usage(usage);
     }
+
+
+
+    //
+    // Get images
+    //
+    pub(super) fn buffer_resource(
+        &self,
+        usage_id: RenderGraphBufferUsageId,
+    ) -> &RenderGraphBufferResource {
+        let version = self.buffer_usages[usage_id.0].version;
+        &self.buffer_resources[version.index]
+    }
+
+    pub(super) fn buffer_resource_mut(
+        &mut self,
+        usage_id: RenderGraphBufferUsageId,
+    ) -> &mut RenderGraphBufferResource {
+        let version = self.buffer_usages[usage_id.0].version;
+        &mut self.buffer_resources[version.index]
+    }
+
+    //
+    // Get buffer version infos
+    //
+    pub(super) fn buffer_version_info(
+        &self,
+        usage_id: RenderGraphBufferUsageId,
+    ) -> &RenderGraphBufferResourceVersionInfo {
+        let version = self.buffer_usages[usage_id.0].version;
+        &self.buffer_resources[version.index].versions[version.version]
+    }
+
+    pub(super) fn buffer_version_info_mut(
+        &mut self,
+        usage_id: RenderGraphBufferUsageId,
+    ) -> &mut RenderGraphBufferResourceVersionInfo {
+        let version = self.buffer_usages[usage_id.0].version;
+        &mut self.buffer_resources[version.index].versions[version.version]
+    }
+
+    pub(super) fn buffer_version_id(
+        &self,
+        usage_id: RenderGraphBufferUsageId,
+    ) -> RenderGraphBufferVersionId {
+        self.buffer_usages[usage_id.0].version
+    }
+
+
+    pub(super) fn get_buffer_create_usage(
+        &self,
+        usage: RenderGraphBufferUsageId,
+    ) -> RenderGraphBufferUsageId {
+        let version = self.buffer_usages[usage.0].version;
+        self.buffer_resources[version.index].versions[version.version].create_usage
+    }
+
 
     pub fn build_plan(
         self,
