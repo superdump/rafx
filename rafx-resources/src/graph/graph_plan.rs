@@ -405,6 +405,42 @@ fn determine_constraints(
             // Don't bother setting usage constraint for 0
         }
 
+        //
+        // Propagate constraints into buffers this node creates.
+        //
+        for buffer_create in &node.buffer_creates {
+            // An buffer cannot be created within the graph and imported externally at the same
+            // time. (The code here assumes no input and will not produce correct results if there
+            // is an input buffer)
+            //TODO: Input buffers are broken, we don't properly represent an buffer being created
+            // vs. receiving an input. We probably need to make creator in
+            // RenderGraphImageResourceVersionInfo Option or an enum with input/create options
+            //assert!(graph.buffer_version_info(buffer_create.buffer).input_buffer.is_none());
+
+            log::trace!(
+                "      Create buffer {:?} {:?}",
+                buffer_create.buffer,
+                graph.buffer_resource(buffer_create.buffer).name
+            );
+
+            let version_state = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_create.buffer))
+                .or_default();
+
+            if !version_state.try_merge(&buffer_create.constraint) {
+                // Should not happen as this should be our first visit to this buffer
+                panic!("Unexpected constraints on buffer being created");
+            }
+
+            log::trace!(
+                "        Forward propagate constraints {:?} {:?}",
+                buffer_create.buffer,
+                version_state
+            );
+
+            // Don't bother setting usage constraint for 0
+        }
+
         // We don't need to propagate anything forward on reads
 
         //
@@ -438,6 +474,38 @@ fn determine_constraints(
 
             log::trace!("        Forward propagate constraints {:?}", output_state);
         }
+
+        //
+        // Propagate constraints forward for buffers being modified.
+        //
+        for buffer_modify in &node.buffer_modifies {
+            log::trace!(
+                "      Modify buffer {:?} {:?} -> {:?} {:?}",
+                buffer_modify.input,
+                graph.buffer_resource(buffer_modify.input).name,
+                buffer_modify.output,
+                graph.buffer_resource(buffer_modify.output).name
+            );
+
+            //let buffer = graph.buffer_version_info(buffer_modify.input);
+            //log::trace!("  Modify buffer {:?} {:?}", buffer_modify.input, graph.buffer_resource(buffer_modify.input).name);
+            let input_state = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_modify.input))
+                .or_default();
+            let mut buffer_modify_constraint = buffer_modify.constraint.clone();
+
+            // Merge the input buffer constraints with this node's constraints
+            buffer_modify_constraint.partial_merge(&input_state);
+
+            let output_state = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_modify.output))
+                .or_default();
+
+            // Now propagate forward to the buffer version we write
+            output_state.partial_merge(&buffer_modify_constraint);
+
+            log::trace!("        Forward propagate constraints {:?}", output_state);
+        }
     }
 
     log::trace!("  Set up output images");
@@ -463,7 +531,28 @@ fn determine_constraints(
         );
     }
 
-    log::trace!("  Propagate image constraints BACKWARD");
+    //
+    // Propagate output buffer state specifications into buffers
+    //
+    for output_buffer in &graph.output_buffers {
+        log::trace!(
+            "    Buffer {:?} {:?}",
+            output_buffer,
+            graph.buffer_resource(output_buffer.usage).name
+        );
+        let output_buffer_version_state = buffer_version_states
+            .entry(graph.buffer_version_create_usage(output_buffer.usage))
+            .or_default();
+        let output_constraint = output_buffer.specification.clone().into();
+        output_buffer_version_state.partial_merge(&output_constraint);
+
+        buffer_version_states.insert(
+            output_buffer.usage,
+            output_buffer.specification.clone().into(),
+        );
+    }
+
+    log::trace!("  Propagate constraints BACKWARD");
 
     //
     // Iterate backwards through nodes, determining the state the image must be in at every
@@ -516,6 +605,46 @@ fn determine_constraints(
         }
 
         //
+        // Propagate backwards from reads
+        //
+        for buffer_read in &node.buffer_reads {
+            log::trace!(
+                "      Read buffer {:?} {:?}",
+                buffer_read.buffer,
+                graph.buffer_resource(buffer_read.buffer).name
+            );
+
+            let version_state = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_read.buffer))
+                .or_default();
+            version_state.partial_merge(&buffer_read.constraint);
+
+            // If this is an buffer read with no output, it's possible the constraint on the read is incomplete.
+            // So we need to merge the buffer state that may have information forward-propagated
+            // into it with the constraints on the read. (Conceptually it's like we're forward
+            // propagating here because the main forward propagate pass does not handle reads.
+            // TODO: We could consider moving this to the forward pass
+            let mut buffer_read_constraint = buffer_read.constraint.clone();
+            buffer_read_constraint.partial_merge(&version_state);
+            log::trace!(
+                "        Read constraints will be {:?}",
+                buffer_read_constraint
+            );
+            if let Some(spec) = buffer_read_constraint.try_convert_to_specification() {
+                buffer_version_states.insert(buffer_read.buffer, spec.into());
+            } else {
+                panic!(
+                    "Not enough information in the graph to determine the specification for buffer {:?} {:?} being read by node {:?} {:?}. Constraints are: {:?}",
+                    buffer_read.buffer,
+                    graph.buffer_resource(buffer_read.buffer).name,
+                    node.id(),
+                    node.name(),
+                    buffer_version_states.get(&buffer_read.buffer)
+                );
+            }
+        }
+
+        //
         // Propagate backwards from modifies
         //
         for image_modify in &node.image_modifies {
@@ -538,6 +667,31 @@ fn determine_constraints(
             input_state.partial_merge(&output_image_constraint);
 
             image_version_states.insert(image_modify.input, output_image_constraint.clone());
+        }
+
+        //
+        // Propagate backwards from modifies
+        //
+        for buffer_modify in &node.buffer_modifies {
+            log::trace!(
+                "      Modify buffer {:?} {:?} <- {:?} {:?}",
+                buffer_modify.input,
+                graph.buffer_resource(buffer_modify.input).name,
+                buffer_modify.output,
+                graph.buffer_resource(buffer_modify.output).name
+            );
+            // The output buffer constraint already takes buffer_modify.constraint into account from
+            // when we propagated buffer constraints forward
+            let output_buffer_constraint = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_modify.output))
+                .or_default()
+                .clone();
+            let input_state = buffer_version_states
+                .entry(graph.buffer_version_create_usage(buffer_modify.input))
+                .or_default();
+            input_state.partial_merge(&output_buffer_constraint);
+
+            buffer_version_states.insert(buffer_modify.input, output_buffer_constraint.clone());
         }
     }
 
@@ -566,7 +720,7 @@ fn determine_constraints(
 fn insert_resolves(
     graph: &mut RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraint_results: &mut DetermineConstraintsResult,
+    constraint_results: &mut DetermineConstraintsResult,
 ) {
     log::trace!("Insert resolves in graph where necessary");
     for node_id in node_execution_order {
@@ -583,7 +737,7 @@ fn insert_resolves(
                 if let Some(write_image) = color_attachment.write_image {
                     //let write_version = graph.image_usages[write_image.0].version;
                     // Skip if it's not an MSAA image
-                    let write_spec = image_constraint_results.image_specification(write_image).unwrap();
+                    let write_spec = constraint_results.image_specification(write_image).unwrap();
                     if write_spec.samples == vk::SampleCountFlags::TYPE_1 {
                         log::trace!("      already non-MSAA");
                         continue;
@@ -608,7 +762,7 @@ fn insert_resolves(
                             graph.image_usages[read_usage.0].usage_type
                         );
                         let read_spec =
-                            image_constraint_results.image_specification(*read_usage).unwrap();
+                            constraint_results.image_specification(*read_usage).unwrap();
                         if *read_spec == *write_spec {
                             continue;
                         } else if *read_spec == resolve_spec {
@@ -645,7 +799,7 @@ fn insert_resolves(
                 resolve_attachment_index,
                 resolve_spec.clone().into(),
             );
-            image_constraint_results.images.insert(image, resolve_spec);
+            constraint_results.images.insert(image, resolve_spec);
 
             for usage in usages_to_move {
                 let from = graph.image_usages[usage.0].version;
@@ -666,7 +820,8 @@ fn insert_resolves(
 /// sequence of reads and writes
 #[derive(Debug)]
 pub struct AssignVirtualImagesResult {
-    usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
+    image_usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
+    buffer_usage_to_virtual: FnvHashMap<RenderGraphBufferUsageId, VirtualBufferId>,
 }
 
 //
@@ -680,7 +835,7 @@ pub struct AssignVirtualImagesResult {
 fn assign_virtual_images(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraint_results: &mut DetermineConstraintsResult,
+    constraint_results: &mut DetermineConstraintsResult,
 ) -> AssignVirtualImagesResult {
     #[derive(Default)]
     struct VirtualImageIdAllocator {
@@ -695,10 +850,27 @@ fn assign_virtual_images(
         }
     }
 
-    let mut usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId> =
+    #[derive(Default)]
+    struct VirtualBufferIdAllocator {
+        next_id: usize,
+    }
+
+    impl VirtualBufferIdAllocator {
+        fn allocate(&mut self) -> VirtualBufferId {
+            let id = VirtualBufferId(self.next_id);
+            self.next_id += 1;
+            id
+        }
+    }
+
+    let mut image_usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId> =
+        FnvHashMap::default();
+    let mut buffer_usage_to_virtual: FnvHashMap<RenderGraphBufferUsageId, VirtualBufferId> =
         FnvHashMap::default();
 
     let mut virtual_image_id_allocator = VirtualImageIdAllocator::default();
+    let mut virtual_buffer_id_allocator = VirtualBufferIdAllocator::default();
+
     //TODO: Associate input images here? We can wait until we decide which images are shared
     log::trace!("Associate images written by nodes with virtual images");
     for node in node_execution_order.iter() {
@@ -709,40 +881,88 @@ fn assign_virtual_images(
         // being written forward into the nodes of downstream reads. This can chain such that
         // the same image is shared by many nodes
         let mut written_images = vec![];
+        let mut written_buffers = vec![];
 
-        for create in &node.image_creates {
+        //
+        // Handle images created by this node
+        //
+        for image_create in &node.image_creates {
             // An image that's created always allocates an image (we reuse these if they are compatible
             // and lifetimes don't overlap)
             let virtual_image = virtual_image_id_allocator.allocate();
             log::trace!(
                 "    Create {:?} will use image {:?}",
-                create.image,
+                image_create.image,
                 virtual_image
             );
-            usage_to_virtual.insert(create.image, virtual_image);
+            image_usage_to_virtual.insert(image_create.image, virtual_image);
             // Queue this image write to try to share the image forward
-            written_images.push(create.image);
+            written_images.push(image_create.image);
         }
 
-        for modify in &node.image_modifies {
-            // The virtual image in the read portion of a modify must also be the write image.
+        //
+        // Handle buffers created by this node
+        //
+        for buffer_create in &node.buffer_creates {
+            // An buffer that's created always allocates an buffer (we reuse these if they are compatible
+            // and lifetimes don't overlap)
+            let virtual_buffer = virtual_buffer_id_allocator.allocate();
+            log::trace!(
+                "    Create {:?} will use buffer {:?}",
+                buffer_create.buffer,
+                virtual_buffer
+            );
+            buffer_usage_to_virtual.insert(buffer_create.buffer, virtual_buffer);
+            // Queue this buffer write to try to share the buffer forward
+            written_buffers.push(buffer_create.buffer);
+        }
+
+        //
+        // Handle images modified by this node
+        //
+        for image_modify in &node.image_modifies {
+            // The virtual image in the read portion of a image_modify must also be the write image.
             // The format of the input/output is guaranteed to match
             assert_eq!(
-                image_constraint_results.image_specification(modify.input),
-                image_constraint_results.image_specification(modify.output)
+                constraint_results.image_specification(image_modify.input),
+                constraint_results.image_specification(image_modify.output)
             );
 
             // Assign the image
-            let virtual_image = *usage_to_virtual.get(&modify.input).unwrap();
+            let virtual_image = *image_usage_to_virtual.get(&image_modify.input).unwrap();
             log::trace!(
                 "    Modify {:?} will pass through image {:?}",
-                modify.output,
+                image_modify.output,
                 virtual_image
             );
-            usage_to_virtual.insert(modify.output, virtual_image);
+            image_usage_to_virtual.insert(image_modify.output, virtual_image);
 
             // Queue this image write to try to share the image forward
-            written_images.push(modify.output);
+            written_images.push(image_modify.output);
+        }
+
+        //
+        // Handle buffers modified by this node
+        //
+        for buffer_modify in &node.buffer_modifies {
+            // The virtual buffer in the read portion of a buffer_modify must also be the write buffer.
+            // The format of the input/output is guaranteed to match
+            assert_eq!(
+                constraint_results.buffer_specification(buffer_modify.input),
+                constraint_results.buffer_specification(buffer_modify.output)
+            );
+
+            // Assign the buffer
+            let virtual_buffer = *buffer_usage_to_virtual.get(&buffer_modify.input).unwrap();
+            log::trace!(
+                "    Modify {:?} will pass through buffer {:?}",
+                buffer_modify.output,
+                virtual_buffer
+            );
+            buffer_usage_to_virtual.insert(buffer_modify.output, virtual_buffer);
+
+            // Queue this buffer write to try to share the buffer forward
+            written_buffers.push(buffer_modify.output);
         }
 
         for written_image in written_images {
@@ -782,15 +1002,15 @@ fn assign_virtual_images(
             //     }
             // }
 
-            let write_virtual_image = *usage_to_virtual.get(&written_image).unwrap();
+            let write_virtual_image = *image_usage_to_virtual.get(&written_image).unwrap();
             let write_type = graph.image_usages[written_image.0].usage_type;
 
-            let written_spec = image_constraint_results
+            let written_spec = constraint_results
                 .image_specification(written_image)
                 .unwrap();
 
             for usage_resource_id in &written_image_version_info.read_usages {
-                let usage_spec = match image_constraint_results.image_specification(*usage_resource_id) {
+                let usage_spec = match constraint_results.image_specification(*usage_resource_id) {
                     Some(usage_spec) => usage_spec,
                     // If the reader of this image was culled, we may not have determined a spec.
                     // If so, skip this usage
@@ -818,7 +1038,7 @@ fn assign_virtual_images(
                         read_type
                     );
                     let overwritten_image =
-                        usage_to_virtual.insert(*usage_resource_id, write_virtual_image);
+                        image_usage_to_virtual.insert(*usage_resource_id, write_virtual_image);
 
                     assert!(overwritten_image.is_none());
                 } else {
@@ -838,7 +1058,7 @@ fn assign_virtual_images(
                         log::trace!("      usage  : {:?}", usage_spec);
                     }
                     let overwritten_image =
-                        usage_to_virtual.insert(*usage_resource_id, virtual_image);
+                        image_usage_to_virtual.insert(*usage_resource_id, virtual_image);
 
                     assert!(overwritten_image.is_none());
 
@@ -848,12 +1068,101 @@ fn assign_virtual_images(
                 }
             }
         }
+
+        for written_buffer in written_buffers {
+            // Count the downstream users of this image based on if they need read-only access
+            // or write access. We need this information to determine which usages we can share
+            // the output data with.
+            //
+            // I'm not sure if this works as written. I was thinking we might have trouble with
+            // multiple readers, and then they pass to a writer, but now that I think of it, readers
+            // don't "output" anything.
+            //TODO: This could be smarter to handle the case of a resource being read and then
+            // later written
+            let written_buffer_version_info = graph.buffer_version_info(written_buffer);
+            let mut read_count = 0;
+            let mut write_count = 0;
+            for usage in &written_buffer_version_info.read_usages {
+                if graph.buffer_usages[usage.0].usage_type.is_read_only() {
+                    read_count += 1;
+                } else {
+                    write_count += 1;
+                }
+            }
+
+            let write_virtual_buffer = *buffer_usage_to_virtual.get(&written_buffer).unwrap();
+            let write_type = graph.buffer_usages[written_buffer.0].usage_type;
+
+            let written_spec = constraint_results
+                .buffer_specification(written_buffer)
+                .unwrap();
+
+            for usage_resource_id in &written_buffer_version_info.read_usages {
+                let usage_spec = match constraint_results.buffer_specification(*usage_resource_id) {
+                    Some(usage_spec) => usage_spec,
+                    // If the reader of this buffer was culled, we may not have determined a spec.
+                    // If so, skip this usage
+                    None => continue,
+                };
+
+                // We can't share buffers if they aren't the same format
+                let specifications_match = *written_spec == *usage_spec;
+
+                // We can't share buffers unless it's a read or it's an exclusive write
+                let is_read_or_exclusive_write = (read_count > 0
+                    && graph.buffer_usages[usage_resource_id.0]
+                    .usage_type
+                    .is_read_only())
+                    || write_count <= 1;
+
+                let read_type = graph.buffer_usages[usage_resource_id.0].usage_type;
+                if specifications_match && is_read_or_exclusive_write {
+                    // it's a shared read or an exclusive write
+                    log::trace!(
+                        "    Usage {:?} will share an buffer with {:?} ({:?} -> {:?})",
+                        written_buffer,
+                        usage_resource_id,
+                        write_type,
+                        read_type
+                    );
+                    let overwritten_buffer =
+                        buffer_usage_to_virtual.insert(*usage_resource_id, write_virtual_buffer);
+
+                    assert!(overwritten_buffer.is_none());
+                } else {
+                    // allocate new buffer
+                    let virtual_buffer = virtual_buffer_id_allocator.allocate();
+                    log::trace!(
+                        "    Allocate buffer {:?} for {:?} ({:?} -> {:?})  (specifications_match match: {} is_read_or_exclusive_write: {})",
+                        virtual_buffer,
+                        usage_resource_id,
+                        write_type,
+                        read_type,
+                        specifications_match,
+                        is_read_or_exclusive_write
+                    );
+                    if !specifications_match {
+                        log::trace!("      written: {:?}", written_spec);
+                        log::trace!("      usage  : {:?}", usage_spec);
+                    }
+                    let overwritten_buffer =
+                        buffer_usage_to_virtual.insert(*usage_resource_id, virtual_buffer);
+
+                    assert!(overwritten_buffer.is_none());
+
+                    //TODO: One issue (aside from not doing any copies right now) is that buffers created in this way
+                    // aren't included in the assign_physical_buffers logic
+                    panic!("Render graph does not currently support blit from one buffer to another to fix buffer compatibility");
+                }
+            }
+        }
     }
 
     // vulkan image layouts: https://github.com/nannou-org/nannou/issues/271#issuecomment-465876622
     AssignVirtualImagesResult {
         //physical_image_usages,
-        usage_to_virtual,
+        image_usage_to_virtual,
+        buffer_usage_to_virtual,
         //physical_image_versions,
         //physical_image_infos,
     }
@@ -1013,7 +1322,7 @@ fn build_physical_passes(
                         .or(color_attachment.write_image)
                         .unwrap();
                     let virtual_image = virtual_images
-                        .usage_to_virtual
+                        .image_usage_to_virtual
                         .get(&read_or_write_usage)
                         .unwrap();
 
@@ -1064,7 +1373,7 @@ fn build_physical_passes(
             {
                 if let Some(resolve_attachment) = resolve_attachment {
                     let write_image = resolve_attachment.write_image;
-                    let virtual_image = virtual_images.usage_to_virtual.get(&write_image).unwrap();
+                    let virtual_image = virtual_images.image_usage_to_virtual.get(&write_image).unwrap();
                     //let version_id = graph.image_version_id(write_image);
                     let specification = image_constraints.images.get(&write_image).unwrap();
                     log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
@@ -1102,7 +1411,7 @@ fn build_physical_passes(
                     .or(depth_attachment.write_image)
                     .unwrap();
                 let virtual_image = virtual_images
-                    .usage_to_virtual
+                    .image_usage_to_virtual
                     .get(&read_or_write_usage)
                     .unwrap();
                 let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
@@ -1223,7 +1532,7 @@ fn assign_physical_images(
         reuse_requirements_lookup: &mut FnvHashMap<VirtualImageId, usize>,
     ) {
         // Get physical ID from usage
-        let virtual_id = virtual_images.usage_to_virtual[&usage];
+        let virtual_id = virtual_images.image_usage_to_virtual[&usage];
 
         // Find requirements for this image if they exist, or create new requirements. This is a
         // lookup for an index so that the requirements will be stored sorted by
@@ -1336,7 +1645,7 @@ fn assign_physical_images(
             can_be_reused: false, // Should be safe to allow reuse? But last_node_pass_index effectively makes this never reuse
         });
 
-        let virtual_id = virtual_images.usage_to_virtual[&output_image.usage];
+        let virtual_id = virtual_images.image_usage_to_virtual[&output_image.usage];
         let old = virtual_to_physical.insert(virtual_id, physical_image_id);
         assert!(old.is_none());
         log::trace!(
@@ -1411,7 +1720,7 @@ fn assign_physical_images(
     // Create a lookup to get physical image from usage
     //
     let mut usage_to_physical = FnvHashMap::default();
-    for (&usage, virtual_image) in &virtual_images.usage_to_virtual {
+    for (&usage, virtual_image) in &virtual_images.image_usage_to_virtual {
         //TODO: This was breaking in a test because an output image had no usage flags and we
         // never assigned the output image a physical ID since it wasn't in a pass
         usage_to_physical.insert(usage, virtual_to_physical[virtual_image]);
@@ -2165,7 +2474,7 @@ fn create_output_passes(
 #[allow(dead_code)]
 fn print_image_constraints(
     graph: &RenderGraphBuilder,
-    image_constraint_results: &mut DetermineConstraintsResult,
+    constraint_results: &mut DetermineConstraintsResult,
 ) {
     log::trace!("Image constraints:");
     for (image_index, image_resource) in graph.image_resources.iter().enumerate() {
@@ -2175,14 +2484,14 @@ fn print_image_constraints(
 
             log::trace!(
                 "      Writen as: {:?}",
-                image_constraint_results.image_specification(version.create_usage)
+                constraint_results.image_specification(version.create_usage)
             );
 
             for (usage_index, usage) in version.read_usages.iter().enumerate() {
                 log::trace!(
                     "      Read Usage {}: {:?}",
                     usage_index,
-                    image_constraint_results.image_specification(*usage)
+                    constraint_results.image_specification(*usage)
                 );
             }
         }
@@ -2192,17 +2501,17 @@ fn print_image_constraints(
 #[allow(dead_code)]
 fn print_image_compatibility(
     graph: &RenderGraphBuilder,
-    image_constraint_results: &DetermineConstraintsResult,
+    constraint_results: &DetermineConstraintsResult,
 ) {
     log::trace!("Image Compatibility Report:");
     for (image_index, image_resource) in graph.image_resources.iter().enumerate() {
         log::trace!("  Image {:?} {:?}", image_index, image_resource.name);
         for (version_index, version) in image_resource.versions.iter().enumerate() {
-            let write_specification = image_constraint_results.image_specification(version.create_usage);
+            let write_specification = constraint_results.image_specification(version.create_usage);
 
             log::trace!("    Version {}: {:?}", version_index, version);
             for (usage_index, usage) in version.read_usages.iter().enumerate() {
-                let read_specification = image_constraint_results.image_specification(*usage);
+                let read_specification = constraint_results.image_specification(*usage);
 
                 // TODO: Skip images we don't use?
 
@@ -2240,14 +2549,14 @@ fn print_node_barriers(
 fn verify_unculled_image_usages_specifications_exist(
     graph: &RenderGraphBuilder,
     node_execution_order: &Vec<RenderGraphNodeId>,
-    image_constraint_results: &DetermineConstraintsResult,
+    constraint_results: &DetermineConstraintsResult,
 ) {
     for (_image_index, image_resource) in graph.image_resources.iter().enumerate() {
         //log::trace!("  Image {:?} {:?}", image_index, image_resource.name);
         for (_version_index, version) in image_resource.versions.iter().enumerate() {
             // Check the write usage for this version
             if node_execution_order.contains(&version.creator_node)
-                && image_constraint_results
+                && constraint_results
                     .images
                     .get(&version.create_usage)
                     .is_none()
@@ -2267,7 +2576,7 @@ fn verify_unculled_image_usages_specifications_exist(
                     RenderGraphImageUser::Output(_) => true,
                 };
 
-                if is_scheduled && image_constraint_results.images.get(usage).is_none() {
+                if is_scheduled && constraint_results.images.get(usage).is_none() {
                     panic!(
                         "Could not determine specification for image {:?} used by {:?} for {:?}",
                         usage, usage_info.user, usage_info.usage_type
@@ -2300,7 +2609,7 @@ fn print_final_images(
 fn print_final_image_usage(
     graph: &RenderGraphBuilder,
     assign_physical_images_result: &AssignPhysicalImagesResult,
-    image_constraint_results: &DetermineConstraintsResult,
+    constraint_results: &DetermineConstraintsResult,
     renderpasses: &Vec<RenderGraphOutputPass>,
 ) {
     log::debug!("-- IMAGE USAGE --");
@@ -2330,7 +2639,7 @@ fn print_final_image_usage(
                         color_attachment_index,
                         physical_image,
                         write_name,
-                        image_constraint_results.images[&read_or_write]
+                        constraint_results.images[&read_or_write]
                     );
                 }
             }
@@ -2347,7 +2656,7 @@ fn print_final_image_usage(
                         resolve_attachment_index,
                         physical_image,
                         write_name,
-                        image_constraint_results.images[&resolve_attachment.write_image]
+                        constraint_results.images[&resolve_attachment.write_image]
                     );
                 }
             }
@@ -2367,7 +2676,7 @@ fn print_final_image_usage(
                     "    Depth Attachment: {:?} Name: {:?} Constraints: {:?}",
                     physical_image,
                     write_name,
-                    image_constraint_results.images[&read_or_write]
+                    constraint_results.images[&read_or_write]
                 );
             }
 
@@ -2378,7 +2687,7 @@ fn print_final_image_usage(
                     "    Sampled: {:?} Name: {:?} Constraints: {:?}",
                     physical_image,
                     write_name,
-                    image_constraint_results.images[sampled_image]
+                    constraint_results.images[sampled_image]
                 );
             }
         }
@@ -2390,7 +2699,7 @@ fn print_final_image_usage(
             "    Output Image {:?} Name: {:?} Constraints: {:?}",
             physical_image,
             write_name,
-            image_constraint_results.images[&output_image.usage]
+            constraint_results.images[&output_image.usage]
         );
     }
 }
@@ -2444,15 +2753,15 @@ impl RenderGraphPlan {
         // If there is not enough information to infer then the render graph cannot be used and
         // building it will panic.
         //
-        let mut image_constraint_results =
+        let mut constraint_results =
             determine_constraints(&graph, &node_execution_order);
 
         // Look at all image versions and ensure a constraint exists for usages where the node was
         // not culled
-        //RenderGraphPlan::verify_unculled_image_usages_specifications_exist(&graph, &node_execution_order, &image_constraint_results);
+        //RenderGraphPlan::verify_unculled_image_usages_specifications_exist(&graph, &node_execution_order, &constraint_results);
 
         // Print out the constraints assigned to images
-        //print_image_constraints(&graph, &mut image_constraint_results);
+        //print_image_constraints(&graph, &mut constraint_results);
 
         //
         // Add resolves to the graph - this will occur when a renderpass outputs a multisample image
@@ -2461,18 +2770,18 @@ impl RenderGraphPlan {
         insert_resolves(
             &mut graph,
             &node_execution_order,
-            &mut image_constraint_results,
+            &mut constraint_results,
         );
 
         // Print the cases where we can't reuse images
-        //print_image_compatibility(&graph, &image_constraint_results);
+        //print_image_compatibility(&graph, &constraint_results);
 
         //
         // Assign logical images to physical images. This should give us a minimal number of images
         // if we are not reusing or aliasing. (We reuse when we assign physical indexes)
         //
         let assign_virtual_images_result =
-            assign_virtual_images(&graph, &node_execution_order, &mut image_constraint_results);
+            assign_virtual_images(&graph, &node_execution_order, &mut constraint_results);
 
         //
         // Combine nodes into passes where possible
@@ -2480,7 +2789,7 @@ impl RenderGraphPlan {
         let mut passes = build_physical_passes(
             &graph,
             &node_execution_order,
-            &image_constraint_results,
+            &constraint_results,
             &assign_virtual_images_result,
             swapchain_info,
         );
@@ -2491,7 +2800,7 @@ impl RenderGraphPlan {
         //
         let assign_physical_images_result = assign_physical_images(
             &graph,
-            &image_constraint_results,
+            &constraint_results,
             &assign_virtual_images_result,
             &mut passes,
         );
@@ -2515,7 +2824,7 @@ impl RenderGraphPlan {
         let node_barriers = build_node_barriers(
             &graph,
             &node_execution_order,
-            &image_constraint_results,
+            &constraint_results,
             &assign_physical_images_result, /*, &determine_image_layouts_result*/
         );
 
@@ -2531,7 +2840,7 @@ impl RenderGraphPlan {
         let subpass_dependencies = build_pass_barriers(
             &graph,
             &node_execution_order,
-            &image_constraint_results,
+            &constraint_results,
             &assign_physical_images_result,
             &node_barriers,
             &mut passes,
@@ -2561,7 +2870,7 @@ impl RenderGraphPlan {
         // alias_images(
         //     &graph,
         //     &node_execution_order,
-        //     &image_constraint_results,
+        //     &constraint_results,
         //     &assign_physical_images_result,
         //     &node_barriers,
         //     &passes,
@@ -2625,7 +2934,7 @@ impl RenderGraphPlan {
         print_final_image_usage(
             &graph,
             &assign_physical_images_result,
-            &image_constraint_results,
+            &constraint_results,
             &renderpasses,
         );
 
