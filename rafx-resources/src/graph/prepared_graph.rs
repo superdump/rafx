@@ -2,12 +2,12 @@ use super::PhysicalImageId;
 use crate::graph::graph_image::PhysicalImageViewId;
 use crate::graph::graph_node::RenderGraphNodeId;
 use crate::graph::graph_plan::RenderGraphPlan;
-use crate::graph::{RenderGraphBuilder, RenderGraphImageSpecification, RenderGraphImageUsageId};
+use crate::graph::{RenderGraphBuilder, RenderGraphImageSpecification, RenderGraphImageUsageId, RenderGraphBufferSpecification, RenderGraphBufferUsageId};
 use crate::resources::FramebufferResource;
 use crate::resources::RenderPassResource;
 use crate::resources::ResourceLookupSet;
 use crate::vk_description::SwapchainSurfaceInfo;
-use crate::{vk_description as dsc, ImageResource};
+use crate::{vk_description as dsc, ImageResource, BufferResource};
 use crate::{ImageViewResource, ResourceArc, ResourceContext};
 use ash::prelude::VkResult;
 use ash::version::DeviceV1_0;
@@ -17,6 +17,8 @@ use rafx_nodes::{RenderPhase, RenderPhaseIndex};
 use rafx_shell_vulkan::{VkDeviceContext, VkImage};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
+use crate::graph::graph_buffer::PhysicalBufferId;
+use crate::vulkan::VkBuffer;
 
 pub struct ResourceCache<T: Eq + Hash> {
     resources: FnvHashMap<T, u64>,
@@ -52,6 +54,16 @@ impl<T: Eq + Hash> ResourceCache<T> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
+struct RenderGraphCachedBufferKey {
+    specification: RenderGraphBufferSpecification,
+}
+
+struct RenderGraphCachedBuffer {
+    keep_until_frame: u64,
+    buffer: ResourceArc<BufferResource>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 struct RenderGraphCachedImageKey {
     specification: RenderGraphImageSpecification,
     swapchain_surface_info: SwapchainSurfaceInfo,
@@ -63,6 +75,7 @@ struct RenderGraphCachedImage {
 }
 
 pub struct RenderGraphCacheInner {
+    buffers: FnvHashMap<RenderGraphCachedBufferKey, Vec<RenderGraphCachedBuffer>>,
     images: FnvHashMap<RenderGraphCachedImageKey, Vec<RenderGraphCachedImage>>,
     render_passes: ResourceCache<ResourceArc<RenderPassResource>>,
     framebuffers: ResourceCache<ResourceArc<FramebufferResource>>,
@@ -73,6 +86,7 @@ pub struct RenderGraphCacheInner {
 impl RenderGraphCacheInner {
     pub fn new(max_frames_in_flight: u32) -> Self {
         RenderGraphCacheInner {
+            buffers: Default::default(),
             images: Default::default(),
             render_passes: ResourceCache::new(),
             framebuffers: ResourceCache::new(),
@@ -84,6 +98,13 @@ impl RenderGraphCacheInner {
     pub fn on_frame_complete(&mut self) {
         //println!("-- FRAME COMPLETE -- drop framebuffer if keep_until <= {}", self.current_frame_index);
         let current_frame_index = self.current_frame_index;
+
+        for value in self.buffers.values_mut() {
+            value.retain(|x| x.keep_until_frame > current_frame_index);
+        }
+
+        self.buffers.retain(|_k, v| !v.is_empty());
+
         for value in self.images.values_mut() {
             value.retain(|x| x.keep_until_frame > current_frame_index);
         }
@@ -97,9 +118,94 @@ impl RenderGraphCacheInner {
     }
 
     pub fn clear(&mut self) {
+        self.buffers.clear();
         self.images.clear();
         self.render_passes.clear();
         self.framebuffers.clear();
+    }
+
+    fn allocate_buffers(
+        &mut self,
+        device_context: &VkDeviceContext,
+        graph: &RenderGraphPlan,
+        resources: &ResourceLookupSet,
+    ) -> VkResult<FnvHashMap<PhysicalBufferId, ResourceArc<BufferResource>>> {
+        log::trace!("Allocate buffers for rendergraph");
+        let mut buffer_resources: FnvHashMap<PhysicalBufferId, ResourceArc<BufferResource>> =
+            Default::default();
+
+        // Keeps track of what index in the cache we will use next. This starts at 0 for each key
+        // and increments every time we use an image. If the next image is >= length of buffers, we
+        // allocate one and push it into that key's list of cached buffers
+        let mut next_buffer_to_use = FnvHashMap::<RenderGraphCachedBufferKey, usize>::default();
+
+        // Using a buffer will bump the keep_until_frame for that buffer
+        let keep_until_frame = self.current_frame_index + self.frames_to_persist;
+
+        for (&physical_id, buffer) in &graph.output_buffers {
+            buffer_resources.insert(physical_id, buffer.dst_buffer.clone());
+        }
+
+        // Iterate all intermediate buffers, assigning an existing buffer from a previous frame or
+        // allocating a new one
+        for (&id, specification) in &graph.intermediate_buffers {
+            let key = RenderGraphCachedBufferKey {
+                specification: specification.clone(),
+            };
+
+            let next_buffer_index = next_buffer_to_use.entry(key.clone()).or_insert(0);
+            let matching_cached_buffers = self
+                .buffers
+                .entry(key.clone())
+                .or_insert_with(Default::default);
+
+            if let Some(cached_buffer) = matching_cached_buffers.get_mut(*next_buffer_index) {
+                log::trace!(
+                    "  Buffer {:?} - REUSE {:?}  (key: {:?}, index: {})",
+                    id,
+                    cached_buffer.buffer,
+                    key,
+                    next_buffer_index
+                );
+
+                // Reuse a buffer from a previous frame, bump keep_until_frame
+                cached_buffer.keep_until_frame = keep_until_frame;
+                *next_buffer_index += 1;
+
+                buffer_resources.insert(id, cached_buffer.buffer.clone());
+            } else {
+                // No unused buffer available, create one
+                let buffer = VkBuffer::new(
+                    device_context,
+                    rafx_shell_vulkan::vk_mem::MemoryUsage::GpuOnly,
+                    key.specification.usage_flags,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    key.specification.size
+                )?;
+                let buffer = resources.insert_buffer(buffer);
+
+                log::trace!(
+                    "  Buffer {:?} - CREATE {:?}  (key: {:?}, index: {})",
+                    id,
+                    buffer.get_raw().buffer,
+                    key,
+                    next_buffer_index
+                );
+
+                // Add the buffer to the cache
+                debug_assert_eq!(matching_cached_buffers.len(), *next_buffer_index);
+                matching_cached_buffers.push(RenderGraphCachedBuffer {
+                    keep_until_frame,
+                    buffer: buffer.clone(),
+                });
+                *next_buffer_index += 1;
+
+                // Associate the physical id with this buffer
+                buffer_resources.insert(id, buffer);
+            }
+        }
+
+        Ok(buffer_resources)
     }
 
     fn allocate_images(
@@ -345,6 +451,13 @@ pub struct RenderGraphContext<'a> {
 }
 
 impl<'a> RenderGraphContext<'a> {
+    pub fn buffer(
+        &self,
+        buffer: RenderGraphBufferUsageId,
+    ) -> Option<ResourceArc<BufferResource>> {
+        self.prepared_graph.buffer(buffer)
+    }
+
     pub fn image_view(
         &self,
         image: RenderGraphImageUsageId,
@@ -373,6 +486,7 @@ pub struct VisitRenderpassArgs<'a> {
 pub struct PreparedRenderGraph {
     device_context: VkDeviceContext,
     resource_context: ResourceContext,
+    buffer_resources: FnvHashMap<PhysicalBufferId, ResourceArc<BufferResource>>,
     image_resources: FnvHashMap<PhysicalImageId, ResourceArc<ImageResource>>,
     image_view_resources: FnvHashMap<PhysicalImageViewId, ResourceArc<ImageViewResource>>,
     render_pass_resources: Vec<ResourceArc<RenderPassResource>>,
@@ -393,6 +507,12 @@ impl PreparedRenderGraph {
         let cache = &mut *cache_guard;
 
         profiling::scope!("allocate resources");
+        let buffer_resources = cache.allocate_buffers(
+            device_context,
+            &graph_plan,
+            resources,
+        )?;
+
         let image_resources = cache.allocate_images(
             device_context,
             &graph_plan,
@@ -416,6 +536,7 @@ impl PreparedRenderGraph {
         Ok(PreparedRenderGraph {
             device_context: device_context.clone(),
             resource_context: resource_context.clone(),
+            buffer_resources,
             image_resources,
             image_view_resources,
             render_pass_resources,
@@ -424,12 +545,20 @@ impl PreparedRenderGraph {
         })
     }
 
+    fn buffer(
+        &self,
+        buffer: RenderGraphBufferUsageId,
+    ) -> Option<ResourceArc<BufferResource>> {
+        let physical_buffer = self.graph_plan.buffer_usage_to_physical.get(&buffer)?;
+        self.buffer_resources.get(physical_buffer).cloned()
+    }
+
     fn image_view(
         &self,
         image: RenderGraphImageUsageId,
     ) -> Option<ResourceArc<ImageViewResource>> {
         let physical_image = self.graph_plan.image_usage_to_view.get(&image)?;
-        self.image_view_resources.get(&physical_image).cloned()
+        self.image_view_resources.get(physical_image).cloned()
     }
 
     pub fn execute_graph(
@@ -484,6 +613,26 @@ impl PreparedRenderGraph {
 
             unsafe {
                 if let Some(pre_pass_barrier) = &pass.pre_pass_barrier {
+                    let mut buffer_memory_barriers =
+                        Vec::with_capacity(pre_pass_barrier.buffer_barriers.len());
+
+                    for buffer_barrier in &pre_pass_barrier.buffer_barriers {
+                        log::trace!("add buffer barrier for buffer {:?}", buffer_barrier.buffer);
+                        let buffer = &self.buffer_resources[&buffer_barrier.buffer];
+
+                        let buffer_memory_barrier = vk::BufferMemoryBarrier::builder()
+                            .src_access_mask(buffer_barrier.src_access)
+                            .dst_access_mask(buffer_barrier.dst_access)
+                            .src_queue_family_index(buffer_barrier.src_queue_family_index)
+                            .dst_queue_family_index(buffer_barrier.dst_queue_family_index)
+                            .buffer(buffer.get_raw().buffer.buffer)
+                            .offset(0)
+                            .size(buffer_barrier.size)
+                            .build();
+
+                        buffer_memory_barriers.push(buffer_memory_barrier);
+                    }
+
                     let mut image_memory_barriers =
                         Vec::with_capacity(pre_pass_barrier.image_barriers.len());
 
@@ -512,7 +661,7 @@ impl PreparedRenderGraph {
                         pre_pass_barrier.dst_stage,
                         vk::DependencyFlags::empty(),
                         &[],
-                        &[],
+                        &buffer_memory_barriers,
                         &image_memory_barriers,
                     );
                 }
@@ -713,6 +862,18 @@ impl<T> RenderGraphExecutor<T> {
             .node_to_renderpass_index
             .get(&node_id)?;
         Some(self.prepared_graph.render_pass_resources[renderpass_index].clone())
+    }
+
+    pub fn buffer_resource(
+        &self,
+        buffer_usage: RenderGraphBufferUsageId,
+    ) -> Option<ResourceArc<BufferResource>> {
+        let buffer = self
+            .prepared_graph
+            .graph_plan
+            .buffer_usage_to_physical
+            .get(&buffer_usage)?;
+        Some(self.prepared_graph.buffer_resources[buffer].clone())
     }
 
     pub fn image_resource(

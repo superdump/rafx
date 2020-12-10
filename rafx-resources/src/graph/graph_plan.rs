@@ -409,10 +409,10 @@ fn determine_constraints(
         // Propagate constraints into buffers this node creates.
         //
         for buffer_create in &node.buffer_creates {
-            // An buffer cannot be created within the graph and imported externally at the same
+            // A buffer cannot be created within the graph and imported externally at the same
             // time. (The code here assumes no input and will not produce correct results if there
             // is an input buffer)
-            //TODO: Input buffers are broken, we don't properly represent an buffer being created
+            //TODO: Input buffers are broken, we don't properly represent a buffer being created
             // vs. receiving an input. We probably need to make creator in
             // RenderGraphImageResourceVersionInfo Option or an enum with input/create options
             //assert!(graph.buffer_version_info(buffer_create.buffer).input_buffer.is_none());
@@ -619,7 +619,7 @@ fn determine_constraints(
                 .or_default();
             version_state.partial_merge(&buffer_read.constraint);
 
-            // If this is an buffer read with no output, it's possible the constraint on the read is incomplete.
+            // If this is a buffer read with no output, it's possible the constraint on the read is incomplete.
             // So we need to merge the buffer state that may have information forward-propagated
             // into it with the constraints on the read. (Conceptually it's like we're forward
             // propagating here because the main forward propagate pass does not handle reads.
@@ -904,7 +904,7 @@ fn assign_virtual_resources(
         // Handle buffers created by this node
         //
         for buffer_create in &node.buffer_creates {
-            // An buffer that's created always allocates an buffer (we reuse these if they are compatible
+            // A buffer that's created always allocates a buffer (we reuse these if they are compatible
             // and lifetimes don't overlap)
             let virtual_buffer = virtual_buffer_id_allocator.allocate();
             log::trace!(
@@ -1119,7 +1119,7 @@ fn assign_virtual_resources(
                 if specifications_match && is_read_or_exclusive_write {
                     // it's a shared read or an exclusive write
                     log::trace!(
-                        "    Usage {:?} will share an buffer with {:?} ({:?} -> {:?})",
+                        "    Usage {:?} will share a buffer with {:?} ({:?} -> {:?})",
                         written_buffer,
                         usage_resource_id,
                         write_type,
@@ -2571,12 +2571,14 @@ fn build_pass_barriers(
                 let buffer_barriers = node_barriers.buffer_barriers
                     .keys()
                     .map(|physical_buffer_id| {
+                        let specification = &physical_resources.buffer_specifications[physical_buffer_id.0];
                         PrepassBufferBarrier {
                             buffer: *physical_buffer_id,
                             src_access: invalidate_src_access_flags,
                             dst_access: invalidate_dst_access_flags,
                             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                            size: specification.size,
                         }
                     })
                     .collect();

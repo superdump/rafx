@@ -614,7 +614,7 @@ impl AssetManager {
         &mut self,
         buffer: VkBuffer,
     ) -> VkResult<BufferAsset> {
-        let buffer = self.resources().insert_buffer(ManuallyDrop::new(buffer));
+        let buffer = self.resources().insert_buffer(buffer);
 
         Ok(BufferAsset { buffer })
     }

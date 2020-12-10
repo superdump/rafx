@@ -5,11 +5,11 @@ use ash::vk;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct RenderGraphBufferUsageId(pub(super) usize);
 
-/// An ID for an buffer used within the graph between passes
+/// An ID for a buffer used within the graph between passes
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VirtualBufferId(pub(super) usize);
 
-/// An ID for an buffer allocation (possibly reused)
+/// An ID for a buffer allocation (possibly reused)
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PhysicalBufferId(pub(super) usize);
 
@@ -17,7 +17,7 @@ pub struct PhysicalBufferId(pub(super) usize);
 #[derive(Debug, Copy, Clone)]
 pub struct RenderGraphOutputBufferId(pub(super) usize);
 
-/// Unique ID for a particular version of an buffer. Any time a buffer is modified, a new version is
+/// Unique ID for a particular version of a buffer. Any time a buffer is modified, a new version is
 /// produced
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct RenderGraphBufferVersionId {
@@ -62,7 +62,7 @@ pub struct RenderGraphBufferUsage {
     //pub(super) stage_flags: vk::PipelineStageFlags,
 }
 
-/// Immutable, fully-specified attributes of an buffer. A *constraint* is partially specified and
+/// Immutable, fully-specified attributes of a buffer. A *constraint* is partially specified and
 /// the graph will use constraints to solve for the specification
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RenderGraphBufferSpecification {
@@ -101,7 +101,7 @@ impl RenderGraphBufferSpecification {
 }
 
 
-/// Constraints on an buffer. Constraints are set per-field and start out None (i.e. unconstrained)
+/// Constraints on a buffer. Constraints are set per-field and start out None (i.e. unconstrained)
 /// The rendergraph will derive specifications from the constraints
 #[derive(Default, Clone, Debug)]
 pub struct RenderGraphBufferConstraint {
@@ -194,7 +194,7 @@ impl RenderGraphBufferConstraint {
 }
 
 
-/// How an buffer is being used
+/// How a buffer is being used
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum RenderGraphBufferUsageType {
     Create,

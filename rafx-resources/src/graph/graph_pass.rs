@@ -218,6 +218,7 @@ pub struct PrepassBufferBarrier {
     pub src_queue_family_index: u32,
     pub dst_queue_family_index: u32,
     pub buffer: PhysicalBufferId,
+    pub size: u64,
 }
 
 /// Metadata required to create a renderpass

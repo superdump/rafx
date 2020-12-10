@@ -816,7 +816,7 @@ impl RenderGraphBuilder {
         usage_id
     }
 
-    // Add an buffer that can be used by nodes
+    // Add a buffer that can be used by nodes
     pub(super) fn add_buffer_create(
         &mut self,
         create_node: RenderGraphNodeId,
