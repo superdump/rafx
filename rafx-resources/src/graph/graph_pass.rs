@@ -30,7 +30,6 @@ pub struct RenderGraphPassImageBarriers {
     pub(super) invalidate: RenderGraphImageBarrier,
     pub(super) flush: RenderGraphImageBarrier,
     pub(super) layout: vk::ImageLayout,
-    pub(super) used_by_attachment: bool,
     pub(super) used_by_sampling: bool,
 }
 
@@ -40,7 +39,6 @@ impl RenderGraphPassImageBarriers {
             flush: Default::default(),
             invalidate: Default::default(),
             layout,
-            used_by_attachment: false,
             used_by_sampling: false,
         }
     }
@@ -49,8 +47,9 @@ impl RenderGraphPassImageBarriers {
 /// All the barriers required for a single node (i.e. subpass). Nodes represent passes that may be
 /// merged to be subpasses within a single pass.
 #[derive(Debug)]
-pub struct RenderGraphNodeImageBarriers {
-    pub(super) barriers: FnvHashMap<PhysicalImageId, RenderGraphPassImageBarriers>,
+pub struct RenderGraphNodeResourceBarriers {
+    pub(super) image_barriers: FnvHashMap<PhysicalImageId, RenderGraphPassImageBarriers>,
+    pub(super) buffer_barriers: FnvHashMap<PhysicalBufferId, RenderGraphPassBufferBarriers>,
 }
 
 

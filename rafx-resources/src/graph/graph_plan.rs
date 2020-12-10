@@ -3,7 +3,7 @@ use super::{RenderGraphImageSpecification, RenderGraphOutputImageId};
 use crate::graph::graph_image::{PhysicalImageId, RenderGraphImageUser, VirtualImageId};
 use crate::graph::graph_node::RenderGraphNodeId;
 use crate::graph::{RenderGraphBuilder, RenderGraphImageConstraint, RenderGraphImageUsageId};
-use crate::vk_description as dsc;
+use crate::{vk_description as dsc, BufferResource};
 use crate::vk_description::SwapchainSurfaceInfo;
 use crate::{ImageViewResource, ResourceArc};
 use ash::vk;
@@ -819,7 +819,7 @@ fn insert_resolves(
 /// Assignment of usages to actual images. This allows a single image to be passed through a
 /// sequence of reads and writes
 #[derive(Debug)]
-pub struct AssignVirtualImagesResult {
+pub struct AssignVirtualResourcesResult {
     image_usage_to_virtual: FnvHashMap<RenderGraphImageUsageId, VirtualImageId>,
     buffer_usage_to_virtual: FnvHashMap<RenderGraphBufferUsageId, VirtualBufferId>,
 }
@@ -832,11 +832,11 @@ pub struct AssignVirtualImagesResult {
 // there are multiple downstream consumers modifying the image or if the format needs to change.
 //
 #[profiling::function]
-fn assign_virtual_images(
+fn assign_virtual_resources(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
     constraint_results: &mut DetermineConstraintsResult,
-) -> AssignVirtualImagesResult {
+) -> AssignVirtualResourcesResult {
     #[derive(Default)]
     struct VirtualImageIdAllocator {
         next_id: usize,
@@ -1159,12 +1159,9 @@ fn assign_virtual_images(
     }
 
     // vulkan image layouts: https://github.com/nannou-org/nannou/issues/271#issuecomment-465876622
-    AssignVirtualImagesResult {
-        //physical_image_usages,
+    AssignVirtualResourcesResult {
         image_usage_to_virtual,
         buffer_usage_to_virtual,
-        //physical_image_versions,
-        //physical_image_infos,
     }
 }
 
@@ -1173,8 +1170,8 @@ fn can_merge_nodes(
     graph: &RenderGraphBuilder,
     before_node_id: RenderGraphNodeId,
     after_node_id: RenderGraphNodeId,
-    _image_constraints: &DetermineConstraintsResult,
-    _virtual_images: &AssignVirtualImagesResult,
+    _constraints: &DetermineConstraintsResult,
+    _virtual_resources: &AssignVirtualResourcesResult,
 ) -> bool {
     let _before_node = graph.node(before_node_id);
     let _after_node = graph.node(after_node_id);
@@ -1203,8 +1200,8 @@ fn can_merge_nodes(
 fn build_physical_passes(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    image_constraints: &DetermineConstraintsResult,
-    virtual_images: &AssignVirtualImagesResult,
+    constraints: &DetermineConstraintsResult,
+    virtual_resources: &AssignVirtualResourcesResult,
     swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphPass> {
     let mut pass_node_sets = Vec::default();
@@ -1217,8 +1214,8 @@ fn build_physical_passes(
                 graph,
                 *subpass_node,
                 *node_id,
-                image_constraints,
-                virtual_images,
+                constraints,
+                virtual_resources,
             ) {
                 add_to_current = false;
                 break;
@@ -1321,12 +1318,12 @@ fn build_physical_passes(
                         .read_image
                         .or(color_attachment.write_image)
                         .unwrap();
-                    let virtual_image = virtual_images
+                    let virtual_image = virtual_resources
                         .image_usage_to_virtual
                         .get(&read_or_write_usage)
                         .unwrap();
 
-                    let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
+                    let specification = constraints.images.get(&read_or_write_usage).unwrap();
                     log::trace!("      virtual attachment (color): {:?}", virtual_image);
 
                     set_extent(&mut pass.extents, specification, swapchain_surface_info);
@@ -1373,9 +1370,9 @@ fn build_physical_passes(
             {
                 if let Some(resolve_attachment) = resolve_attachment {
                     let write_image = resolve_attachment.write_image;
-                    let virtual_image = virtual_images.image_usage_to_virtual.get(&write_image).unwrap();
+                    let virtual_image = virtual_resources.image_usage_to_virtual.get(&write_image).unwrap();
                     //let version_id = graph.image_version_id(write_image);
-                    let specification = image_constraints.images.get(&write_image).unwrap();
+                    let specification = constraints.images.get(&write_image).unwrap();
                     log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
 
                     set_extent(&mut pass.extents, specification, swapchain_surface_info);
@@ -1410,11 +1407,11 @@ fn build_physical_passes(
                     .read_image
                     .or(depth_attachment.write_image)
                     .unwrap();
-                let virtual_image = virtual_images
+                let virtual_image = virtual_resources
                     .image_usage_to_virtual
                     .get(&read_or_write_usage)
                     .unwrap();
-                let specification = image_constraints.images.get(&read_or_write_usage).unwrap();
+                let specification = constraints.images.get(&read_or_write_usage).unwrap();
                 log::trace!("      virtual attachment (depth): {:?}", virtual_image);
 
                 set_extent(&mut pass.extents, specification, swapchain_surface_info);
@@ -1490,31 +1487,42 @@ fn build_physical_passes(
 }
 
 #[derive(Debug)]
-struct AssignPhysicalImagesResult {
-    usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
-    usage_to_image_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
+struct AssignPhysicalResourcesResult {
+    image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
+    image_usage_to_image_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
     image_views: Vec<RenderGraphImageView>, // indexed by physical image view id
-    virtual_to_physical: FnvHashMap<VirtualImageId, PhysicalImageId>,
-    specifications: Vec<RenderGraphImageSpecification>, // indexed by physical image id
+    image_virtual_to_physical: FnvHashMap<VirtualImageId, PhysicalImageId>,
+    image_specifications: Vec<RenderGraphImageSpecification>, // indexed by physical image id
+
+    buffer_usage_to_physical: FnvHashMap<RenderGraphBufferUsageId, PhysicalBufferId>,
+    buffer_virtual_to_physical: FnvHashMap<VirtualBufferId, PhysicalBufferId>,
+    buffer_specifications: Vec<RenderGraphBufferSpecification>, // indexed by physical image id
 }
 
 //
-// This function walks through all the passes and creates a minimal list of images, potentially
-// reusing an image for multiple purposes during the execution of the graph. (Only if the lifetime
+// This function walks through all the passes and creates a minimal list of images/buffers, potentially
+// reusing a resource for multiple purposes during the execution of the graph. (Only if the lifetimes
 // of those usages don't overlap!) For example, if we do a series of blurs, we can collapse those
 // image usages into ping-ponging back and forth between two images.
 //
 #[profiling::function]
-fn assign_physical_images(
+fn assign_physical_resources(
     graph: &RenderGraphBuilder,
-    image_constraints: &DetermineConstraintsResult,
-    virtual_images: &AssignVirtualImagesResult,
+    constraints: &DetermineConstraintsResult,
+    virtual_resources: &AssignVirtualResourcesResult,
     passes: &mut [RenderGraphPass],
-) -> AssignPhysicalImagesResult {
-    log::trace!("-- Assign physical images --");
+) -> AssignPhysicalResourcesResult {
+    log::trace!("-- Assign physical resources --");
     struct PhysicalImageReuseRequirements {
         virtual_id: VirtualImageId,
         specification: RenderGraphImageSpecification,
+        first_node_pass_index: usize,
+        last_node_pass_index: usize,
+    }
+
+    struct PhysicalBufferReuseRequirements {
+        virtual_id: VirtualBufferId,
+        specification: RenderGraphBufferSpecification,
         first_node_pass_index: usize,
         last_node_pass_index: usize,
     }
@@ -1524,15 +1532,15 @@ fn assign_physical_images(
     // reuse_requirements_lookup. The goal here is to determine the lifetimes of all virtual images
     //
     fn add_or_modify_reuse_image_requirements(
-        virtual_images: &AssignVirtualImagesResult,
-        image_constraints: &DetermineConstraintsResult,
+        virtual_resources: &AssignVirtualResourcesResult,
+        constraints: &DetermineConstraintsResult,
         pass_index: usize,
         usage: RenderGraphImageUsageId,
         reuse_requirements: &mut Vec<PhysicalImageReuseRequirements>,
         reuse_requirements_lookup: &mut FnvHashMap<VirtualImageId, usize>,
     ) {
         // Get physical ID from usage
-        let virtual_id = virtual_images.image_usage_to_virtual[&usage];
+        let virtual_id = virtual_resources.image_usage_to_virtual[&usage];
 
         // Find requirements for this image if they exist, or create new requirements. This is a
         // lookup for an index so that the requirements will be stored sorted by
@@ -1541,7 +1549,7 @@ fn assign_physical_images(
             .entry(virtual_id)
             .or_insert_with(|| {
                 let reused_image_requirements_index = reuse_requirements.len();
-                let specification = &image_constraints.images[&usage];
+                let specification = &constraints.images[&usage];
                 reuse_requirements.push(PhysicalImageReuseRequirements {
                     virtual_id,
                     first_node_pass_index: pass_index,
@@ -1557,8 +1565,44 @@ fn assign_physical_images(
         reuse_requirements[reused_image_requirements_index].last_node_pass_index = pass_index;
     }
 
-    let mut reuse_requirements = Vec::<PhysicalImageReuseRequirements>::default();
-    let mut reuse_requirements_lookup = FnvHashMap::<VirtualImageId, usize>::default();
+    fn add_or_modify_reuse_buffer_requirements(
+        virtual_resources: &AssignVirtualResourcesResult,
+        constraints: &DetermineConstraintsResult,
+        pass_index: usize,
+        usage: RenderGraphBufferUsageId,
+        reuse_requirements: &mut Vec<PhysicalBufferReuseRequirements>,
+        reuse_requirements_lookup: &mut FnvHashMap<VirtualBufferId, usize>,
+    ) {
+        // Get physical ID from usage
+        let virtual_id = virtual_resources.buffer_usage_to_virtual[&usage];
+
+        // Find requirements for this buffer if they exist, or create new requirements. This is a
+        // lookup for an index so that the requirements will be stored sorted by
+        // first_node_pass_index for iteration later
+        let reused_buffer_requirements_index = *reuse_requirements_lookup
+            .entry(virtual_id)
+            .or_insert_with(|| {
+                let reused_buffer_requirements_index = reuse_requirements.len();
+                let specification = &constraints.buffers[&usage];
+                reuse_requirements.push(PhysicalBufferReuseRequirements {
+                    virtual_id,
+                    first_node_pass_index: pass_index,
+                    last_node_pass_index: pass_index,
+                    specification: specification.clone(),
+                });
+
+                log::trace!("  Add requirement {:?} {:?}", virtual_id, specification);
+                reused_buffer_requirements_index
+            });
+
+        // Update the last pass index
+        reuse_requirements[reused_buffer_requirements_index].last_node_pass_index = pass_index;
+    }
+
+    let mut image_reuse_requirements = Vec::<PhysicalImageReuseRequirements>::default();
+    let mut image_reuse_requirements_lookup = FnvHashMap::<VirtualImageId, usize>::default();
+    let mut buffer_reuse_requirements = Vec::<PhysicalBufferReuseRequirements>::default();
+    let mut buffer_reuse_requirements_lookup = FnvHashMap::<VirtualBufferId, usize>::default();
 
     //
     // Walk through all image usages to determine their lifetimes
@@ -1567,55 +1611,96 @@ fn assign_physical_images(
         for subpass in &pass.subpasses {
             let node = graph.node(subpass.node);
 
-            for modify in &node.image_modifies {
+            for image_modify in &node.image_modifies {
                 add_or_modify_reuse_image_requirements(
-                    virtual_images,
-                    image_constraints,
+                    virtual_resources,
+                    constraints,
                     pass_index,
-                    modify.input,
-                    &mut reuse_requirements,
-                    &mut reuse_requirements_lookup,
+                    image_modify.input,
+                    &mut image_reuse_requirements,
+                    &mut image_reuse_requirements_lookup,
                 );
                 add_or_modify_reuse_image_requirements(
-                    virtual_images,
-                    image_constraints,
+                    virtual_resources,
+                    constraints,
                     pass_index,
-                    modify.output,
-                    &mut reuse_requirements,
-                    &mut reuse_requirements_lookup,
-                );
-            }
-
-            for read in &node.image_reads {
-                add_or_modify_reuse_image_requirements(
-                    virtual_images,
-                    image_constraints,
-                    pass_index,
-                    read.image,
-                    &mut reuse_requirements,
-                    &mut reuse_requirements_lookup,
+                    image_modify.output,
+                    &mut image_reuse_requirements,
+                    &mut image_reuse_requirements_lookup,
                 );
             }
 
-            for create in &node.image_creates {
+            for image_read in &node.image_reads {
                 add_or_modify_reuse_image_requirements(
-                    virtual_images,
-                    image_constraints,
+                    virtual_resources,
+                    constraints,
                     pass_index,
-                    create.image,
-                    &mut reuse_requirements,
-                    &mut reuse_requirements_lookup,
+                    image_read.image,
+                    &mut image_reuse_requirements,
+                    &mut image_reuse_requirements_lookup,
                 );
             }
 
-            for sample in &node.sampled_images {
+            for image_create in &node.image_creates {
                 add_or_modify_reuse_image_requirements(
-                    virtual_images,
-                    image_constraints,
+                    virtual_resources,
+                    constraints,
                     pass_index,
-                    *sample,
-                    &mut reuse_requirements,
-                    &mut reuse_requirements_lookup,
+                    image_create.image,
+                    &mut image_reuse_requirements,
+                    &mut image_reuse_requirements_lookup,
+                );
+            }
+
+            for image_sample in &node.sampled_images {
+                add_or_modify_reuse_image_requirements(
+                    virtual_resources,
+                    constraints,
+                    pass_index,
+                    *image_sample,
+                    &mut image_reuse_requirements,
+                    &mut image_reuse_requirements_lookup,
+                );
+            }
+
+            for buffer_modify in &node.buffer_modifies {
+                add_or_modify_reuse_buffer_requirements(
+                    virtual_resources,
+                    constraints,
+                    pass_index,
+                    buffer_modify.input,
+                    &mut buffer_reuse_requirements,
+                    &mut buffer_reuse_requirements_lookup,
+                );
+                add_or_modify_reuse_buffer_requirements(
+                    virtual_resources,
+                    constraints,
+                    pass_index,
+                    buffer_modify.output,
+                    &mut buffer_reuse_requirements,
+                    &mut buffer_reuse_requirements_lookup,
+                );
+            }
+
+            for buffer_read in &node.buffer_reads {
+                add_or_modify_reuse_buffer_requirements(
+                    virtual_resources,
+                    constraints,
+                    pass_index,
+                    buffer_read.buffer,
+                    &mut buffer_reuse_requirements,
+                    &mut buffer_reuse_requirements_lookup,
+                );
+            }
+
+            for buffer_create in &node.buffer_creates {
+                add_or_modify_reuse_buffer_requirements(
+                    virtual_resources,
+                    constraints,
+                    pass_index,
+                    buffer_create.buffer,
+                    &mut buffer_reuse_requirements,
+                    &mut buffer_reuse_requirements_lookup,
                 );
             }
         }
@@ -1631,11 +1716,19 @@ fn assign_physical_images(
         can_be_reused: bool,
     }
 
+    struct PhysicalBuffer {
+        specification: RenderGraphBufferSpecification,
+        last_node_pass_index: usize,
+        can_be_reused: bool,
+    }
+
     let mut physical_images = Vec::<PhysicalImage>::default();
-    let mut virtual_to_physical = FnvHashMap::<VirtualImageId, PhysicalImageId>::default();
+    let mut image_virtual_to_physical = FnvHashMap::<VirtualImageId, PhysicalImageId>::default();
+    let mut physical_buffers = Vec::<PhysicalBuffer>::default();
+    let mut buffer_virtual_to_physical = FnvHashMap::<VirtualBufferId, PhysicalBufferId>::default();
 
     //
-    // First allocate physical IDs for all output images
+    // Allocate physical IDs for all output images
     //
     for output_image in &graph.output_images {
         let physical_image_id = PhysicalImageId(physical_images.len());
@@ -1645,13 +1738,36 @@ fn assign_physical_images(
             can_be_reused: false, // Should be safe to allow reuse? But last_node_pass_index effectively makes this never reuse
         });
 
-        let virtual_id = virtual_images.image_usage_to_virtual[&output_image.usage];
-        let old = virtual_to_physical.insert(virtual_id, physical_image_id);
+        let virtual_id = virtual_resources.image_usage_to_virtual[&output_image.usage];
+        let old = image_virtual_to_physical.insert(virtual_id, physical_image_id);
         assert!(old.is_none());
         log::trace!(
             "  Output Image {:?} -> {:?} Used in passes [{}:{}]",
             virtual_id,
             physical_image_id,
+            0,
+            passes.len() - 1
+        );
+    }
+
+    //
+    // Allocate physical IDs for all output buffers
+    //
+    for output_buffer in &graph.output_buffers {
+        let physical_buffer_id = PhysicalBufferId(physical_buffers.len());
+        physical_buffers.push(PhysicalBuffer {
+            specification: output_buffer.specification.clone(),
+            last_node_pass_index: passes.len() - 1,
+            can_be_reused: false, // Should be safe to allow reuse? But last_node_pass_index effectively makes this never reuse
+        });
+
+        let virtual_id = virtual_resources.buffer_usage_to_virtual[&output_buffer.usage];
+        let old = buffer_virtual_to_physical.insert(virtual_id, physical_buffer_id);
+        assert!(old.is_none());
+        log::trace!(
+            "  Output Buffer {:?} -> {:?} Used in passes [{}:{}]",
+            virtual_id,
+            physical_buffer_id,
             0,
             passes.len() - 1
         );
@@ -1664,8 +1780,8 @@ fn assign_physical_images(
     // Images are sorted by first usage (because we register them in order of the passes that first
     // use them)
     //
-    for reuse_requirements in &reuse_requirements {
-        if virtual_to_physical.contains_key(&reuse_requirements.virtual_id) {
+    for reuse_requirements in &image_reuse_requirements {
+        if image_virtual_to_physical.contains_key(&reuse_requirements.virtual_id) {
             // May already have been registered by output image
             continue;
         }
@@ -1713,39 +1829,97 @@ fn assign_physical_images(
             physical_image_id
         });
 
-        virtual_to_physical.insert(reuse_requirements.virtual_id, physical_image_id);
+        image_virtual_to_physical.insert(reuse_requirements.virtual_id, physical_image_id);
+    }
+
+    for reuse_requirements in &buffer_reuse_requirements {
+        if buffer_virtual_to_physical.contains_key(&reuse_requirements.virtual_id) {
+            // May already have been registered by output buffer
+            continue;
+        }
+
+        // See if we can reuse with an existing physical buffer
+        let mut physical_buffer_id = None;
+        for (physical_buffer_index, physical_buffer) in physical_buffers.iter_mut().enumerate() {
+            if physical_buffer.last_node_pass_index < reuse_requirements.first_node_pass_index
+                && physical_buffer.can_be_reused
+            {
+                if physical_buffer
+                    .specification
+                    .try_merge(&reuse_requirements.specification)
+                {
+                    physical_buffer.last_node_pass_index = reuse_requirements.last_node_pass_index;
+                    physical_buffer_id = Some(PhysicalBufferId(physical_buffer_index));
+                    log::trace!(
+                        "  Intermediate Buffer (Reuse) {:?} -> {:?} Used in passes [{}:{}]",
+                        reuse_requirements.virtual_id,
+                        physical_buffer_id,
+                        reuse_requirements.first_node_pass_index,
+                        reuse_requirements.last_node_pass_index
+                    );
+                    break;
+                }
+            }
+        }
+
+        // If the existing physical buffers are not compatible, make a new one
+        let physical_buffer_id = physical_buffer_id.unwrap_or_else(|| {
+            let physical_buffer_id = PhysicalBufferId(physical_buffers.len());
+            physical_buffers.push(PhysicalBuffer {
+                specification: reuse_requirements.specification.clone(),
+                last_node_pass_index: reuse_requirements.last_node_pass_index,
+                can_be_reused: true,
+            });
+
+            log::trace!(
+                "  Intermediate Buffer (Create new) {:?} -> {:?} Used in passes [{}:{}]",
+                reuse_requirements.virtual_id,
+                physical_buffer_id,
+                reuse_requirements.first_node_pass_index,
+                reuse_requirements.last_node_pass_index
+            );
+            physical_buffer_id
+        });
+
+        buffer_virtual_to_physical.insert(reuse_requirements.virtual_id, physical_buffer_id);
     }
 
     //
     // Create a lookup to get physical image from usage
     //
-    let mut usage_to_physical = FnvHashMap::default();
-    for (&usage, virtual_image) in &virtual_images.image_usage_to_virtual {
+    let mut image_usage_to_physical = FnvHashMap::default();
+    for (&usage, virtual_image) in &virtual_resources.image_usage_to_virtual {
         //TODO: This was breaking in a test because an output image had no usage flags and we
         // never assigned the output image a physical ID since it wasn't in a pass
-        usage_to_physical.insert(usage, virtual_to_physical[virtual_image]);
+        image_usage_to_physical.insert(usage, image_virtual_to_physical[virtual_image]);
     }
 
     //
-    // Create a list of all images that need to be created
+    // Create a lookup to get physical buffer from usage
     //
-    let physical_image_specifications: Vec<_> = physical_images
-        .into_iter()
-        .map(|x| x.specification)
-        .collect();
+    let mut buffer_usage_to_physical = FnvHashMap::default();
+    for (&usage, virtual_buffer) in &virtual_resources.buffer_usage_to_virtual {
+        //TODO: This was breaking in a test because an output buffer had no usage flags and we
+        // never assigned the output buffer a physical ID since it wasn't in a pass
+        buffer_usage_to_physical.insert(usage, buffer_virtual_to_physical[virtual_buffer]);
+    }
+
+    //
+    // Setup image views
+    //
 
     // Temporary to build image view list/lookup
     let mut image_subresource_to_view = FnvHashMap::default();
 
     // Create a list of all views needed for the graph and associating the usage with the view
     let mut image_views = Vec::default();
-    let mut usage_to_image_view = FnvHashMap::default();
+    let mut image_usage_to_image_view = FnvHashMap::default();
 
     //
     // Create a list and lookup for all image views that are needed for the graph
     //
-    for (&usage, &physical_image) in &usage_to_physical {
-        let image_specification = image_constraints.image_specification(usage).unwrap();
+    for (&usage, &physical_image) in &image_usage_to_physical {
+        let image_specification = constraints.image_specification(usage).unwrap();
         let subresource_range = graph.image_usages[usage.0]
             .subresource_range
             .into_subresource_range(image_specification);
@@ -1765,25 +1939,44 @@ fn assign_physical_images(
                 image_view_id
             });
 
-        let old = usage_to_image_view.insert(usage, image_view_id);
+        let old = image_usage_to_image_view.insert(usage, image_view_id);
         assert!(old.is_none());
     }
 
     for pass in passes {
         for attachment in &mut pass.attachments {
-            let physical_image = virtual_to_physical[&attachment.virtual_image];
-            let image_view_id = usage_to_image_view[&attachment.usage];
+            let physical_image = image_virtual_to_physical[&attachment.virtual_image];
+            let image_view_id = image_usage_to_image_view[&attachment.usage];
             attachment.image = Some(physical_image);
             attachment.image_view = Some(image_view_id);
         }
     }
 
-    AssignPhysicalImagesResult {
-        virtual_to_physical,
-        usage_to_physical,
-        usage_to_image_view,
+    //
+    // Create a list of all images that need to be created
+    //
+    let image_specifications: Vec<_> = physical_images
+        .into_iter()
+        .map(|x| x.specification)
+        .collect();
+
+    //
+    // Create a list of all buffers that need to be created
+    //
+    let buffer_specifications: Vec<_> = physical_buffers
+        .into_iter()
+        .map(|x| x.specification)
+        .collect();
+
+    AssignPhysicalResourcesResult {
+        image_usage_to_physical,
+        image_virtual_to_physical,
+        image_usage_to_image_view,
         image_views,
-        specifications: physical_image_specifications,
+        image_specifications,
+        buffer_usage_to_physical,
+        buffer_virtual_to_physical,
+        buffer_specifications,
     }
 }
 
@@ -1791,17 +1984,16 @@ fn assign_physical_images(
 fn build_node_barriers(
     graph: &RenderGraphBuilder,
     node_execution_order: &[RenderGraphNodeId],
-    _image_constraints: &DetermineConstraintsResult,
-    physical_images: &AssignPhysicalImagesResult,
-    //determine_image_layouts_result: &DetermineImageLayoutsResult,
-) -> FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers> {
-    let mut barriers = FnvHashMap::<RenderGraphNodeId, RenderGraphNodeImageBarriers>::default();
+    _constraints: &DetermineConstraintsResult,
+    physical_resources: &AssignPhysicalResourcesResult,
+) -> FnvHashMap<RenderGraphNodeId, RenderGraphNodeResourceBarriers> {
+    let mut resource_barriers = FnvHashMap::<RenderGraphNodeId, RenderGraphNodeResourceBarriers>::default();
 
     for node_id in node_execution_order {
         let node = graph.node(*node_id);
-        //let mut invalidate_barriers = FnvHashMap<PhysicalImageId, RenderGraphImageBarrier>::default();
-        //let mut flush_barriers = FnvHashMap<PhysicalImageId, RenderGraphImageBarrier>::default();
-        let mut node_barriers: FnvHashMap<PhysicalImageId, RenderGraphPassImageBarriers> =
+        let mut image_node_barriers: FnvHashMap<PhysicalImageId, RenderGraphPassImageBarriers> =
+            Default::default();
+        let mut buffer_node_barriers: FnvHashMap<PhysicalBufferId, RenderGraphPassBufferBarriers> =
             Default::default();
 
         for color_attachment in &node.color_attachments {
@@ -1810,54 +2002,42 @@ fn build_node_barriers(
                     .read_image
                     .or(color_attachment.write_image)
                     .unwrap();
-                let physical_image = physical_images
-                    .usage_to_physical
+                let physical_image = physical_resources
+                    .image_usage_to_physical
                     .get(&read_or_write_usage)
                     .unwrap();
-                //let version_id = graph.image_version_id(read_or_write_usage);
 
-                let barrier = node_barriers.entry(*physical_image).or_insert_with(|| {
+                let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
                     RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                 });
-
-                barrier.used_by_attachment |= true;
 
                 if color_attachment.read_image.is_some() {
                     barrier.invalidate.access_flags |= vk::AccessFlags::COLOR_ATTACHMENT_WRITE
                         | vk::AccessFlags::COLOR_ATTACHMENT_READ;
                     barrier.invalidate.stage_flags |=
                         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
-                    //barrier.invalidate.layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
-                    //invalidate_barrier.layout = determine_image_layouts_result.image_layouts[&version_id].read_layout.into();
                 }
 
                 if color_attachment.write_image.is_some() {
                     barrier.flush.access_flags |= vk::AccessFlags::COLOR_ATTACHMENT_WRITE;
                     barrier.flush.stage_flags |= vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
-                    //barrier.flush.layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
-                    //flush_barrier.layout = determine_image_layouts_result.image_layouts[&version_id].write_layout.into();
                 }
             }
         }
 
         for resolve_attachment in &node.resolve_attachments {
             if let Some(resolve_attachment) = resolve_attachment {
-                let physical_image = physical_images
-                    .usage_to_physical
+                let physical_image = physical_resources
+                    .image_usage_to_physical
                     .get(&resolve_attachment.write_image)
                     .unwrap();
-                //let version_id = graph.image_version_id(resolve_attachment.write_image);
 
-                let barrier = node_barriers.entry(*physical_image).or_insert_with(|| {
+                let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
                     RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                 });
 
-                barrier.used_by_attachment |= true;
-
                 barrier.flush.access_flags |= vk::AccessFlags::COLOR_ATTACHMENT_WRITE;
                 barrier.flush.stage_flags |= vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
-                //barrier.flush.layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
-                //flush_barrier.layout = determine_image_layouts_result.image_layouts[&version_id].write_layout.into();
             }
         }
 
@@ -1866,52 +2046,42 @@ fn build_node_barriers(
                 .read_image
                 .or(depth_attachment.write_image)
                 .unwrap();
-            let physical_image = physical_images
-                .usage_to_physical
+            let physical_image = physical_resources
+                .image_usage_to_physical
                 .get(&read_or_write_usage)
                 .unwrap();
             //let version_id = graph.image_version_id(read_or_write_usage);
 
-            let barrier = node_barriers.entry(*physical_image).or_insert_with(|| {
+            let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
                 RenderGraphPassImageBarriers::new(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             });
 
-            barrier.used_by_attachment |= true;
-
             if depth_attachment.read_image.is_some() && depth_attachment.write_image.is_some() {
-                //barrier.invalidate.layout = vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                //barrier.invalidate.layout = determine_image_layouts_result.image_layouts[&version_id].read_layout.into();
                 barrier.invalidate.access_flags |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
                     | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
                 barrier.invalidate.stage_flags |= vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
                     | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
 
-                //barrier.flush.layout = vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                //barrier.flush.layout = determine_image_layouts_result.image_layouts[&version_id].write_layout.into();
                 barrier.flush.access_flags |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
                 barrier.flush.stage_flags |= vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
             } else if depth_attachment.read_image.is_some() {
-                //barrier.invalidate.layout = vk::ImageLayout::DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-                //barrier.invalidate.layout = determine_image_layouts_result.image_layouts[&version_id].read_layout.into();
                 barrier.invalidate.access_flags |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ;
                 barrier.invalidate.stage_flags |= vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
                     | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
             } else {
                 assert!(depth_attachment.write_image.is_some());
-                //barrier.flush.layout = vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                //barrier.flush.layout = determine_image_layouts_result.image_layouts[&version_id].write_layout.into();
                 barrier.flush.access_flags |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
                 barrier.flush.stage_flags |= vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
             }
         }
 
         for sampled_image in &node.sampled_images {
-            let physical_image = physical_images
-                .usage_to_physical
+            let physical_image = physical_resources
+                .image_usage_to_physical
                 .get(sampled_image)
                 .unwrap();
 
-            let barrier = node_barriers.entry(*physical_image).or_insert_with(|| {
+            let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
                 RenderGraphPassImageBarriers::new(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             });
 
@@ -1921,19 +2091,155 @@ fn build_node_barriers(
             barrier.invalidate.stage_flags |= vk::PipelineStageFlags::FRAGMENT_SHADER;
         }
 
-        // barriers.push(RenderGraphNodeImageBarriers {
-        //     invalidates: invalidate_barriers,
-        //     flushes: flush_barriers
-        // });
-        barriers.insert(
+        //TODO: Do something smarter than this
+        #[allow(non_snake_case)]
+        let ALL_BUFFER_INVALIDATE_ACCESS_FLAGS: vk::AccessFlags = vk::AccessFlags::VERTEX_ATTRIBUTE_READ |
+            vk::AccessFlags::INDEX_READ |
+            vk::AccessFlags::INDIRECT_COMMAND_READ |
+            vk::AccessFlags::UNIFORM_READ |
+            vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE;
+        #[allow(non_snake_case)]
+        let ALL_BUFFER_INVALIDATE_STAGE_FLAGS: vk::PipelineStageFlags = vk::PipelineStageFlags::VERTEX_INPUT |
+            vk::PipelineStageFlags::VERTEX_INPUT |
+            vk::PipelineStageFlags::DRAW_INDIRECT |
+            vk::PipelineStageFlags::COMPUTE_SHADER |
+            vk::PipelineStageFlags::FRAGMENT_SHADER;
+
+        //TODO: Do something smarter than this
+        #[allow(non_snake_case)]
+        let ALL_BUFFER_FLUSH_ACCESS_FLAGS: vk::AccessFlags = vk::AccessFlags::SHADER_WRITE;
+        #[allow(non_snake_case)]
+        let ALL_BUFFER_FLUSH_STAGE_FLAGS: vk::PipelineStageFlags = vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER;
+
+        for buffer_create in &node.buffer_creates {
+            let physical_buffer = physical_resources
+                .buffer_usage_to_physical
+                .get(&buffer_create.buffer)
+                .unwrap();
+
+            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
+                RenderGraphPassBufferBarriers::new()
+            });
+
+            // for now just do all of these
+            barrier.flush.access_flags |= ALL_BUFFER_FLUSH_ACCESS_FLAGS;
+            barrier.flush.stage_flags |= ALL_BUFFER_FLUSH_STAGE_FLAGS;
+        }
+
+        for buffer_read in &node.buffer_reads {
+            let physical_buffer = physical_resources
+                .buffer_usage_to_physical
+                .get(&buffer_read.buffer)
+                .unwrap();
+
+            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
+                RenderGraphPassBufferBarriers::new()
+            });
+            // for now just do all of these
+            barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
+            barrier.invalidate.stage_flags |= ALL_BUFFER_INVALIDATE_STAGE_FLAGS;
+        }
+
+        for buffer_modify in &node.buffer_modifies {
+            let physical_buffer = physical_resources
+                .buffer_usage_to_physical
+                .get(&buffer_modify.input)
+                .unwrap();
+
+            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
+                RenderGraphPassBufferBarriers::new()
+            });
+
+            // for now just do all of these
+            barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
+            barrier.invalidate.stage_flags |= ALL_BUFFER_INVALIDATE_STAGE_FLAGS;
+            barrier.flush.access_flags |= ALL_BUFFER_FLUSH_ACCESS_FLAGS;
+            barrier.flush.stage_flags |= ALL_BUFFER_FLUSH_STAGE_FLAGS;
+        }
+
+        resource_barriers.insert(
             *node_id,
-            RenderGraphNodeImageBarriers {
-                barriers: node_barriers,
+            RenderGraphNodeResourceBarriers {
+                image_barriers: image_node_barriers,
+                buffer_barriers: buffer_node_barriers,
             },
         );
     }
 
-    barriers
+    resource_barriers
+}
+
+const MAX_PIPELINE_FLAG_BITS: usize = 15;
+
+fn determine_required_dst_synchronization_flags(
+    mut invalidate_access_flags: vk::AccessFlags,
+    mut invalidate_pipeline_stage_flags: vk::PipelineStageFlags,
+    flush_access_flags: vk::AccessFlags,
+    flush_pipeline_stage_flags: vk::PipelineStageFlags,
+    invalidated: &[vk::AccessFlags; MAX_PIPELINE_FLAG_BITS]
+) -> (vk::AccessFlags, vk::PipelineStageFlags) {
+    //TODO: Should I OR in the flush access/stages? Right now the invalidate barrier is including write
+    // access flags in the invalidate **but only for modifies**
+    invalidate_access_flags |= flush_access_flags;
+    invalidate_pipeline_stage_flags |= flush_pipeline_stage_flags;
+
+    // Check if we have already done invalidates for this image previously, allowing
+    // us to skip some now
+    for i in 0..MAX_PIPELINE_FLAG_BITS {
+        let pipeline_stage = vk::PipelineStageFlags::from_raw(1 << i);
+        if pipeline_stage.intersects(invalidate_pipeline_stage_flags) {
+            // If the resource has been invalidate in this stage, we don't need to include this stage
+            // in the invalidation barrier
+            if invalidated[i].contains(invalidate_access_flags) {
+                log::trace!(
+                    "      skipping invalidation for {:?} {:?}",
+                    pipeline_stage,
+                    invalidate_access_flags
+                );
+                invalidate_pipeline_stage_flags &= !pipeline_stage;
+            }
+        }
+    }
+
+    // All pipeline stages have seen invalidates for the relevant access flags
+    // already, so we don't need to do invalidates at all.
+    if invalidate_pipeline_stage_flags == vk::PipelineStageFlags::empty() {
+        log::trace!("      no invalidation required, clearing access flags");
+        invalidate_access_flags = vk::AccessFlags::empty();
+    }
+
+    log::trace!("      Access Flags: {:?}", invalidate_access_flags);
+    log::trace!(
+        "      Pipeline Stage Flags: {:?}",
+        invalidate_pipeline_stage_flags
+    );
+
+    (invalidate_access_flags, invalidate_pipeline_stage_flags)
+}
+
+fn update_invalidated_state(
+    pending_flush_access_flags: &mut vk::AccessFlags,
+    pending_flush_pipeline_stage_flags: &mut vk::PipelineStageFlags,
+    invalidated: &mut [vk::AccessFlags; MAX_PIPELINE_FLAG_BITS],
+    invalidate_src_access_flags: vk::AccessFlags,
+    invalidate_src_pipeline_stage_flags: vk::PipelineStageFlags,
+    invalidate_dst_access_flags: vk::AccessFlags,
+    invalidate_dst_pipeline_stage_flags: vk::PipelineStageFlags,
+) {
+    // Mark pending flushes as handled
+    *pending_flush_access_flags &= !invalidate_src_access_flags;
+    *pending_flush_pipeline_stage_flags &=
+        !invalidate_src_pipeline_stage_flags;
+
+    // Mark resources that we are invalidating as having been invalidated for
+    // the appropriate pipeline stages
+    //TODO: Invalidate all later stages?
+    for i in 0..MAX_PIPELINE_FLAG_BITS {
+        let pipeline_stage = vk::PipelineStageFlags::from_raw(1 << i);
+        if pipeline_stage.intersects(invalidate_dst_pipeline_stage_flags) {
+            invalidated[i] |= invalidate_dst_access_flags;
+        }
+    }
 }
 
 // * At this point we know images/image views, format, samples, load/store ops. We also know what
@@ -1945,13 +2251,12 @@ fn build_node_barriers(
 fn build_pass_barriers(
     graph: &RenderGraphBuilder,
     _node_execution_order: &[RenderGraphNodeId],
-    _image_constraints: &DetermineConstraintsResult,
-    physical_images: &AssignPhysicalImagesResult,
-    node_barriers: &FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>,
+    _constraints: &DetermineConstraintsResult,
+    physical_resources: &AssignPhysicalResourcesResult,
+    node_barriers: &FnvHashMap<RenderGraphNodeId, RenderGraphNodeResourceBarriers>,
     passes: &mut [RenderGraphPass],
 ) -> Vec<Vec<dsc::SubpassDependency>> {
     log::trace!("-- build_pass_barriers --");
-    const MAX_PIPELINE_FLAG_BITS: usize = 15;
 
     //
     // We will walk through all nodes keeping track of memory access as we go
@@ -1975,11 +2280,32 @@ fn build_pass_barriers(
         }
     }
 
+    struct BufferState {
+        pending_flush_access_flags: vk::AccessFlags,
+        pending_flush_pipeline_stage_flags: vk::PipelineStageFlags,
+        // One per pipeline stage
+        invalidated: [vk::AccessFlags; MAX_PIPELINE_FLAG_BITS],
+    }
+
+    impl Default for BufferState {
+        fn default() -> Self {
+            BufferState {
+                pending_flush_access_flags: Default::default(),
+                pending_flush_pipeline_stage_flags: Default::default(),
+                invalidated: Default::default(),
+            }
+        }
+    }
+
     //TODO: to support subpass, probably need image states for each previous subpass
     // TODO: This is coarse-grained over the whole image. Ideally it would be per-layer and per-mip
     let mut image_states: Vec<ImageState> =
-        Vec::with_capacity(physical_images.specifications.len());
-    image_states.resize_with(physical_images.specifications.len(), || Default::default());
+        Vec::with_capacity(physical_resources.image_specifications.len());
+    image_states.resize_with(physical_resources.image_specifications.len(), || Default::default());
+
+    let mut buffer_states: Vec<BufferState> =
+        Vec::with_capacity(physical_resources.buffer_specifications.len());
+    buffer_states.resize_with(physical_resources.buffer_specifications.len(), || Default::default());
 
     // dependencies for all renderpasses
     let mut pass_dependencies = Vec::default();
@@ -2010,7 +2336,7 @@ fn build_pass_barriers(
             // Common case where this is not possible is having any image that's not an attachment
             // being used via sampling.
             let mut use_external_dependency_for_pass_initial_layout_transition = true;
-            for (physical_image_id, image_barrier) in &node_barriers.barriers {
+            for (physical_image_id, image_barrier) in &node_barriers.image_barriers {
                 if image_barrier.used_by_sampling
                     && image_states[physical_image_id.0].layout != image_barrier.layout
                 {
@@ -2019,12 +2345,17 @@ fn build_pass_barriers(
                     break;
                 }
 
-                let image_specification = &physical_images.specifications[physical_image_id.0];
+                let image_specification = &physical_resources.image_specifications[physical_image_id.0];
                 if image_specification.layer_count != 1 || image_specification.mip_count != 1 {
                     log::trace!("    will emit separate barrier for layout transitions (an image has > 1 layers or mips)");
                     use_external_dependency_for_pass_initial_layout_transition = false;
                     break;
                 }
+            }
+
+            if !node_barriers.buffer_barriers.is_empty() {
+                log::trace!("    will emit separate barrier for layout transitions (a buffer needs transitioned)");
+                use_external_dependency_for_pass_initial_layout_transition = false;
             }
 
             struct ImageTransition {
@@ -2036,7 +2367,7 @@ fn build_pass_barriers(
 
             let mut image_transitions = Vec::default();
             // Look at all the images we read and determine what invalidates we need
-            for (physical_image_id, image_barrier) in &node_barriers.barriers {
+            for (physical_image_id, image_barrier) in &node_barriers.image_barriers {
                 log::trace!("    image {:?}", physical_image_id);
                 let image_state = &mut image_states[physical_image_id.0];
 
@@ -2064,8 +2395,6 @@ fn build_pass_barriers(
                                 pipeline_stage
                             );
                             invalidate_src_pipeline_stage_flags |= pipeline_stage;
-                            //invalidate_dst_pipeline_stage_flags |= image_barrier.invalidate.stage_flags;
-                            //invalidate_dst_pipeline_stage_flags |= image_barrier.flush.stage_flags;
                         }
 
                         image_state.invalidated[i] = vk::AccessFlags::empty();
@@ -2078,45 +2407,12 @@ fn build_pass_barriers(
                     );
                 }
 
-                // Requirements for this image
-                let mut image_invalidate_access_flags = image_barrier.invalidate.access_flags;
-                let mut image_invalidate_pipeline_stage_flags =
-                    image_barrier.invalidate.stage_flags;
-
-                //TODO: Should I OR in the flush access/stages? Right now the invalidate barrier is including write
-                // access flags in the invalidate **but only for modifies**
-                image_invalidate_access_flags |= image_barrier.flush.access_flags;
-                image_invalidate_pipeline_stage_flags |= image_barrier.flush.stage_flags;
-
-                // Check if we have already done invalidates for this image previously, allowing
-                // us to skip some now
-                for i in 0..MAX_PIPELINE_FLAG_BITS {
-                    let pipeline_stage = vk::PipelineStageFlags::from_raw(1 << i);
-                    if pipeline_stage.intersects(image_invalidate_pipeline_stage_flags) {
-                        // If the resource has been invalidate in this stage, we don't need to include this stage
-                        // in the invalidation barrier
-                        if image_state.invalidated[i].contains(image_invalidate_access_flags) {
-                            log::trace!(
-                                "      skipping invalidation for {:?} {:?}",
-                                pipeline_stage,
-                                image_invalidate_access_flags
-                            );
-                            image_invalidate_pipeline_stage_flags &= !pipeline_stage;
-                        }
-                    }
-                }
-
-                // All pipeline stages have seen invalidates for the relevant access flags
-                // already, so we don't need to do invalidates at all.
-                if image_invalidate_pipeline_stage_flags == vk::PipelineStageFlags::empty() {
-                    log::trace!("      no invalidation required, clearing access flags");
-                    image_invalidate_access_flags = vk::AccessFlags::empty();
-                }
-
-                log::trace!("      Access Flags: {:?}", image_invalidate_access_flags);
-                log::trace!(
-                    "      Pipeline Stage Flags: {:?}",
-                    image_invalidate_pipeline_stage_flags
+                let (image_invalidate_access_flags, image_invalidate_pipeline_stage_flags) = determine_required_dst_synchronization_flags(
+                    image_barrier.invalidate.access_flags,
+                    image_barrier.invalidate.stage_flags,
+                    image_barrier.flush.access_flags,
+                    image_barrier.flush.stage_flags,
+                    &image_state.invalidated
                 );
 
                 // OR the requirements in
@@ -2151,7 +2447,7 @@ fn build_pass_barriers(
                     }
                 }
 
-                let specification = &physical_images.specifications[physical_image_id.0];
+                let specification = &physical_resources.image_specifications[physical_image_id.0];
                 let subresource_range = dsc::ImageSubresourceRange::default_all_mips_all_layers(
                     dsc::ImageAspectFlag::from_vk_image_aspect_flags(specification.aspect_flags),
                     specification.mip_count,
@@ -2170,56 +2466,58 @@ fn build_pass_barriers(
                 image_state.layout = image_barrier.layout;
             }
 
-            //
-            // for (physical_image_id, image_barrier) in &node_barriers.flushes {
-            //     log::trace!("    flush");
-            //     let image_state = &mut image_states[physical_image_id.0];
-            //
-            //     for i in 0..MAX_PIPELINE_FLAG_BITS {
-            //         if image_state.invalidated[i] != vk::AccessFlags::empty() {
-            //             // Add an execution barrier if we are writing on something that
-            //             // is already being read from
-            //             let pipeline_stage = vk::PipelineStageFlags::from_raw(1 << i);
-            //             invalidate_src_pipeline_stage_flags |= pipeline_stage;
-            //             invalidate_dst_pipeline_stage_flags |= image_barrier.stage_flags;
-            //         }
-            //     }
-            //
-            //     for (attachment_index, attachment) in &mut pass.attachments.iter_mut().enumerate() {
-            //         log::trace!("      attachment {:?}", attachment.image);
-            //         if attachment.image == *physical_image_id {
-            //             log::trace!("        final layout {:?}", image_barrier.layout);
-            //             attachment.final_layout = image_barrier.layout.into();
-            //             break;
-            //         }
-            //     }
-            //
-            //     assert!(image_state.layout == vk::ImageLayout::UNDEFINED || image_state.layout == image_barrier.layout);
-            //     if image_state.layout != image_barrier.layout {
-            //         invalidate_dst_pipeline_stage_flags |= image_barrier.stage_flags;
-            //         invalidate_dst_access_flags |= image_barrier.access_flags;
-            //     }
-            //
-            //     //image_state.layout = image_barrier.layout;
-            // }
 
-            // Update the image states
+
+
+
+
+
+            // Look at all the buffers we read and determine what invalidates we need
+            for (physical_buffer_id, buffer_barrier) in &node_barriers.buffer_barriers {
+                log::trace!("    buffer {:?}", physical_buffer_id);
+                let buffer_state = &mut buffer_states[physical_buffer_id.0];
+
+                // Include the previous writer's stage/access flags, if there were any
+                invalidate_src_access_flags |= buffer_state.pending_flush_access_flags;
+                invalidate_src_pipeline_stage_flags |=
+                    buffer_state.pending_flush_pipeline_stage_flags;
+
+
+                let (buffer_invalidate_access_flags, buffer_invalidate_pipeline_stage_flags) = determine_required_dst_synchronization_flags(
+                    buffer_barrier.invalidate.access_flags,
+                    buffer_barrier.invalidate.stage_flags,
+                    buffer_barrier.flush.access_flags,
+                    buffer_barrier.flush.stage_flags,
+                    &buffer_state.invalidated
+                );
+
+                // OR the requirements in
+                invalidate_dst_access_flags |= buffer_invalidate_access_flags;
+                invalidate_dst_pipeline_stage_flags |= buffer_invalidate_pipeline_stage_flags;
+            }
+
             for image_state in &mut image_states {
-                // Mark pending flushes as handled
-                //TODO: Check that ! is inverting bits
-                image_state.pending_flush_access_flags &= !invalidate_src_access_flags;
-                image_state.pending_flush_pipeline_stage_flags &=
-                    !invalidate_src_pipeline_stage_flags;
+                update_invalidated_state(
+                    &mut image_state.pending_flush_access_flags,
+                    &mut image_state.pending_flush_pipeline_stage_flags,
+                    &mut image_state.invalidated,
+                    invalidate_src_access_flags,
+                    invalidate_src_pipeline_stage_flags,
+                    invalidate_dst_access_flags,
+                    invalidate_dst_pipeline_stage_flags
+                );
+            }
 
-                // Mark resources that we are invalidating as having been invalidated for
-                // the appropriate pipeline stages
-                //TODO: Invalidate all later stages?
-                for i in 0..MAX_PIPELINE_FLAG_BITS {
-                    let pipeline_stage = vk::PipelineStageFlags::from_raw(1 << i);
-                    if pipeline_stage.intersects(invalidate_dst_pipeline_stage_flags) {
-                        image_state.invalidated[i] |= invalidate_dst_access_flags;
-                    }
-                }
+            for buffer_state in &mut buffer_states {
+                update_invalidated_state(
+                    &mut buffer_state.pending_flush_access_flags,
+                    &mut buffer_state.pending_flush_pipeline_stage_flags,
+                    &mut buffer_state.invalidated,
+                    invalidate_src_access_flags,
+                    invalidate_src_pipeline_stage_flags,
+                    invalidate_dst_access_flags,
+                    invalidate_dst_pipeline_stage_flags
+                );
             }
 
             // The first pass has no previous readers/writers and the spec requires that
@@ -2269,8 +2567,19 @@ fn build_pass_barriers(
                     })
                     .collect();
 
-                //unimplemented!();
-                let buffer_barriers = vec![];
+
+                let buffer_barriers = node_barriers.buffer_barriers
+                    .keys()
+                    .map(|physical_buffer_id| {
+                        PrepassBufferBarrier {
+                            buffer: *physical_buffer_id,
+                            src_access: invalidate_src_access_flags,
+                            dst_access: invalidate_dst_access_flags,
+                            src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                            dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                        }
+                    })
+                    .collect();
 
                 let barrier = PrepassBarrier {
                     src_stage: invalidate_src_pipeline_stage_flags,
@@ -2282,8 +2591,10 @@ fn build_pass_barriers(
                 pass.pre_pass_barrier = Some(barrier);
             }
 
-            // Handle the flush synchronization
-            for (physical_image_id, image_barrier) in &node_barriers.barriers {
+            //
+            // Handle the flush synchronization for images
+            //
+            for (physical_image_id, image_barrier) in &node_barriers.image_barriers {
                 let image_state = &mut image_states[physical_image_id.0];
 
                 // Queue up flushes to happen later based on what this pass writes
@@ -2300,6 +2611,24 @@ fn build_pass_barriers(
                 // If we add code to change final layout, ensure that we set up a dependency
             }
 
+            //
+            // Handle the flush synchronization for buffers
+            //
+            for (physical_buffer_id, buffer_barrier) in &node_barriers.buffer_barriers {
+                let buffer_state = &mut buffer_states[physical_buffer_id.0];
+
+                // Queue up flushes to happen later based on what this pass writes
+                buffer_state.pending_flush_pipeline_stage_flags |= buffer_barrier.flush.stage_flags;
+                buffer_state.pending_flush_access_flags |= buffer_barrier.flush.access_flags;
+
+                // If we write something, mark it as no longer invalidated
+                //TODO: Not sure if we invalidate specific stages or all stages
+                //TODO: Can we invalidate specific access instead of all access?
+                for i in 0..MAX_PIPELINE_FLAG_BITS {
+                    buffer_state.invalidated[i] = vk::AccessFlags::empty();
+                }
+            }
+
             // Do not put unstored images into UNDEFINED layout, per vulkan spec
 
             // TODO: Figure out how to handle output images
@@ -2311,7 +2640,7 @@ fn build_pass_barriers(
                     //graph.image_usages[output_image.usage]
 
                     let output_physical_image =
-                        physical_images.usage_to_physical[&output_image.usage];
+                        physical_resources.image_usage_to_physical[&output_image.usage];
                     log::trace!(
                         "Output image {} usage {:?} created by node {:?} physical image {:?}",
                         output_image_index,
@@ -2345,7 +2674,7 @@ fn build_pass_barriers(
 fn create_output_passes(
     graph: &RenderGraphBuilder,
     passes: Vec<RenderGraphPass>,
-    node_barriers: FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>,
+    node_barriers: FnvHashMap<RenderGraphNodeId, RenderGraphNodeResourceBarriers>,
     subpass_dependencies: &Vec<Vec<dsc::SubpassDependency>>,
 ) -> Vec<RenderGraphOutputPass> {
     let mut renderpasses = Vec::with_capacity(passes.len());
@@ -2394,7 +2723,7 @@ fn create_output_passes(
                         color_index,
                         dsc::AttachmentReference {
                             attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                            layout: node_barriers[&subpass.node].barriers[&physical_image]
+                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
                                 .layout
                                 .into(),
                         },
@@ -2411,7 +2740,7 @@ fn create_output_passes(
                         resolve_index,
                         dsc::AttachmentReference {
                             attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                            layout: node_barriers[&subpass.node].barriers[&physical_image]
+                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
                                 .layout
                                 .into(),
                         },
@@ -2423,7 +2752,7 @@ fn create_output_passes(
                 let physical_image = pass.attachments[attachment_index].image.unwrap();
                 subpass_description.depth_stencil_attachment = Some(dsc::AttachmentReference {
                     attachment: dsc::AttachmentIndex::Index(attachment_index as u32),
-                    layout: node_barriers[&subpass.node].barriers[&physical_image]
+                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
                         .layout
                         .into(),
                 });
@@ -2472,7 +2801,7 @@ fn create_output_passes(
 }
 
 #[allow(dead_code)]
-fn print_image_constraints(
+fn print_constraints(
     graph: &RenderGraphBuilder,
     constraint_results: &mut DetermineConstraintsResult,
 ) {
@@ -2492,6 +2821,27 @@ fn print_image_constraints(
                     "      Read Usage {}: {:?}",
                     usage_index,
                     constraint_results.image_specification(*usage)
+                );
+            }
+        }
+    }
+
+    log::trace!("Buffer constraints:");
+    for (buffer_index, buffer_resource) in graph.buffer_resources.iter().enumerate() {
+        log::trace!("  Buffer {:?} {:?}", buffer_index, buffer_resource.name);
+        for (version_index, version) in buffer_resource.versions.iter().enumerate() {
+            log::trace!("    Version {}", version_index);
+
+            log::trace!(
+                "      Writen as: {:?}",
+                constraint_results.buffer_specification(version.create_usage)
+            );
+
+            for (usage_index, usage) in version.read_usages.iter().enumerate() {
+                log::trace!(
+                    "      Read Usage {}: {:?}",
+                    usage_index,
+                    constraint_results.buffer_specification(*usage)
                 );
             }
         }
@@ -2529,17 +2879,17 @@ fn print_image_compatibility(
 
 #[allow(dead_code)]
 fn print_node_barriers(
-    node_barriers: &FnvHashMap<RenderGraphNodeId, RenderGraphNodeImageBarriers>
+    node_barriers: &FnvHashMap<RenderGraphNodeId, RenderGraphNodeResourceBarriers>
 ) {
     log::trace!("Barriers:");
     for (node_id, barriers) in node_barriers.iter() {
         log::trace!("  pass {:?}", node_id);
         log::trace!("    invalidates");
-        for (physical_id, barriers) in &barriers.barriers {
+        for (physical_id, barriers) in &barriers.image_barriers {
             log::trace!("      {:?}: {:?}", physical_id, barriers.invalidate);
         }
         log::trace!("    flushes");
-        for (physical_id, barriers) in &barriers.barriers {
+        for (physical_id, barriers) in &barriers.image_barriers {
             log::trace!("      {:?}: {:?}", physical_id, barriers.flush);
         }
     }
@@ -2608,7 +2958,7 @@ fn print_final_images(
 #[allow(dead_code)]
 fn print_final_image_usage(
     graph: &RenderGraphBuilder,
-    assign_physical_images_result: &AssignPhysicalImagesResult,
+    assign_physical_resources_result: &AssignPhysicalResourcesResult,
     constraint_results: &DetermineConstraintsResult,
     renderpasses: &Vec<RenderGraphOutputPass>,
 ) {
@@ -2629,7 +2979,7 @@ fn print_final_image_usage(
                         .or_else(|| color_attachment.write_image)
                         .unwrap();
                     let physical_image =
-                        assign_physical_images_result.usage_to_physical[&read_or_write];
+                        assign_physical_resources_result.image_usage_to_physical[&read_or_write];
                     let write_name = color_attachment
                         .write_image
                         .map(|x| graph.image_resource(x).name)
@@ -2648,7 +2998,7 @@ fn print_final_image_usage(
                 node.resolve_attachments.iter().enumerate()
             {
                 if let Some(resolve_attachment) = resolve_attachment {
-                    let physical_image = assign_physical_images_result.usage_to_physical
+                    let physical_image = assign_physical_resources_result.image_usage_to_physical
                         [&resolve_attachment.write_image];
                     let write_name = graph.image_resource(resolve_attachment.write_image).name;
                     log::debug!(
@@ -2667,7 +3017,7 @@ fn print_final_image_usage(
                     .or_else(|| depth_attachment.write_image)
                     .unwrap();
                 let physical_image =
-                    assign_physical_images_result.usage_to_physical[&read_or_write];
+                    assign_physical_resources_result.image_usage_to_physical[&read_or_write];
                 let write_name = depth_attachment
                     .write_image
                     .map(|x| graph.image_resource(x).name)
@@ -2681,7 +3031,7 @@ fn print_final_image_usage(
             }
 
             for sampled_image in &node.sampled_images {
-                let physical_image = assign_physical_images_result.usage_to_physical[sampled_image];
+                let physical_image = assign_physical_resources_result.image_usage_to_physical[sampled_image];
                 let write_name = graph.image_resource(*sampled_image).name;
                 log::debug!(
                     "    Sampled: {:?} Name: {:?} Constraints: {:?}",
@@ -2693,7 +3043,7 @@ fn print_final_image_usage(
         }
     }
     for output_image in &graph.output_images {
-        let physical_image = assign_physical_images_result.usage_to_physical[&output_image.usage];
+        let physical_image = assign_physical_resources_result.image_usage_to_physical[&output_image.usage];
         let write_name = graph.image_resource(output_image.usage).name;
         log::debug!(
             "    Output Image {:?} Name: {:?} Constraints: {:?}",
@@ -2710,17 +3060,26 @@ pub struct RenderGraphPlanOutputImage {
     pub dst_image: ResourceArc<ImageViewResource>,
 }
 
+#[derive(Debug)]
+pub struct RenderGraphPlanOutputBuffer {
+    pub output_id: RenderGraphOutputBufferId,
+    pub dst_buffer: ResourceArc<BufferResource>,
+}
+
 /// The final output of a render graph, which will be consumed by PreparedRenderGraph. This just
 /// includes the computed metadata and does not allocate resources.
 #[derive(Debug)]
 pub struct RenderGraphPlan {
     pub passes: Vec<RenderGraphOutputPass>,
     pub output_images: FnvHashMap<PhysicalImageViewId, RenderGraphPlanOutputImage>,
+    pub output_buffers: FnvHashMap<PhysicalBufferId, RenderGraphPlanOutputBuffer>,
     pub intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification>,
+    pub intermediate_buffers: FnvHashMap<PhysicalBufferId, RenderGraphBufferSpecification>,
     pub image_views: Vec<RenderGraphImageView>, // index by physical image view id
     pub node_to_renderpass_index: FnvHashMap<RenderGraphNodeId, usize>,
     pub image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
     pub image_usage_to_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
+    pub buffer_usage_to_physical: FnvHashMap<RenderGraphBufferUsageId, PhysicalBufferId>,
 }
 
 impl RenderGraphPlan {
@@ -2781,7 +3140,7 @@ impl RenderGraphPlan {
         // if we are not reusing or aliasing. (We reuse when we assign physical indexes)
         //
         let assign_virtual_images_result =
-            assign_virtual_images(&graph, &node_execution_order, &mut constraint_results);
+            assign_virtual_resources(&graph, &node_execution_order, &mut constraint_results);
 
         //
         // Combine nodes into passes where possible
@@ -2798,7 +3157,7 @@ impl RenderGraphPlan {
         // Find virtual images with matching specification and non-overlapping lifetimes. Assign
         // the same physical index to them so that we reuse a single allocation
         //
-        let assign_physical_images_result = assign_physical_images(
+        let assign_physical_resources_result = assign_physical_resources(
             &graph,
             &constraint_results,
             &assign_virtual_images_result,
@@ -2825,7 +3184,7 @@ impl RenderGraphPlan {
             &graph,
             &node_execution_order,
             &constraint_results,
-            &assign_physical_images_result, /*, &determine_image_layouts_result*/
+            &assign_physical_resources_result, /*, &determine_image_layouts_result*/
         );
 
         print_node_barriers(&node_barriers);
@@ -2841,7 +3200,7 @@ impl RenderGraphPlan {
             &graph,
             &node_execution_order,
             &constraint_results,
-            &assign_physical_images_result,
+            &assign_physical_resources_result,
             &node_barriers,
             &mut passes,
         );
@@ -2871,7 +3230,7 @@ impl RenderGraphPlan {
         //     &graph,
         //     &node_execution_order,
         //     &constraint_results,
-        //     &assign_physical_images_result,
+        //     &assign_physical_resources_result,
         //     &node_barriers,
         //     &passes,
         // );
@@ -2893,7 +3252,7 @@ impl RenderGraphPlan {
         let mut output_image_physical_ids = FnvHashSet::default();
         for output_image in &graph.output_images {
             let output_image_view =
-                assign_physical_images_result.usage_to_image_view[&output_image.usage];
+                assign_physical_resources_result.image_usage_to_image_view[&output_image.usage];
 
             output_images.insert(
                 output_image_view,
@@ -2904,14 +3263,32 @@ impl RenderGraphPlan {
             );
 
             output_image_physical_ids.insert(
-                assign_physical_images_result.image_views[output_image_view.0].physical_image,
+                assign_physical_resources_result.image_views[output_image_view.0].physical_image,
             );
+        }
+
+        let mut output_buffers: FnvHashMap<PhysicalBufferId, RenderGraphPlanOutputBuffer> =
+            Default::default();
+        let mut output_buffer_physical_ids = FnvHashSet::default();
+        for output_buffer in &graph.output_buffers {
+            let output_buffer_id =
+                assign_physical_resources_result.buffer_usage_to_physical[&output_buffer.usage];
+
+            output_buffers.insert(
+                output_buffer_id,
+                RenderGraphPlanOutputBuffer {
+                    output_id: output_buffer.output_buffer_id,
+                    dst_buffer: output_buffer.dst_buffer.clone(),
+                },
+            );
+
+            output_buffer_physical_ids.insert(output_buffer_id);
         }
 
         let mut intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification> =
             Default::default();
-        for (index, specification) in assign_physical_images_result
-            .specifications
+        for (index, specification) in assign_physical_resources_result
+            .image_specifications
             .iter()
             .enumerate()
         {
@@ -2921,6 +3298,21 @@ impl RenderGraphPlan {
             }
 
             intermediate_images.insert(physical_image, specification.clone());
+        }
+
+        let mut intermediate_buffers: FnvHashMap<PhysicalBufferId, RenderGraphBufferSpecification> =
+            Default::default();
+        for (index, specification) in assign_physical_resources_result
+            .buffer_specifications
+            .iter()
+            .enumerate()
+        {
+            let physical_buffer = PhysicalBufferId(index);
+            if output_buffer_physical_ids.contains(&physical_buffer) {
+                continue;
+            }
+
+            intermediate_buffers.insert(physical_buffer, specification.clone());
         }
 
         // log::trace!("-- RENDERPASS {} --", renderpass_index);
@@ -2933,7 +3325,7 @@ impl RenderGraphPlan {
 
         print_final_image_usage(
             &graph,
-            &assign_physical_images_result,
+            &assign_physical_resources_result,
             &constraint_results,
             &renderpasses,
         );
@@ -2952,11 +3344,14 @@ impl RenderGraphPlan {
         RenderGraphPlan {
             passes: renderpasses,
             output_images,
+            output_buffers,
             intermediate_images,
-            image_views: assign_physical_images_result.image_views,
+            intermediate_buffers,
+            image_views: assign_physical_resources_result.image_views,
             node_to_renderpass_index,
-            image_usage_to_physical: assign_physical_images_result.usage_to_physical,
-            image_usage_to_view: assign_physical_images_result.usage_to_image_view,
+            image_usage_to_physical: assign_physical_resources_result.image_usage_to_physical,
+            image_usage_to_view: assign_physical_resources_result.image_usage_to_image_view,
+            buffer_usage_to_physical: assign_physical_resources_result.buffer_usage_to_physical,
         }
     }
 }
