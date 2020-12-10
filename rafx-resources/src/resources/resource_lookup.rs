@@ -513,10 +513,10 @@ pub struct ComputePipelineResource {
 
 impl VkResource for ComputePipelineResource {
     fn destroy(
-        _device_context: &VkDeviceContext,
-        _resource: Self,
+        device_context: &VkDeviceContext,
+        resource: Self,
     ) -> VkResult<()> {
-        Ok(())
+        VkResource::destroy(device_context, resource.pipeline)
     }
 }
 
