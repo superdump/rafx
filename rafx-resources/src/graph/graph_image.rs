@@ -455,6 +455,7 @@ impl RenderGraphImageResourceVersionInfo {
         }
     }
 
+    // for redirect_image_usage
     pub(super) fn remove_read_usage(
         &mut self,
         usage: RenderGraphImageUsageId,

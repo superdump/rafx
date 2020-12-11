@@ -1204,35 +1204,77 @@ fn build_physical_passes(
     virtual_resources: &AssignVirtualResourcesResult,
     swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphPass> {
+
+    #[derive(Debug)]
+    enum PassNodeSet {
+        RenderNodeSet(Vec<RenderGraphNodeId>),
+        ComputeNode(RenderGraphNodeId)
+    }
+
+    // All passes
     let mut pass_node_sets = Vec::default();
 
+    // A set of nodes we are accumulating that we will merge into a single renderpass (compute does
+    // not support merging)
     let mut subpass_nodes = Vec::default();
+
+    // The last node - we store subpass_nodes in pass_node_sets if we are at the end of the list
+    let last_node_id = node_execution_order.last();
     for node_id in node_execution_order {
+        let node = graph.node(*node_id);
+
+        // If it has no attachments, it's a compute node
+        let is_compute = node.color_attachments.is_empty() && node.depth_attachment.is_none();
+        debug_assert_eq!(is_compute && !node.resolve_attachments.is_empty(), false);
+
+        // See if we can combine this pass with previous passes
         let mut add_to_current = true;
-        for subpass_node in &subpass_nodes {
-            if !can_merge_nodes(
-                graph,
-                *subpass_node,
-                *node_id,
-                constraints,
-                virtual_resources,
-            ) {
-                add_to_current = false;
-                break;
+        if is_compute {
+            // Compute nodes cannot be subpasses
+            add_to_current = false
+        } else {
+            // Verify this pass is compatible with other passes
+            for subpass_node in &subpass_nodes {
+                if !can_merge_nodes(
+                    graph,
+                    *subpass_node,
+                    *node_id,
+                    constraints,
+                    virtual_resources,
+                ) {
+                    add_to_current = false;
+                    break;
+                }
             }
         }
 
         if add_to_current {
+            // If it's a compatible pass, just store it for later
             subpass_nodes.push(*node_id);
         } else {
-            pass_node_sets.push(subpass_nodes);
-            subpass_nodes = Vec::default();
-            subpass_nodes.push(*node_id);
-        }
-    }
+            // If it's not compatible and we have previously saved nodes, store them as a renderpass
+            if !subpass_nodes.is_empty() {
+                let mut tmp = Vec::default();
+                std::mem::swap(&mut tmp, &mut subpass_nodes);
+                pass_node_sets.push(PassNodeSet::RenderNodeSet(tmp));
+                subpass_nodes = Vec::default();
+            }
 
-    if !subpass_nodes.is_empty() {
-        pass_node_sets.push(subpass_nodes);
+            // If this is a compute node, store it as a compute pass, otherwise buffer it for later
+            if is_compute {
+                pass_node_sets.push(PassNodeSet::ComputeNode(*node_id));
+            } else {
+                subpass_nodes.push(*node_id);
+            }
+        }
+
+        // If this is the last node and we've been buffering up subpasses, put them into a
+        // renderpass now
+        if Some(node_id) == last_node_id && !subpass_nodes.is_empty() {
+            let mut tmp = Vec::default();
+            std::mem::swap(&mut tmp, &mut subpass_nodes);
+            pass_node_sets.push(PassNodeSet::RenderNodeSet(tmp));
+        }
     }
 
     log::trace!("gather pass info");
@@ -1289,198 +1331,210 @@ fn build_physical_passes(
             }
         }
 
-        let mut pass = RenderGraphPass::default();
+        match pass_node_set {
+            PassNodeSet::ComputeNode(compute_node) => {
+                passes.push(RenderGraphPass::Compute(RenderGraphComputePass {
+                    node: compute_node,
+                    pre_pass_barrier: Default::default(),
+                }));
+            },
+            PassNodeSet::RenderNodeSet(renderpass_nodes) => {
+                let mut renderpass_attachments = Vec::default();
+                let mut renderpass_subpasses = Vec::default();
 
-        for node_id in pass_node_set {
-            log::trace!("    subpass node: {:?}", node_id);
-            let subpass_node = graph.node(node_id);
+                let mut renderpass_extents = None;
 
-            // Don't create a subpass if there are no attachments
-            if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none()
-            {
-                assert!(subpass_node.resolve_attachments.is_empty());
-                log::trace!("      Not generating a subpass - no attachments");
-                continue;
-            }
+                for &node_id in &renderpass_nodes {
+                    log::trace!("    subpass node: {:?}", node_id);
+                    let subpass_node = graph.node(node_id);
 
-            let mut subpass = RenderGraphSubpass {
-                node: node_id,
-                color_attachments: Default::default(),
-                resolve_attachments: Default::default(),
-                depth_attachment: Default::default(),
-            };
+                    // Don't create a subpass if there are no attachments
+                    if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none()
+                    {
+                        assert!(subpass_node.resolve_attachments.is_empty());
+                        log::trace!("      Not generating a subpass - no attachments");
+                        continue;
+                    }
 
-            for (color_attachment_index, color_attachment) in
-                subpass_node.color_attachments.iter().enumerate()
-            {
-                if let Some(color_attachment) = color_attachment {
-                    let read_or_write_usage = color_attachment
-                        .read_image
-                        .or(color_attachment.write_image)
-                        .unwrap();
-                    let virtual_image = virtual_resources
-                        .image_usage_to_virtual
-                        .get(&read_or_write_usage)
-                        .unwrap();
-
-                    let specification = constraints.images.get(&read_or_write_usage).unwrap();
-                    log::trace!("      virtual attachment (color): {:?}", virtual_image);
-
-                    set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                    let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
-                        &mut pass.attachments,
-                        read_or_write_usage,
-                        *virtual_image, /*, subresource_range*/
-                    );
-                    subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
-
-                    let mut attachment = &mut pass.attachments[pass_attachment_index];
-                    if is_first_usage {
-                        // Check if we load or clear
-                        if color_attachment.clear_color_value.is_some() {
-                            attachment.load_op = vk::AttachmentLoadOp::CLEAR;
-                            attachment.clear_color = Some(AttachmentClearValue::Color(
-                                color_attachment.clear_color_value.unwrap(),
-                            ))
-                        } else if color_attachment.read_image.is_some() {
-                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
-                        }
-
-                        attachment.format = specification.format;
-                        attachment.samples = specification.samples;
+                    let mut render_subpass = RenderGraphSubpass {
+                        node: node_id,
+                        color_attachments: Default::default(),
+                        resolve_attachments: Default::default(),
+                        depth_attachment: Default::default(),
                     };
 
-                    let store_op = if let Some(write_image) = color_attachment.write_image {
-                        if !graph.image_version_info(write_image).read_usages.is_empty() {
-                            vk::AttachmentStoreOp::STORE
+                    for (color_attachment_index, color_attachment) in
+                    subpass_node.color_attachments.iter().enumerate()
+                    {
+                        if let Some(color_attachment) = color_attachment {
+                            let read_or_write_usage = color_attachment
+                                .read_image
+                                .or(color_attachment.write_image)
+                                .unwrap();
+                            let virtual_image = virtual_resources
+                                .image_usage_to_virtual
+                                .get(&read_or_write_usage)
+                                .unwrap();
+
+                            let specification = constraints.images.get(&read_or_write_usage).unwrap();
+                            log::trace!("      virtual attachment (color): {:?}", virtual_image);
+
+                            set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                            let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                                &mut renderpass_attachments,
+                                read_or_write_usage,
+                                *virtual_image, /*, subresource_range*/
+                            );
+                            render_subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
+
+                            let mut attachment = &mut renderpass_attachments[pass_attachment_index];
+                            if is_first_usage {
+                                // Check if we load or clear
+                                if color_attachment.clear_color_value.is_some() {
+                                    attachment.load_op = vk::AttachmentLoadOp::CLEAR;
+                                    attachment.clear_color = Some(AttachmentClearValue::Color(
+                                        color_attachment.clear_color_value.unwrap(),
+                                    ))
+                                } else if color_attachment.read_image.is_some() {
+                                    attachment.load_op = vk::AttachmentLoadOp::LOAD;
+                                }
+
+                                attachment.format = specification.format;
+                                attachment.samples = specification.samples;
+                            };
+
+                            let store_op = if let Some(write_image) = color_attachment.write_image {
+                                if !graph.image_version_info(write_image).read_usages.is_empty() {
+                                    vk::AttachmentStoreOp::STORE
+                                } else {
+                                    vk::AttachmentStoreOp::DONT_CARE
+                                }
+                            } else {
+                                vk::AttachmentStoreOp::DONT_CARE
+                            };
+
+                            attachment.store_op = store_op;
+                            attachment.stencil_store_op = vk::AttachmentStoreOp::DONT_CARE;
+                        }
+                    }
+
+                    for (resolve_attachment_index, resolve_attachment) in
+                    subpass_node.resolve_attachments.iter().enumerate()
+                    {
+                        if let Some(resolve_attachment) = resolve_attachment {
+                            let write_image = resolve_attachment.write_image;
+                            let virtual_image = virtual_resources.image_usage_to_virtual.get(&write_image).unwrap();
+                            //let version_id = graph.image_version_id(write_image);
+                            let specification = constraints.images.get(&write_image).unwrap();
+                            log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
+
+                            set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                            let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                                &mut renderpass_attachments,
+                                write_image,
+                                *virtual_image, /*, subresource_range*/
+                            );
+                            render_subpass.resolve_attachments[resolve_attachment_index] =
+                                Some(pass_attachment_index);
+
+                            assert!(is_first_usage); // Not sure if this assert is valid
+                            let mut attachment = &mut renderpass_attachments[pass_attachment_index];
+                            attachment.format = specification.format;
+                            attachment.samples = specification.samples;
+
+                            //TODO: Should we skip resolving if there is no reader?
+                            let store_op = if !graph.image_version_info(write_image).read_usages.is_empty()
+                            {
+                                vk::AttachmentStoreOp::STORE
+                            } else {
+                                vk::AttachmentStoreOp::DONT_CARE
+                            };
+
+                            attachment.store_op = store_op;
+                            attachment.stencil_store_op = vk::AttachmentStoreOp::DONT_CARE;
+                        }
+                    }
+
+                    if let Some(depth_attachment) = &subpass_node.depth_attachment {
+                        let read_or_write_usage = depth_attachment
+                            .read_image
+                            .or(depth_attachment.write_image)
+                            .unwrap();
+                        let virtual_image = virtual_resources
+                            .image_usage_to_virtual
+                            .get(&read_or_write_usage)
+                            .unwrap();
+                        let specification = constraints.images.get(&read_or_write_usage).unwrap();
+                        log::trace!("      virtual attachment (depth): {:?}", virtual_image);
+
+                        set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                        let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
+                            &mut renderpass_attachments,
+                            read_or_write_usage,
+                            *virtual_image, /*, subresource_range*/
+                        );
+                        render_subpass.depth_attachment = Some(pass_attachment_index);
+
+                        let mut attachment = &mut renderpass_attachments[pass_attachment_index];
+                        if is_first_usage {
+                            // Check if we load or clear
+                            //TODO: Support load_op for stencil
+
+                            if depth_attachment.clear_depth_stencil_value.is_some() {
+                                if depth_attachment.has_depth {
+                                    attachment.load_op = vk::AttachmentLoadOp::CLEAR;
+                                }
+                                if depth_attachment.has_stencil {
+                                    attachment.stencil_load_op = vk::AttachmentLoadOp::CLEAR;
+                                }
+                                attachment.clear_color = Some(AttachmentClearValue::DepthStencil(
+                                    depth_attachment.clear_depth_stencil_value.unwrap(),
+                                ));
+                            } else if depth_attachment.read_image.is_some() {
+                                if depth_attachment.has_depth {
+                                    attachment.load_op = vk::AttachmentLoadOp::LOAD;
+                                }
+
+                                if depth_attachment.has_stencil {
+                                    attachment.stencil_load_op = vk::AttachmentLoadOp::LOAD;
+                                }
+                            }
+
+                            attachment.format = specification.format;
+                            attachment.samples = specification.samples;
+                        };
+
+                        let store_op = if let Some(write_image) = depth_attachment.write_image {
+                            if !graph.image_version_info(write_image).read_usages.is_empty() {
+                                vk::AttachmentStoreOp::STORE
+                            } else {
+                                vk::AttachmentStoreOp::DONT_CARE
+                            }
                         } else {
                             vk::AttachmentStoreOp::DONT_CARE
-                        }
-                    } else {
-                        vk::AttachmentStoreOp::DONT_CARE
-                    };
+                        };
 
-                    attachment.store_op = store_op;
-                    attachment.stencil_store_op = vk::AttachmentStoreOp::DONT_CARE;
-                }
-            }
-
-            for (resolve_attachment_index, resolve_attachment) in
-                subpass_node.resolve_attachments.iter().enumerate()
-            {
-                if let Some(resolve_attachment) = resolve_attachment {
-                    let write_image = resolve_attachment.write_image;
-                    let virtual_image = virtual_resources.image_usage_to_virtual.get(&write_image).unwrap();
-                    //let version_id = graph.image_version_id(write_image);
-                    let specification = constraints.images.get(&write_image).unwrap();
-                    log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
-
-                    set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                    let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
-                        &mut pass.attachments,
-                        write_image,
-                        *virtual_image, /*, subresource_range*/
-                    );
-                    subpass.resolve_attachments[resolve_attachment_index] =
-                        Some(pass_attachment_index);
-
-                    assert!(is_first_usage); // Not sure if this assert is valid
-                    let mut attachment = &mut pass.attachments[pass_attachment_index];
-                    attachment.format = specification.format;
-                    attachment.samples = specification.samples;
-
-                    //TODO: Should we skip resolving if there is no reader?
-                    let store_op = if !graph.image_version_info(write_image).read_usages.is_empty()
-                    {
-                        vk::AttachmentStoreOp::STORE
-                    } else {
-                        vk::AttachmentStoreOp::DONT_CARE
-                    };
-
-                    attachment.store_op = store_op;
-                    attachment.stencil_store_op = vk::AttachmentStoreOp::DONT_CARE;
-                }
-            }
-
-            if let Some(depth_attachment) = &subpass_node.depth_attachment {
-                let read_or_write_usage = depth_attachment
-                    .read_image
-                    .or(depth_attachment.write_image)
-                    .unwrap();
-                let virtual_image = virtual_resources
-                    .image_usage_to_virtual
-                    .get(&read_or_write_usage)
-                    .unwrap();
-                let specification = constraints.images.get(&read_or_write_usage).unwrap();
-                log::trace!("      virtual attachment (depth): {:?}", virtual_image);
-
-                set_extent(&mut pass.extents, specification, swapchain_surface_info);
-                let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
-                    &mut pass.attachments,
-                    read_or_write_usage,
-                    *virtual_image, /*, subresource_range*/
-                );
-                subpass.depth_attachment = Some(pass_attachment_index);
-
-                let mut attachment = &mut pass.attachments[pass_attachment_index];
-                if is_first_usage {
-                    // Check if we load or clear
-                    //TODO: Support load_op for stencil
-
-                    if depth_attachment.clear_depth_stencil_value.is_some() {
                         if depth_attachment.has_depth {
-                            attachment.load_op = vk::AttachmentLoadOp::CLEAR;
-                        }
-                        if depth_attachment.has_stencil {
-                            attachment.stencil_load_op = vk::AttachmentLoadOp::CLEAR;
-                        }
-                        attachment.clear_color = Some(AttachmentClearValue::DepthStencil(
-                            depth_attachment.clear_depth_stencil_value.unwrap(),
-                        ));
-                    } else if depth_attachment.read_image.is_some() {
-                        if depth_attachment.has_depth {
-                            attachment.load_op = vk::AttachmentLoadOp::LOAD;
+                            attachment.store_op = store_op;
                         }
 
                         if depth_attachment.has_stencil {
-                            attachment.stencil_load_op = vk::AttachmentLoadOp::LOAD;
+                            attachment.stencil_store_op = store_op;
                         }
                     }
 
-                    attachment.format = specification.format;
-                    attachment.samples = specification.samples;
-                };
-
-                let store_op = if let Some(write_image) = depth_attachment.write_image {
-                    if !graph.image_version_info(write_image).read_usages.is_empty() {
-                        vk::AttachmentStoreOp::STORE
-                    } else {
-                        vk::AttachmentStoreOp::DONT_CARE
-                    }
-                } else {
-                    vk::AttachmentStoreOp::DONT_CARE
-                };
-
-                if depth_attachment.has_depth {
-                    attachment.store_op = store_op;
+                    renderpass_subpasses.push(render_subpass);
                 }
 
-                if depth_attachment.has_stencil {
-                    attachment.stencil_store_op = store_op;
-                }
+                passes.push(RenderGraphPass::Renderpass(RenderGraphRenderPass {
+                    nodes: renderpass_nodes,
+                    attachments: renderpass_attachments,
+                    subpasses: renderpass_subpasses,
+                    pre_pass_barrier: None,
+                    extents: renderpass_extents,
+                }));
             }
-
-            pass.subpasses.push(subpass);
         }
-
-        if pass.subpasses.is_empty() {
-            log::trace!("    Not generating a pass - no attachments");
-            debug_assert!(pass.attachments.is_empty());
-            debug_assert!(pass.extents.is_none());
-            continue;
-        }
-
-        passes.push(pass);
     }
 
     passes
@@ -1605,11 +1659,11 @@ fn assign_physical_resources(
     let mut buffer_reuse_requirements_lookup = FnvHashMap::<VirtualBufferId, usize>::default();
 
     //
-    // Walk through all image usages to determine their lifetimes
+    // Walk through all image/buffer usages to determine their lifetimes
     //
     for (pass_index, pass) in passes.iter().enumerate() {
-        for subpass in &pass.subpasses {
-            let node = graph.node(subpass.node);
+        for subpass_node_id in pass.nodes() {
+            let node = graph.node(*subpass_node_id);
 
             for image_modify in &node.image_modifies {
                 add_or_modify_reuse_image_requirements(
@@ -1944,11 +1998,13 @@ fn assign_physical_resources(
     }
 
     for pass in passes {
-        for attachment in &mut pass.attachments {
-            let physical_image = image_virtual_to_physical[&attachment.virtual_image];
-            let image_view_id = image_usage_to_image_view[&attachment.usage];
-            attachment.image = Some(physical_image);
-            attachment.image_view = Some(image_view_id);
+        if let RenderGraphPass::Renderpass(renderpass) = pass {
+            for attachment in &mut renderpass.attachments {
+                let physical_image = image_virtual_to_physical[&attachment.virtual_image];
+                let image_view_id = image_usage_to_image_view[&attachment.usage];
+                attachment.image = Some(physical_image);
+                attachment.image_view = Some(image_view_id);
+            }
         }
     }
 
@@ -2318,13 +2374,16 @@ fn build_pass_barriers(
 
         // Initial layout for all attachments at the start of the renderpass
         let mut attachment_initial_layout: Vec<Option<dsc::ImageLayout>> = Default::default();
-        attachment_initial_layout.resize_with(pass.attachments.len(), || None);
+        if let RenderGraphPass::Renderpass(pass) = pass {
+            attachment_initial_layout.resize_with(pass.attachments.len(), || None);
+        }
 
         //TODO: This does not support multiple subpasses in a single pass
-        assert_eq!(pass.subpasses.len(), 1);
-        for (subpass_index, subpass) in pass.subpasses.iter_mut().enumerate() {
+        assert_eq!(pass.nodes().len(), 1);
+        let nodes : Vec<_> = pass.nodes().iter().copied().collect();
+        for (subpass_index, subpass_node_id) in nodes.iter().enumerate() {
             log::trace!("  subpass {}", subpass_index);
-            let node_barriers = &node_barriers[&subpass.node];
+            let node_barriers = &node_barriers[subpass_node_id];
 
             // Accumulate the invalidates for this subpass here
             let mut invalidate_src_access_flags = vk::AccessFlags::empty();
@@ -2422,28 +2481,30 @@ fn build_pass_barriers(
                 // Set the initial layout for the attachment, but only if it's the first time we've seen it
                 //TODO: This is bad and does not properly handle an image being used in multiple ways requiring
                 // multiple layouts
-                for (attachment_index, attachment) in &mut pass.attachments.iter_mut().enumerate() {
-                    //log::trace!("      attachment {:?}", attachment.image);
-                    if attachment.image.unwrap() == *physical_image_id {
-                        if attachment_initial_layout[attachment_index].is_none() {
-                            //log::trace!("        initial layout {:?}", image_barrier.layout);
-                            attachment_initial_layout[attachment_index] =
-                                Some(image_state.layout.into());
+                if let RenderGraphPass::Renderpass(pass) = pass {
+                    for (attachment_index, attachment) in &mut pass.attachments.iter_mut().enumerate() {
+                        //log::trace!("      attachment {:?}", attachment.image);
+                        if attachment.image.unwrap() == *physical_image_id {
+                            if attachment_initial_layout[attachment_index].is_none() {
+                                //log::trace!("        initial layout {:?}", image_barrier.layout);
+                                attachment_initial_layout[attachment_index] =
+                                    Some(image_state.layout.into());
 
-                            if use_external_dependency_for_pass_initial_layout_transition {
-                                // Use an external dependency on the renderpass to do the image
-                                // transition
-                                attachment.initial_layout = image_state.layout.into();
-                            } else {
-                                // Use an image barrier before the pass to transition the layout,
-                                // so we will already be in the correct layout before starting the
-                                // pass.
-                                attachment.initial_layout = image_barrier.layout.into();
+                                if use_external_dependency_for_pass_initial_layout_transition {
+                                    // Use an external dependency on the renderpass to do the image
+                                    // transition
+                                    attachment.initial_layout = image_state.layout.into();
+                                } else {
+                                    // Use an image barrier before the pass to transition the layout,
+                                    // so we will already be in the correct layout before starting the
+                                    // pass.
+                                    attachment.initial_layout = image_barrier.layout.into();
+                                }
                             }
-                        }
 
-                        attachment.final_layout = image_barrier.layout.into();
-                        break;
+                            attachment.final_layout = image_barrier.layout.into();
+                            break;
+                        }
                     }
                 }
 
@@ -2590,7 +2651,7 @@ fn build_pass_barriers(
                     buffer_barriers
                 };
 
-                pass.pre_pass_barrier = Some(barrier);
+                pass.set_pre_pass_barrier(barrier);
             }
 
             //
@@ -2637,7 +2698,7 @@ fn build_pass_barriers(
             // TODO: This only works if no one else reads it?
             log::trace!("Check for output images");
             for (output_image_index, output_image) in graph.output_images.iter().enumerate() {
-                if graph.image_version_info(output_image.usage).creator_node == subpass.node {
+                if graph.image_version_info(output_image.usage).creator_node == *subpass_node_id {
                     //output_image.
                     //graph.image_usages[output_image.usage]
 
@@ -2647,16 +2708,18 @@ fn build_pass_barriers(
                         "Output image {} usage {:?} created by node {:?} physical image {:?}",
                         output_image_index,
                         output_image.usage,
-                        subpass.node,
+                        subpass_node_id,
                         output_physical_image
                     );
 
-                    for (attachment_index, attachment) in
-                        &mut pass.attachments.iter_mut().enumerate()
-                    {
-                        if attachment.image.unwrap() == output_physical_image {
-                            log::trace!("  attachment {}", attachment_index);
-                            attachment.final_layout = output_image.final_layout;
+                    if let RenderGraphPass::Renderpass(pass) = pass {
+                        for (attachment_index, attachment) in
+                            &mut pass.attachments.iter_mut().enumerate()
+                        {
+                            if attachment.image.unwrap() == output_physical_image {
+                                log::trace!("  attachment {}", attachment_index);
+                                attachment.final_layout = output_image.final_layout;
+                            }
                         }
                     }
                     //TODO: Need a 0 -> EXTERNAL dependency here?
@@ -2681,122 +2744,135 @@ fn create_output_passes(
 ) -> Vec<RenderGraphOutputPass> {
     let mut renderpasses = Vec::with_capacity(passes.len());
     for (index, pass) in passes.into_iter().enumerate() {
-        let mut renderpass_desc = dsc::RenderPass::default();
-        let mut subpass_nodes = Vec::with_capacity(pass.subpasses.len());
+        match pass {
+            RenderGraphPass::Renderpass(pass) => {
+                let mut renderpass_desc = dsc::RenderPass::default();
+                let mut subpass_nodes = Vec::with_capacity(pass.subpasses.len());
 
-        renderpass_desc.attachments.reserve(pass.attachments.len());
-        for attachment in &pass.attachments {
-            renderpass_desc
-                .attachments
-                .push(attachment.create_attachment_description());
-        }
+                renderpass_desc.attachments.reserve(pass.attachments.len());
+                for attachment in &pass.attachments {
+                    renderpass_desc
+                        .attachments
+                        .push(attachment.create_attachment_description());
+                }
 
-        renderpass_desc.attachments.reserve(pass.subpasses.len());
-        for subpass in &pass.subpasses {
-            let mut subpass_description = dsc::SubpassDescription {
-                pipeline_bind_point: dsc::PipelineBindPoint::Graphics,
-                input_attachments: Default::default(),
-                color_attachments: Default::default(),
-                resolve_attachments: Default::default(),
-                depth_stencil_attachment: Default::default(),
-            };
+                renderpass_desc.attachments.reserve(pass.subpasses.len());
+                for subpass in &pass.subpasses {
+                    let mut subpass_description = dsc::SubpassDescription {
+                        pipeline_bind_point: dsc::PipelineBindPoint::Graphics,
+                        input_attachments: Default::default(),
+                        color_attachments: Default::default(),
+                        resolve_attachments: Default::default(),
+                        depth_stencil_attachment: Default::default(),
+                    };
 
-            fn set_attachment_reference(
-                attachment_references_list: &mut Vec<dsc::AttachmentReference>,
-                list_index: usize,
-                attachment_reference: dsc::AttachmentReference,
-            ) {
-                // Pad unused to get to the specified color attachment list_index
-                while attachment_references_list.len() <= list_index {
-                    attachment_references_list.push(dsc::AttachmentReference {
-                        attachment: dsc::AttachmentIndex::Unused,
-                        layout: dsc::ImageLayout::Undefined,
+                    fn set_attachment_reference(
+                        attachment_references_list: &mut Vec<dsc::AttachmentReference>,
+                        list_index: usize,
+                        attachment_reference: dsc::AttachmentReference,
+                    ) {
+                        // Pad unused to get to the specified color attachment list_index
+                        while attachment_references_list.len() <= list_index {
+                            attachment_references_list.push(dsc::AttachmentReference {
+                                attachment: dsc::AttachmentIndex::Unused,
+                                layout: dsc::ImageLayout::Undefined,
+                            })
+                        }
+
+                        attachment_references_list[list_index] = attachment_reference;
+                    }
+
+                    for (color_index, attachment_index) in subpass.color_attachments.iter().enumerate() {
+                        if let Some(attachment_index) = attachment_index {
+                            let physical_image = pass.attachments[*attachment_index].image.unwrap();
+                            set_attachment_reference(
+                                &mut subpass_description.color_attachments,
+                                color_index,
+                                dsc::AttachmentReference {
+                                    attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
+                                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
+                                        .layout
+                                        .into(),
+                                },
+                            );
+                        }
+                    }
+
+                    for (resolve_index, attachment_index) in subpass.resolve_attachments.iter().enumerate()
+                    {
+                        if let Some(attachment_index) = attachment_index {
+                            let physical_image = pass.attachments[*attachment_index].image.unwrap();
+                            set_attachment_reference(
+                                &mut subpass_description.resolve_attachments,
+                                resolve_index,
+                                dsc::AttachmentReference {
+                                    attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
+                                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
+                                        .layout
+                                        .into(),
+                                },
+                            );
+                        }
+                    }
+
+                    if let Some(attachment_index) = subpass.depth_attachment {
+                        let physical_image = pass.attachments[attachment_index].image.unwrap();
+                        subpass_description.depth_stencil_attachment = Some(dsc::AttachmentReference {
+                            attachment: dsc::AttachmentIndex::Index(attachment_index as u32),
+                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
+                                .layout
+                                .into(),
+                        });
+                    }
+
+                    renderpass_desc.subpasses.push(subpass_description);
+                    subpass_nodes.push(subpass.node);
+                }
+
+                let dependencies = &subpass_dependencies[index];
+                renderpass_desc.dependencies.reserve(dependencies.len());
+                for dependency in dependencies {
+                    renderpass_desc.dependencies.push(dependency.clone());
+                }
+
+                let attachment_images = pass
+                    .attachments
+                    .iter()
+                    .map(|attachment| attachment.image_view.unwrap())
+                    .collect();
+                let clear_values = pass
+                    .attachments
+                    .iter()
+                    .map(|attachment| match &attachment.clear_color {
+                        Some(clear_color) => clear_color.clone().into(),
+                        None => vk::ClearValue::default(),
                     })
-                }
+                    .collect();
 
-                attachment_references_list[list_index] = attachment_reference;
+                let debug_name = subpass_nodes.first().map(|x| graph.node(*x).name).flatten();
+
+                let output_pass = RenderGraphOutputRenderPass {
+                    subpass_nodes,
+                    description: Arc::new(renderpass_desc),
+                    extents: pass.extents.unwrap(),
+                    attachment_images,
+                    clear_values,
+                    pre_pass_barrier: pass.pre_pass_barrier,
+                    debug_name,
+                };
+
+                renderpasses.push(RenderGraphOutputPass::Renderpass(output_pass));
+            },
+            RenderGraphPass::Compute(pass) => {
+                let output_pass = RenderGraphOutputComputePass {
+                    node: pass.node,
+                    pre_pass_barrier: pass.pre_pass_barrier,
+                    debug_name: graph.node(pass.node).name,
+                };
+
+                renderpasses.push(RenderGraphOutputPass::Compute(output_pass));
             }
-
-            for (color_index, attachment_index) in subpass.color_attachments.iter().enumerate() {
-                if let Some(attachment_index) = attachment_index {
-                    let physical_image = pass.attachments[*attachment_index].image.unwrap();
-                    set_attachment_reference(
-                        &mut subpass_description.color_attachments,
-                        color_index,
-                        dsc::AttachmentReference {
-                            attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
-                                .layout
-                                .into(),
-                        },
-                    );
-                }
-            }
-
-            for (resolve_index, attachment_index) in subpass.resolve_attachments.iter().enumerate()
-            {
-                if let Some(attachment_index) = attachment_index {
-                    let physical_image = pass.attachments[*attachment_index].image.unwrap();
-                    set_attachment_reference(
-                        &mut subpass_description.resolve_attachments,
-                        resolve_index,
-                        dsc::AttachmentReference {
-                            attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
-                                .layout
-                                .into(),
-                        },
-                    );
-                }
-            }
-
-            if let Some(attachment_index) = subpass.depth_attachment {
-                let physical_image = pass.attachments[attachment_index].image.unwrap();
-                subpass_description.depth_stencil_attachment = Some(dsc::AttachmentReference {
-                    attachment: dsc::AttachmentIndex::Index(attachment_index as u32),
-                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
-                        .layout
-                        .into(),
-                });
-            }
-
-            renderpass_desc.subpasses.push(subpass_description);
-            subpass_nodes.push(subpass.node);
         }
-
-        let dependencies = &subpass_dependencies[index];
-        renderpass_desc.dependencies.reserve(dependencies.len());
-        for dependency in dependencies {
-            renderpass_desc.dependencies.push(dependency.clone());
-        }
-
-        let attachment_images = pass
-            .attachments
-            .iter()
-            .map(|attachment| attachment.image_view.unwrap())
-            .collect();
-        let clear_values = pass
-            .attachments
-            .iter()
-            .map(|attachment| match &attachment.clear_color {
-                Some(clear_color) => clear_color.clone().into(),
-                None => vk::ClearValue::default(),
-            })
-            .collect();
-
-        let debug_name = subpass_nodes.first().map(|x| graph.node(*x).name).flatten();
-
-        let output_pass = RenderGraphOutputPass {
-            subpass_nodes,
-            description: Arc::new(renderpass_desc),
-            extents: pass.extents.unwrap(),
-            attachment_images,
-            clear_values,
-            pre_pass_barrier: pass.pre_pass_barrier,
-            debug_name,
-        };
-
-        renderpasses.push(output_pass);
     }
 
     renderpasses
@@ -2967,8 +3043,7 @@ fn print_final_image_usage(
     log::debug!("-- IMAGE USAGE --");
     for (pass_index, pass) in renderpasses.iter().enumerate() {
         log::debug!("pass {}", pass_index);
-        for (subpass_index, _subpass) in pass.description.subpasses.iter().enumerate() {
-            let node_id = pass.subpass_nodes[subpass_index];
+        for (subpass_index, &node_id) in pass.nodes().iter().enumerate() {
             let node = graph.node(node_id);
             log::debug!("  subpass {} {:?} {:?}", subpass_index, node_id, node.name);
 
@@ -3078,7 +3153,7 @@ pub struct RenderGraphPlan {
     pub intermediate_images: FnvHashMap<PhysicalImageId, RenderGraphImageSpecification>,
     pub intermediate_buffers: FnvHashMap<PhysicalBufferId, RenderGraphBufferSpecification>,
     pub image_views: Vec<RenderGraphImageView>, // index by physical image view id
-    pub node_to_renderpass_index: FnvHashMap<RenderGraphNodeId, usize>,
+    pub node_to_pass_index: FnvHashMap<RenderGraphNodeId, usize>,
     pub image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
     pub image_usage_to_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
     pub buffer_usage_to_physical: FnvHashMap<RenderGraphBufferUsageId, PhysicalBufferId>,
@@ -3242,7 +3317,7 @@ impl RenderGraphPlan {
         // passed into the resource system to create the renderpass but also includes other metadata
         // required to push them through the command queue
         //
-        let renderpasses =
+        let output_passes =
             create_output_passes(&graph, passes, node_barriers, &subpass_dependencies);
 
         //
@@ -3329,28 +3404,28 @@ impl RenderGraphPlan {
             &graph,
             &assign_physical_resources_result,
             &constraint_results,
-            &renderpasses,
+            &output_passes,
         );
 
         //
-        // Create a lookup from node_id to renderpass. Nodes are culled and renderpasses may include
+        // Create a lookup from node_id to pass. Nodes are culled and renderpasses may include
         // subpasses from multiple nodes.
         //
-        let mut node_to_renderpass_index = FnvHashMap::default();
-        for (renderpass_index, renderpass) in renderpasses.iter().enumerate() {
-            for &node in &renderpass.subpass_nodes {
-                node_to_renderpass_index.insert(node, renderpass_index);
+        let mut node_to_pass_index = FnvHashMap::default();
+        for (pass_index, pass) in output_passes.iter().enumerate() {
+            for &node in pass.nodes() {
+                node_to_pass_index.insert(node, pass_index);
             }
         }
 
         RenderGraphPlan {
-            passes: renderpasses,
+            passes: output_passes,
             output_images,
             output_buffers,
             intermediate_images,
             intermediate_buffers,
             image_views: assign_physical_resources_result.image_views,
-            node_to_renderpass_index,
+            node_to_pass_index,
             image_usage_to_physical: assign_physical_resources_result.image_usage_to_physical,
             image_usage_to_view: assign_physical_resources_result.image_usage_to_image_view,
             buffer_usage_to_physical: assign_physical_resources_result.buffer_usage_to_physical,

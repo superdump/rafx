@@ -20,7 +20,6 @@ use rafx_resources::{
     DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource, ResourceArc,
 };
 use rafx_shell_vulkan::{VkBuffer, VkDeviceContext, VkImage};
-use std::mem::ManuallyDrop;
 
 use super::asset_lookup::LoadedAssetMetrics;
 use super::load_queue::LoadQueueSet;

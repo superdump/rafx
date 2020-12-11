@@ -242,15 +242,6 @@ impl RenderGraphBufferResourceVersionInfo {
         }
     }
 
-    pub(super) fn remove_read_usage(
-        &mut self,
-        usage: RenderGraphBufferUsageId,
-    ) {
-        if let Some(position) = self.read_usages.iter().position(|x| *x == usage) {
-            self.read_usages.swap_remove(position);
-        }
-    }
-
     pub(super) fn add_read_usage(
         &mut self,
         usage: RenderGraphBufferUsageId,

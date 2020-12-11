@@ -947,6 +947,51 @@ impl RenderGraphBuilder {
         (read_usage_id, write_usage_id)
     }
 
+    pub fn create_storage_buffer(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
+
+        self.add_buffer_create(
+            create_node,
+            constraint
+        )
+    }
+
+    pub fn read_storage_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
+
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint
+        )
+    }
+
+    pub fn modify_storage_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
+
+        let (_read_buffer, write_buffer) = self.add_buffer_modify(
+            read_node,
+            buffer,
+            constraint
+        );
+
+        write_buffer
+    }
+
     pub fn set_output_buffer(
         &mut self,
         buffer_id: RenderGraphBufferUsageId,
