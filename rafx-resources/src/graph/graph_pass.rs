@@ -1,3 +1,4 @@
+use crate::graph::graph_buffer::PhysicalBufferId;
 use crate::graph::graph_image::{PhysicalImageId, PhysicalImageViewId, VirtualImageId};
 use crate::graph::graph_node::RenderGraphNodeName;
 use crate::graph::{RenderGraphImageUsageId, RenderGraphNodeId};
@@ -5,7 +6,6 @@ use crate::vk_description as dsc;
 use ash::vk;
 use fnv::FnvHashMap;
 use std::sync::Arc;
-use crate::graph::graph_buffer::PhysicalBufferId;
 
 /// Represents the invalidate or flush of a RenderGraphPassImageBarriers
 #[derive(Debug)]
@@ -52,11 +52,6 @@ pub struct RenderGraphNodeResourceBarriers {
     pub(super) buffer_barriers: FnvHashMap<PhysicalBufferId, RenderGraphPassBufferBarriers>,
 }
 
-
-
-
-
-
 /// Represents the invalidate or flush of a RenderGraphPassBufferBarriers
 #[derive(Debug)]
 pub struct RenderGraphBufferBarrier {
@@ -72,7 +67,6 @@ impl Default for RenderGraphBufferBarrier {
         }
     }
 }
-
 
 /// Information provided per buffer used in a pass to properly synchronize access to it from
 /// different passes
@@ -97,13 +91,6 @@ impl RenderGraphPassBufferBarriers {
 pub struct RenderGraphNodeBufferBarriers {
     pub(super) barriers: FnvHashMap<PhysicalBufferId, RenderGraphPassBufferBarriers>,
 }
-
-
-
-
-
-
-
 
 const MAX_COLOR_ATTACHMENTS: usize = 4;
 const MAX_RESOLVE_ATTACHMENTS: usize = 4;
@@ -242,22 +229,23 @@ pub struct RenderGraphComputePass {
 #[derive(Debug)]
 pub enum RenderGraphPass {
     Renderpass(RenderGraphRenderPass),
-    Compute(RenderGraphComputePass)
+    Compute(RenderGraphComputePass),
 }
 
 impl RenderGraphPass {
     pub fn nodes(&self) -> &[RenderGraphNodeId] {
         match self {
             RenderGraphPass::Renderpass(renderpass) => renderpass.nodes.as_slice(),
-            RenderGraphPass::Compute(compute_pass) => std::slice::from_ref(&compute_pass.node)
+            RenderGraphPass::Compute(compute_pass) => std::slice::from_ref(&compute_pass.node),
         }
     }
 
-    pub fn set_pre_pass_barrier(&mut self, barrier: PrepassBarrier) {
+    pub fn set_pre_pass_barrier(
+        &mut self,
+        barrier: PrepassBarrier,
+    ) {
         match self {
-            RenderGraphPass::Renderpass(renderpass) => {
-                renderpass.pre_pass_barrier = Some(barrier)
-            },
+            RenderGraphPass::Renderpass(renderpass) => renderpass.pre_pass_barrier = Some(barrier),
             RenderGraphPass::Compute(compute_pass) => {
                 compute_pass.pre_pass_barrier = Some(barrier);
             }
@@ -305,7 +293,7 @@ impl RenderGraphOutputPass {
     pub fn nodes(&self) -> &[RenderGraphNodeId] {
         match self {
             RenderGraphOutputPass::Renderpass(pass) => &pass.subpass_nodes,
-            RenderGraphOutputPass::Compute(pass) => std::slice::from_ref(&pass.node)
+            RenderGraphOutputPass::Compute(pass) => std::slice::from_ref(&pass.node),
         }
     }
 
@@ -319,7 +307,7 @@ impl RenderGraphOutputPass {
     pub fn debug_name(&self) -> Option<RenderGraphNodeName> {
         match self {
             RenderGraphOutputPass::Renderpass(pass) => pass.debug_name,
-            RenderGraphOutputPass::Compute(pass) => pass.debug_name
+            RenderGraphOutputPass::Compute(pass) => pass.debug_name,
         }
     }
 }

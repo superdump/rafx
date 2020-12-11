@@ -1180,7 +1180,6 @@ impl ResourceLookupSet {
     // is that these can be retrieved. However, a mutable reference is required. This one is
     // more appropriate to use with loaded assets, and DynResourceAllocator with runtime assets
 
-
     pub fn insert_buffer(
         &self,
         buffer: VkBuffer,

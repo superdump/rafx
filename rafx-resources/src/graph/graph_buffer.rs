@@ -57,7 +57,6 @@ pub struct RenderGraphBufferUsage {
     pub(super) user: RenderGraphBufferUser,
     pub(super) usage_type: RenderGraphBufferUsageType,
     pub(super) version: RenderGraphBufferVersionId,
-
     //pub(super) access_flags: vk::AccessFlags,
     //pub(super) stage_flags: vk::PipelineStageFlags,
 }
@@ -99,7 +98,6 @@ impl RenderGraphBufferSpecification {
         true
     }
 }
-
 
 /// Constraints on a buffer. Constraints are set per-field and start out None (i.e. unconstrained)
 /// The rendergraph will derive specifications from the constraints
@@ -192,7 +190,6 @@ impl RenderGraphBufferConstraint {
         *self = other.clone().into();
     }
 }
-
 
 /// How a buffer is being used
 #[derive(Copy, Clone, Debug, PartialEq)]

@@ -1,7 +1,7 @@
 use super::*;
 use crate::resources::{ImageViewResource, ResourceArc};
-use crate::{vk_description as dsc, BufferResource};
 use crate::vk_description::SwapchainSurfaceInfo;
+use crate::{vk_description as dsc, BufferResource};
 
 #[derive(Copy, Clone)]
 pub enum RenderGraphQueue {
@@ -786,12 +786,6 @@ impl RenderGraphBuilder {
         output_image_id
     }
 
-
-
-
-
-
-
     //NOTE: While the buffer aspect flags may seem redundant with subresource_range here, the
     // subresource_range should indicate the buffer view's supported aspects and the provided
     // buffer aspect flags the aspects that are actually being used
@@ -954,10 +948,7 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        self.add_buffer_create(
-            create_node,
-            constraint
-        )
+        self.add_buffer_create(create_node, constraint)
     }
 
     pub fn read_storage_buffer(
@@ -968,11 +959,7 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        self.add_buffer_read(
-            read_node,
-            buffer,
-            constraint
-        )
+        self.add_buffer_read(read_node, buffer, constraint)
     }
 
     pub fn modify_storage_buffer(
@@ -983,11 +970,7 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        let (_read_buffer, write_buffer) = self.add_buffer_modify(
-            read_node,
-            buffer,
-            constraint
-        );
+        let (_read_buffer, write_buffer) = self.add_buffer_modify(read_node, buffer, constraint);
 
         write_buffer
     }
@@ -1031,10 +1014,6 @@ impl RenderGraphBuilder {
         self.output_buffers.push(output_buffer);
         output_buffer_id
     }
-
-
-
-
 
     // Add a node which can use resources
     pub fn add_node(
@@ -1171,8 +1150,6 @@ impl RenderGraphBuilder {
         self.image_resources[to.index].versions[to.version].add_read_usage(usage);
     }
 
-
-
     //
     // Get images
     //
@@ -1218,7 +1195,6 @@ impl RenderGraphBuilder {
         self.buffer_usages[usage_id.0].version
     }
 
-
     pub(super) fn buffer_version_create_usage(
         &self,
         usage: RenderGraphBufferUsageId,
@@ -1226,7 +1202,6 @@ impl RenderGraphBuilder {
         let version = self.buffer_usages[usage.0].version;
         self.buffer_resources[version.index].versions[version.version].create_usage
     }
-
 
     pub fn build_plan(
         self,

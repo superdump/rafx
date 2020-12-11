@@ -33,8 +33,8 @@ pub use prepared_graph::PreparedRenderGraph;
 pub use prepared_graph::RenderGraphCache;
 pub use prepared_graph::RenderGraphExecutor;
 pub use prepared_graph::RenderGraphNodeCallbacks;
-pub use prepared_graph::VisitRenderpassNodeArgs;
 pub use prepared_graph::VisitComputeNodeArgs;
+pub use prepared_graph::VisitRenderpassNodeArgs;
 
 pub type RenderGraphResourceName = &'static str;
 

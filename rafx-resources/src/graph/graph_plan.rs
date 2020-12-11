@@ -3,8 +3,8 @@ use super::{RenderGraphImageSpecification, RenderGraphOutputImageId};
 use crate::graph::graph_image::{PhysicalImageId, RenderGraphImageUser, VirtualImageId};
 use crate::graph::graph_node::RenderGraphNodeId;
 use crate::graph::{RenderGraphBuilder, RenderGraphImageConstraint, RenderGraphImageUsageId};
-use crate::{vk_description as dsc, BufferResource};
 use crate::vk_description::SwapchainSurfaceInfo;
+use crate::{vk_description as dsc, BufferResource};
 use crate::{ImageViewResource, ResourceArc};
 use ash::vk;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -234,7 +234,9 @@ fn determine_node_order(graph: &RenderGraphBuilder) -> Vec<RenderGraphNodeId> {
     // potentially leaving out nodes we can cull.
     for output_buffer_id in &graph.output_buffers {
         // Find the node that creates the output buffer
-        let output_node = graph.buffer_version_info(output_buffer_id.usage).creator_node;
+        let output_node = graph
+            .buffer_version_info(output_buffer_id.usage)
+            .creator_node;
         log::trace!(
             "Traversing dependencies of output buffer created by node {:?} {:?}",
             output_node,
@@ -312,8 +314,10 @@ fn determine_constraints(
     let mut image_version_states: FnvHashMap<RenderGraphImageUsageId, RenderGraphImageConstraint> =
         Default::default();
 
-    let mut buffer_version_states: FnvHashMap<RenderGraphBufferUsageId, RenderGraphBufferConstraint> =
-        Default::default();
+    let mut buffer_version_states: FnvHashMap<
+        RenderGraphBufferUsageId,
+        RenderGraphBufferConstraint,
+    > = Default::default();
 
     log::trace!("Propagating constraints");
 
@@ -707,7 +711,7 @@ fn determine_constraints(
 
     DetermineConstraintsResult {
         images: image_specs,
-        buffers: buffer_specs
+        buffers: buffer_specs,
     }
 }
 
@@ -1111,8 +1115,8 @@ fn assign_virtual_resources(
                 // We can't share buffers unless it's a read or it's an exclusive write
                 let is_read_or_exclusive_write = (read_count > 0
                     && graph.buffer_usages[usage_resource_id.0]
-                    .usage_type
-                    .is_read_only())
+                        .usage_type
+                        .is_read_only())
                     || write_count <= 1;
 
                 let read_type = graph.buffer_usages[usage_resource_id.0].usage_type;
@@ -1204,11 +1208,10 @@ fn build_physical_passes(
     virtual_resources: &AssignVirtualResourcesResult,
     swapchain_surface_info: &dsc::SwapchainSurfaceInfo,
 ) -> Vec<RenderGraphPass> {
-
     #[derive(Debug)]
     enum PassNodeSet {
         RenderNodeSet(Vec<RenderGraphNodeId>),
-        ComputeNode(RenderGraphNodeId)
+        ComputeNode(RenderGraphNodeId),
     }
 
     // All passes
@@ -1337,7 +1340,7 @@ fn build_physical_passes(
                     node: compute_node,
                     pre_pass_barrier: Default::default(),
                 }));
-            },
+            }
             PassNodeSet::RenderNodeSet(renderpass_nodes) => {
                 let mut renderpass_attachments = Vec::default();
                 let mut renderpass_subpasses = Vec::default();
@@ -1349,7 +1352,8 @@ fn build_physical_passes(
                     let subpass_node = graph.node(node_id);
 
                     // Don't create a subpass if there are no attachments
-                    if subpass_node.color_attachments.is_empty() && subpass_node.depth_attachment.is_none()
+                    if subpass_node.color_attachments.is_empty()
+                        && subpass_node.depth_attachment.is_none()
                     {
                         assert!(subpass_node.resolve_attachments.is_empty());
                         log::trace!("      Not generating a subpass - no attachments");
@@ -1364,7 +1368,7 @@ fn build_physical_passes(
                     };
 
                     for (color_attachment_index, color_attachment) in
-                    subpass_node.color_attachments.iter().enumerate()
+                        subpass_node.color_attachments.iter().enumerate()
                     {
                         if let Some(color_attachment) = color_attachment {
                             let read_or_write_usage = color_attachment
@@ -1376,16 +1380,22 @@ fn build_physical_passes(
                                 .get(&read_or_write_usage)
                                 .unwrap();
 
-                            let specification = constraints.images.get(&read_or_write_usage).unwrap();
+                            let specification =
+                                constraints.images.get(&read_or_write_usage).unwrap();
                             log::trace!("      virtual attachment (color): {:?}", virtual_image);
 
-                            set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                            set_extent(
+                                &mut renderpass_extents,
+                                specification,
+                                swapchain_surface_info,
+                            );
                             let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
                                 &mut renderpass_attachments,
                                 read_or_write_usage,
                                 *virtual_image, /*, subresource_range*/
                             );
-                            render_subpass.color_attachments[color_attachment_index] = Some(pass_attachment_index);
+                            render_subpass.color_attachments[color_attachment_index] =
+                                Some(pass_attachment_index);
 
                             let mut attachment = &mut renderpass_attachments[pass_attachment_index];
                             if is_first_usage {
@@ -1419,16 +1429,23 @@ fn build_physical_passes(
                     }
 
                     for (resolve_attachment_index, resolve_attachment) in
-                    subpass_node.resolve_attachments.iter().enumerate()
+                        subpass_node.resolve_attachments.iter().enumerate()
                     {
                         if let Some(resolve_attachment) = resolve_attachment {
                             let write_image = resolve_attachment.write_image;
-                            let virtual_image = virtual_resources.image_usage_to_virtual.get(&write_image).unwrap();
+                            let virtual_image = virtual_resources
+                                .image_usage_to_virtual
+                                .get(&write_image)
+                                .unwrap();
                             //let version_id = graph.image_version_id(write_image);
                             let specification = constraints.images.get(&write_image).unwrap();
                             log::trace!("      virtual attachment (resolve): {:?}", virtual_image);
 
-                            set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                            set_extent(
+                                &mut renderpass_extents,
+                                specification,
+                                swapchain_surface_info,
+                            );
                             let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
                                 &mut renderpass_attachments,
                                 write_image,
@@ -1443,12 +1460,12 @@ fn build_physical_passes(
                             attachment.samples = specification.samples;
 
                             //TODO: Should we skip resolving if there is no reader?
-                            let store_op = if !graph.image_version_info(write_image).read_usages.is_empty()
-                            {
-                                vk::AttachmentStoreOp::STORE
-                            } else {
-                                vk::AttachmentStoreOp::DONT_CARE
-                            };
+                            let store_op =
+                                if !graph.image_version_info(write_image).read_usages.is_empty() {
+                                    vk::AttachmentStoreOp::STORE
+                                } else {
+                                    vk::AttachmentStoreOp::DONT_CARE
+                                };
 
                             attachment.store_op = store_op;
                             attachment.stencil_store_op = vk::AttachmentStoreOp::DONT_CARE;
@@ -1467,7 +1484,11 @@ fn build_physical_passes(
                         let specification = constraints.images.get(&read_or_write_usage).unwrap();
                         log::trace!("      virtual attachment (depth): {:?}", virtual_image);
 
-                        set_extent(&mut renderpass_extents, specification, swapchain_surface_info);
+                        set_extent(
+                            &mut renderpass_extents,
+                            specification,
+                            swapchain_surface_info,
+                        );
                         let (pass_attachment_index, is_first_usage) = find_or_insert_attachment(
                             &mut renderpass_attachments,
                             read_or_write_usage,
@@ -2043,7 +2064,8 @@ fn build_node_barriers(
     _constraints: &DetermineConstraintsResult,
     physical_resources: &AssignPhysicalResourcesResult,
 ) -> FnvHashMap<RenderGraphNodeId, RenderGraphNodeResourceBarriers> {
-    let mut resource_barriers = FnvHashMap::<RenderGraphNodeId, RenderGraphNodeResourceBarriers>::default();
+    let mut resource_barriers =
+        FnvHashMap::<RenderGraphNodeId, RenderGraphNodeResourceBarriers>::default();
 
     for node_id in node_execution_order {
         let node = graph.node(*node_id);
@@ -2063,9 +2085,11 @@ fn build_node_barriers(
                     .get(&read_or_write_usage)
                     .unwrap();
 
-                let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
-                    RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                });
+                let barrier = image_node_barriers
+                    .entry(*physical_image)
+                    .or_insert_with(|| {
+                        RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    });
 
                 if color_attachment.read_image.is_some() {
                     barrier.invalidate.access_flags |= vk::AccessFlags::COLOR_ATTACHMENT_WRITE
@@ -2088,9 +2112,11 @@ fn build_node_barriers(
                     .get(&resolve_attachment.write_image)
                     .unwrap();
 
-                let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
-                    RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                });
+                let barrier = image_node_barriers
+                    .entry(*physical_image)
+                    .or_insert_with(|| {
+                        RenderGraphPassImageBarriers::new(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    });
 
                 barrier.flush.access_flags |= vk::AccessFlags::COLOR_ATTACHMENT_WRITE;
                 barrier.flush.stage_flags |= vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
@@ -2108,9 +2134,13 @@ fn build_node_barriers(
                 .unwrap();
             //let version_id = graph.image_version_id(read_or_write_usage);
 
-            let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
-                RenderGraphPassImageBarriers::new(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            });
+            let barrier = image_node_barriers
+                .entry(*physical_image)
+                .or_insert_with(|| {
+                    RenderGraphPassImageBarriers::new(
+                        vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    )
+                });
 
             if depth_attachment.read_image.is_some() && depth_attachment.write_image.is_some() {
                 barrier.invalidate.access_flags |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
@@ -2137,9 +2167,11 @@ fn build_node_barriers(
                 .get(sampled_image)
                 .unwrap();
 
-            let barrier = image_node_barriers.entry(*physical_image).or_insert_with(|| {
-                RenderGraphPassImageBarriers::new(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            });
+            let barrier = image_node_barriers
+                .entry(*physical_image)
+                .or_insert_with(|| {
+                    RenderGraphPassImageBarriers::new(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                });
 
             barrier.used_by_sampling |= true;
 
@@ -2149,23 +2181,27 @@ fn build_node_barriers(
 
         //TODO: Do something smarter than this
         #[allow(non_snake_case)]
-        let ALL_BUFFER_INVALIDATE_ACCESS_FLAGS: vk::AccessFlags = vk::AccessFlags::VERTEX_ATTRIBUTE_READ |
-            vk::AccessFlags::INDEX_READ |
-            vk::AccessFlags::INDIRECT_COMMAND_READ |
-            vk::AccessFlags::UNIFORM_READ |
-            vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE;
+        let ALL_BUFFER_INVALIDATE_ACCESS_FLAGS: vk::AccessFlags =
+            vk::AccessFlags::VERTEX_ATTRIBUTE_READ
+                | vk::AccessFlags::INDEX_READ
+                | vk::AccessFlags::INDIRECT_COMMAND_READ
+                | vk::AccessFlags::UNIFORM_READ
+                | vk::AccessFlags::SHADER_READ
+                | vk::AccessFlags::SHADER_WRITE;
         #[allow(non_snake_case)]
-        let ALL_BUFFER_INVALIDATE_STAGE_FLAGS: vk::PipelineStageFlags = vk::PipelineStageFlags::VERTEX_INPUT |
-            vk::PipelineStageFlags::VERTEX_INPUT |
-            vk::PipelineStageFlags::DRAW_INDIRECT |
-            vk::PipelineStageFlags::COMPUTE_SHADER |
-            vk::PipelineStageFlags::FRAGMENT_SHADER;
+        let ALL_BUFFER_INVALIDATE_STAGE_FLAGS: vk::PipelineStageFlags =
+            vk::PipelineStageFlags::VERTEX_INPUT
+                | vk::PipelineStageFlags::VERTEX_INPUT
+                | vk::PipelineStageFlags::DRAW_INDIRECT
+                | vk::PipelineStageFlags::COMPUTE_SHADER
+                | vk::PipelineStageFlags::FRAGMENT_SHADER;
 
         //TODO: Do something smarter than this
         #[allow(non_snake_case)]
         let ALL_BUFFER_FLUSH_ACCESS_FLAGS: vk::AccessFlags = vk::AccessFlags::SHADER_WRITE;
         #[allow(non_snake_case)]
-        let ALL_BUFFER_FLUSH_STAGE_FLAGS: vk::PipelineStageFlags = vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER;
+        let ALL_BUFFER_FLUSH_STAGE_FLAGS: vk::PipelineStageFlags =
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER;
 
         for buffer_create in &node.buffer_creates {
             let physical_buffer = physical_resources
@@ -2173,9 +2209,9 @@ fn build_node_barriers(
                 .get(&buffer_create.buffer)
                 .unwrap();
 
-            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
-                RenderGraphPassBufferBarriers::new()
-            });
+            let barrier = buffer_node_barriers
+                .entry(*physical_buffer)
+                .or_insert_with(|| RenderGraphPassBufferBarriers::new());
 
             // for now just do all of these
             barrier.flush.access_flags |= ALL_BUFFER_FLUSH_ACCESS_FLAGS;
@@ -2188,9 +2224,9 @@ fn build_node_barriers(
                 .get(&buffer_read.buffer)
                 .unwrap();
 
-            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
-                RenderGraphPassBufferBarriers::new()
-            });
+            let barrier = buffer_node_barriers
+                .entry(*physical_buffer)
+                .or_insert_with(|| RenderGraphPassBufferBarriers::new());
             // for now just do all of these
             barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
             barrier.invalidate.stage_flags |= ALL_BUFFER_INVALIDATE_STAGE_FLAGS;
@@ -2202,9 +2238,9 @@ fn build_node_barriers(
                 .get(&buffer_modify.input)
                 .unwrap();
 
-            let barrier = buffer_node_barriers.entry(*physical_buffer).or_insert_with(|| {
-                RenderGraphPassBufferBarriers::new()
-            });
+            let barrier = buffer_node_barriers
+                .entry(*physical_buffer)
+                .or_insert_with(|| RenderGraphPassBufferBarriers::new());
 
             // for now just do all of these
             barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
@@ -2232,7 +2268,7 @@ fn determine_required_dst_synchronization_flags(
     mut invalidate_pipeline_stage_flags: vk::PipelineStageFlags,
     flush_access_flags: vk::AccessFlags,
     flush_pipeline_stage_flags: vk::PipelineStageFlags,
-    invalidated: &[vk::AccessFlags; MAX_PIPELINE_FLAG_BITS]
+    invalidated: &[vk::AccessFlags; MAX_PIPELINE_FLAG_BITS],
 ) -> (vk::AccessFlags, vk::PipelineStageFlags) {
     //TODO: Should I OR in the flush access/stages? Right now the invalidate barrier is including write
     // access flags in the invalidate **but only for modifies**
@@ -2284,8 +2320,7 @@ fn update_invalidated_state(
 ) {
     // Mark pending flushes as handled
     *pending_flush_access_flags &= !invalidate_src_access_flags;
-    *pending_flush_pipeline_stage_flags &=
-        !invalidate_src_pipeline_stage_flags;
+    *pending_flush_pipeline_stage_flags &= !invalidate_src_pipeline_stage_flags;
 
     // Mark resources that we are invalidating as having been invalidated for
     // the appropriate pipeline stages
@@ -2357,11 +2392,15 @@ fn build_pass_barriers(
     // TODO: This is coarse-grained over the whole image. Ideally it would be per-layer and per-mip
     let mut image_states: Vec<ImageState> =
         Vec::with_capacity(physical_resources.image_specifications.len());
-    image_states.resize_with(physical_resources.image_specifications.len(), || Default::default());
+    image_states.resize_with(physical_resources.image_specifications.len(), || {
+        Default::default()
+    });
 
     let mut buffer_states: Vec<BufferState> =
         Vec::with_capacity(physical_resources.buffer_specifications.len());
-    buffer_states.resize_with(physical_resources.buffer_specifications.len(), || Default::default());
+    buffer_states.resize_with(physical_resources.buffer_specifications.len(), || {
+        Default::default()
+    });
 
     // dependencies for all renderpasses
     let mut pass_dependencies = Vec::default();
@@ -2380,7 +2419,7 @@ fn build_pass_barriers(
 
         //TODO: This does not support multiple subpasses in a single pass
         assert_eq!(pass.nodes().len(), 1);
-        let nodes : Vec<_> = pass.nodes().iter().copied().collect();
+        let nodes: Vec<_> = pass.nodes().iter().copied().collect();
         for (subpass_index, subpass_node_id) in nodes.iter().enumerate() {
             log::trace!("  subpass {}", subpass_index);
             let node_barriers = &node_barriers[subpass_node_id];
@@ -2404,7 +2443,8 @@ fn build_pass_barriers(
                     break;
                 }
 
-                let image_specification = &physical_resources.image_specifications[physical_image_id.0];
+                let image_specification =
+                    &physical_resources.image_specifications[physical_image_id.0];
                 if image_specification.layer_count != 1 || image_specification.mip_count != 1 {
                     log::trace!("    will emit separate barrier for layout transitions (an image has > 1 layers or mips)");
                     use_external_dependency_for_pass_initial_layout_transition = false;
@@ -2466,13 +2506,14 @@ fn build_pass_barriers(
                     );
                 }
 
-                let (image_invalidate_access_flags, image_invalidate_pipeline_stage_flags) = determine_required_dst_synchronization_flags(
-                    image_barrier.invalidate.access_flags,
-                    image_barrier.invalidate.stage_flags,
-                    image_barrier.flush.access_flags,
-                    image_barrier.flush.stage_flags,
-                    &image_state.invalidated
-                );
+                let (image_invalidate_access_flags, image_invalidate_pipeline_stage_flags) =
+                    determine_required_dst_synchronization_flags(
+                        image_barrier.invalidate.access_flags,
+                        image_barrier.invalidate.stage_flags,
+                        image_barrier.flush.access_flags,
+                        image_barrier.flush.stage_flags,
+                        &image_state.invalidated,
+                    );
 
                 // OR the requirements in
                 invalidate_dst_access_flags |= image_invalidate_access_flags;
@@ -2482,7 +2523,9 @@ fn build_pass_barriers(
                 //TODO: This is bad and does not properly handle an image being used in multiple ways requiring
                 // multiple layouts
                 if let RenderGraphPass::Renderpass(pass) = pass {
-                    for (attachment_index, attachment) in &mut pass.attachments.iter_mut().enumerate() {
+                    for (attachment_index, attachment) in
+                        &mut pass.attachments.iter_mut().enumerate()
+                    {
                         //log::trace!("      attachment {:?}", attachment.image);
                         if attachment.image.unwrap() == *physical_image_id {
                             if attachment_initial_layout[attachment_index].is_none() {
@@ -2527,12 +2570,6 @@ fn build_pass_barriers(
                 image_state.layout = image_barrier.layout;
             }
 
-
-
-
-
-
-
             // Look at all the buffers we read and determine what invalidates we need
             for (physical_buffer_id, buffer_barrier) in &node_barriers.buffer_barriers {
                 log::trace!("    buffer {:?}", physical_buffer_id);
@@ -2543,14 +2580,14 @@ fn build_pass_barriers(
                 invalidate_src_pipeline_stage_flags |=
                     buffer_state.pending_flush_pipeline_stage_flags;
 
-
-                let (buffer_invalidate_access_flags, buffer_invalidate_pipeline_stage_flags) = determine_required_dst_synchronization_flags(
-                    buffer_barrier.invalidate.access_flags,
-                    buffer_barrier.invalidate.stage_flags,
-                    buffer_barrier.flush.access_flags,
-                    buffer_barrier.flush.stage_flags,
-                    &buffer_state.invalidated
-                );
+                let (buffer_invalidate_access_flags, buffer_invalidate_pipeline_stage_flags) =
+                    determine_required_dst_synchronization_flags(
+                        buffer_barrier.invalidate.access_flags,
+                        buffer_barrier.invalidate.stage_flags,
+                        buffer_barrier.flush.access_flags,
+                        buffer_barrier.flush.stage_flags,
+                        &buffer_state.invalidated,
+                    );
 
                 // OR the requirements in
                 invalidate_dst_access_flags |= buffer_invalidate_access_flags;
@@ -2565,7 +2602,7 @@ fn build_pass_barriers(
                     invalidate_src_access_flags,
                     invalidate_src_pipeline_stage_flags,
                     invalidate_dst_access_flags,
-                    invalidate_dst_pipeline_stage_flags
+                    invalidate_dst_pipeline_stage_flags,
                 );
             }
 
@@ -2577,7 +2614,7 @@ fn build_pass_barriers(
                     invalidate_src_access_flags,
                     invalidate_src_pipeline_stage_flags,
                     invalidate_dst_access_flags,
-                    invalidate_dst_pipeline_stage_flags
+                    invalidate_dst_pipeline_stage_flags,
                 );
             }
 
@@ -2628,11 +2665,12 @@ fn build_pass_barriers(
                     })
                     .collect();
 
-
-                let buffer_barriers = node_barriers.buffer_barriers
+                let buffer_barriers = node_barriers
+                    .buffer_barriers
                     .keys()
                     .map(|physical_buffer_id| {
-                        let specification = &physical_resources.buffer_specifications[physical_buffer_id.0];
+                        let specification =
+                            &physical_resources.buffer_specifications[physical_buffer_id.0];
                         PrepassBufferBarrier {
                             buffer: *physical_buffer_id,
                             src_access: invalidate_src_access_flags,
@@ -2648,7 +2686,7 @@ fn build_pass_barriers(
                     src_stage: invalidate_src_pipeline_stage_flags,
                     dst_stage: invalidate_dst_pipeline_stage_flags,
                     image_barriers,
-                    buffer_barriers
+                    buffer_barriers,
                 };
 
                 pass.set_pre_pass_barrier(barrier);
@@ -2782,15 +2820,20 @@ fn create_output_passes(
                         attachment_references_list[list_index] = attachment_reference;
                     }
 
-                    for (color_index, attachment_index) in subpass.color_attachments.iter().enumerate() {
+                    for (color_index, attachment_index) in
+                        subpass.color_attachments.iter().enumerate()
+                    {
                         if let Some(attachment_index) = attachment_index {
                             let physical_image = pass.attachments[*attachment_index].image.unwrap();
                             set_attachment_reference(
                                 &mut subpass_description.color_attachments,
                                 color_index,
                                 dsc::AttachmentReference {
-                                    attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
+                                    attachment: dsc::AttachmentIndex::Index(
+                                        *attachment_index as u32,
+                                    ),
+                                    layout: node_barriers[&subpass.node].image_barriers
+                                        [&physical_image]
                                         .layout
                                         .into(),
                                 },
@@ -2798,7 +2841,8 @@ fn create_output_passes(
                         }
                     }
 
-                    for (resolve_index, attachment_index) in subpass.resolve_attachments.iter().enumerate()
+                    for (resolve_index, attachment_index) in
+                        subpass.resolve_attachments.iter().enumerate()
                     {
                         if let Some(attachment_index) = attachment_index {
                             let physical_image = pass.attachments[*attachment_index].image.unwrap();
@@ -2806,8 +2850,11 @@ fn create_output_passes(
                                 &mut subpass_description.resolve_attachments,
                                 resolve_index,
                                 dsc::AttachmentReference {
-                                    attachment: dsc::AttachmentIndex::Index(*attachment_index as u32),
-                                    layout: node_barriers[&subpass.node].image_barriers[&physical_image]
+                                    attachment: dsc::AttachmentIndex::Index(
+                                        *attachment_index as u32,
+                                    ),
+                                    layout: node_barriers[&subpass.node].image_barriers
+                                        [&physical_image]
                                         .layout
                                         .into(),
                                 },
@@ -2817,12 +2864,14 @@ fn create_output_passes(
 
                     if let Some(attachment_index) = subpass.depth_attachment {
                         let physical_image = pass.attachments[attachment_index].image.unwrap();
-                        subpass_description.depth_stencil_attachment = Some(dsc::AttachmentReference {
-                            attachment: dsc::AttachmentIndex::Index(attachment_index as u32),
-                            layout: node_barriers[&subpass.node].image_barriers[&physical_image]
-                                .layout
-                                .into(),
-                        });
+                        subpass_description.depth_stencil_attachment =
+                            Some(dsc::AttachmentReference {
+                                attachment: dsc::AttachmentIndex::Index(attachment_index as u32),
+                                layout: node_barriers[&subpass.node].image_barriers
+                                    [&physical_image]
+                                    .layout
+                                    .into(),
+                            });
                     }
 
                     renderpass_desc.subpasses.push(subpass_description);
@@ -2862,7 +2911,7 @@ fn create_output_passes(
                 };
 
                 renderpasses.push(RenderGraphOutputPass::Renderpass(output_pass));
-            },
+            }
             RenderGraphPass::Compute(pass) => {
                 let output_pass = RenderGraphOutputComputePass {
                     node: pass.node,
@@ -3108,7 +3157,8 @@ fn print_final_image_usage(
             }
 
             for sampled_image in &node.sampled_images {
-                let physical_image = assign_physical_resources_result.image_usage_to_physical[sampled_image];
+                let physical_image =
+                    assign_physical_resources_result.image_usage_to_physical[sampled_image];
                 let write_name = graph.image_resource(*sampled_image).name;
                 log::debug!(
                     "    Sampled: {:?} Name: {:?} Constraints: {:?}",
@@ -3120,7 +3170,8 @@ fn print_final_image_usage(
         }
     }
     for output_image in &graph.output_images {
-        let physical_image = assign_physical_resources_result.image_usage_to_physical[&output_image.usage];
+        let physical_image =
+            assign_physical_resources_result.image_usage_to_physical[&output_image.usage];
         let write_name = graph.image_resource(output_image.usage).name;
         log::debug!(
             "    Output Image {:?} Name: {:?} Constraints: {:?}",
@@ -3189,8 +3240,7 @@ impl RenderGraphPlan {
         // If there is not enough information to infer then the render graph cannot be used and
         // building it will panic.
         //
-        let mut constraint_results =
-            determine_constraints(&graph, &node_execution_order);
+        let mut constraint_results = determine_constraints(&graph, &node_execution_order);
 
         // Look at all image versions and ensure a constraint exists for usages where the node was
         // not culled
@@ -3203,11 +3253,7 @@ impl RenderGraphPlan {
         // Add resolves to the graph - this will occur when a renderpass outputs a multisample image
         // to a renderpass that is expecting a non-multisampled image.
         //
-        insert_resolves(
-            &mut graph,
-            &node_execution_order,
-            &mut constraint_results,
-        );
+        insert_resolves(&mut graph, &node_execution_order, &mut constraint_results);
 
         // Print the cases where we can't reuse images
         //print_image_compatibility(&graph, &constraint_results);
