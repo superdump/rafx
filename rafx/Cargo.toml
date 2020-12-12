@@ -61,6 +61,12 @@ profile-with-tracing = [
     "rafx-shell-vulkan/profile-with-tracing"
 ]
 
+profile-with-tracy = [
+    "rafx-resources/profile-with-tracy",
+    "rafx-assets/profile-with-tracy",
+    "rafx-shell-vulkan/profile-with-tracy"
+]
+
 [[example]]
 name = "triangle_graph"
 required-features = []

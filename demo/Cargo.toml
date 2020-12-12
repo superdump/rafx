@@ -61,16 +61,17 @@ puffin-imgui = { version = "0.4.0", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.2", optional = true }
 
-profiling = "0.1.4"
+profiling = "0.1.5"
 
 [features]
 default = [
     "sdl2-bundled",
     "sdl2-static-link",
     "profile-with-puffin",
-    #"profile-with-optick",
-    #"profile-with-tracy",
-    #"profile-with-superluminal"
+    "profile-with-optick",
+    #"profile-with-tracing",
+    "profile-with-tracy",
+    "profile-with-superluminal"
 ]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
@@ -88,13 +89,17 @@ profile-with-superluminal = [
     "profiling/profile-with-superluminal",
     "rafx/profile-with-superluminal",
 ]
-profile-with-tracy = [
+profile-with-tracing = [
     "profiling/profile-with-tracing",
     "rafx/profile-with-tracing",
     "tracing-subscriber",
     "tracing"
 ]
+profile-with-tracy = [
+    "profiling/profile-with-tracy",
+    "rafx/profile-with-tracy",
+]
 profile-with-tracy-memory = [
-    "profiling/profile-with-tracing",
+    "profiling/profile-with-tracy",
     "profile-with-tracy"
 ]
