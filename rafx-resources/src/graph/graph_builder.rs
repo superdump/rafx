@@ -794,18 +794,16 @@ impl RenderGraphBuilder {
         user: RenderGraphBufferUser,
         version: RenderGraphBufferVersionId,
         usage_type: RenderGraphBufferUsageType,
-        // _access_flags: vk::AccessFlags,
-        // _stage_flags: vk::PipelineStageFlags,
-        // _buffer_aspect_flags: vk::BufferAspectFlags,
+        access_flags: vk::AccessFlags,
+        stage_flags: vk::PipelineStageFlags,
     ) -> RenderGraphBufferUsageId {
         let usage_id = RenderGraphBufferUsageId(self.buffer_usages.len());
         self.buffer_usages.push(RenderGraphBufferUsage {
             user,
             usage_type,
             version,
-            //access_flags,
-            //stage_flags,
-            //buffer_aspect_flags
+            access_flags,
+            stage_flags,
         });
         usage_id
     }
@@ -815,9 +813,8 @@ impl RenderGraphBuilder {
         &mut self,
         create_node: RenderGraphNodeId,
         constraint: RenderGraphBufferConstraint,
-        // access_flags: vk::AccessFlags,
-        // stage_flags: vk::PipelineStageFlags,
-        // buffer_aspect_flags: vk::BufferAspectFlags,
+        access_flags: vk::AccessFlags,
+        stage_flags: vk::PipelineStageFlags,
     ) -> RenderGraphBufferUsageId {
         let version_id = RenderGraphBufferVersionId {
             index: self.buffer_resources.len(),
@@ -827,9 +824,8 @@ impl RenderGraphBuilder {
             RenderGraphBufferUser::Node(create_node),
             version_id,
             RenderGraphBufferUsageType::Create,
-            // access_flags,
-            // stage_flags,
-            // buffer_aspect_flags,
+            access_flags,
+            stage_flags,
         );
 
         let mut resource = RenderGraphBufferResource::new();
@@ -843,7 +839,6 @@ impl RenderGraphBuilder {
         self.nodes[create_node.0]
             .buffer_creates
             .push(RenderGraphBufferCreate {
-                //buffer: buffer_id,
                 buffer: usage_id,
                 constraint,
             });
@@ -856,9 +851,8 @@ impl RenderGraphBuilder {
         read_node: RenderGraphNodeId,
         buffer: RenderGraphBufferUsageId,
         constraint: RenderGraphBufferConstraint,
-        // access_flags: vk::AccessFlags,
-        // stage_flags: vk::PipelineStageFlags,
-        // buffer_aspect_flags: vk::BufferAspectFlags,
+        access_flags: vk::AccessFlags,
+        stage_flags: vk::PipelineStageFlags,
     ) -> RenderGraphBufferUsageId {
         let version_id = self.buffer_usages[buffer.0].version;
 
@@ -866,9 +860,8 @@ impl RenderGraphBuilder {
             RenderGraphBufferUser::Node(read_node),
             version_id,
             RenderGraphBufferUsageType::Read,
-            // access_flags,
-            // stage_flags,
-            // buffer_aspect_flags,
+            access_flags,
+            stage_flags,
         );
 
         self.buffer_resources[version_id.index].versions[version_id.version]
@@ -889,12 +882,10 @@ impl RenderGraphBuilder {
         modify_node: RenderGraphNodeId,
         buffer: RenderGraphBufferUsageId,
         constraint: RenderGraphBufferConstraint,
-        // read_access_flags: vk::AccessFlags,
-        // read_stage_flags: vk::PipelineStageFlags,
-        // read_buffer_aspect_flags: vk::BufferAspectFlags,
-        // write_access_flags: vk::AccessFlags,
-        // write_stage_flags: vk::PipelineStageFlags,
-        // write_buffer_aspect_flags: vk::BufferAspectFlags,
+        read_access_flags: vk::AccessFlags,
+        read_stage_flags: vk::PipelineStageFlags,
+        write_access_flags: vk::AccessFlags,
+        write_stage_flags: vk::PipelineStageFlags,
     ) -> (RenderGraphBufferUsageId, RenderGraphBufferUsageId) {
         let read_version_id = self.buffer_usages[buffer.0].version;
 
@@ -902,9 +893,8 @@ impl RenderGraphBuilder {
             RenderGraphBufferUser::Node(modify_node),
             read_version_id,
             RenderGraphBufferUsageType::ModifyRead,
-            // read_access_flags,
-            // read_stage_flags,
-            // read_buffer_aspect_flags,
+            read_access_flags,
+            read_stage_flags,
         );
 
         self.buffer_resources[read_version_id.index].versions[read_version_id.version]
@@ -920,9 +910,8 @@ impl RenderGraphBuilder {
             RenderGraphBufferUser::Node(modify_node),
             write_version_id,
             RenderGraphBufferUsageType::ModifyWrite,
-            // write_access_flags,
-            // write_stage_flags,
-            // write_buffer_aspect_flags,
+            write_access_flags,
+            write_stage_flags,
         );
 
         let version_info = RenderGraphBufferResourceVersionInfo::new(modify_node, write_usage_id);
@@ -941,6 +930,89 @@ impl RenderGraphBuilder {
         (read_usage_id, write_usage_id)
     }
 
+    pub fn create_buffer(
+        &mut self,
+        create_node: RenderGraphNodeId,
+        constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        self.add_buffer_create(
+            create_node,
+            constraint,
+            vk::AccessFlags::empty(),
+            vk::PipelineStageFlags::empty(),
+        )
+    }
+
+    pub fn read_vertex_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::VERTEX_BUFFER;
+
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::VERTEX_ATTRIBUTE_READ,
+            vk::PipelineStageFlags::VERTEX_INPUT
+        )
+    }
+
+    pub fn read_index_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::INDEX_BUFFER;
+
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::INDEX_READ,
+            vk::PipelineStageFlags::VERTEX_INPUT
+        )
+    }
+
+    pub fn read_indirect_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::INDIRECT_BUFFER;
+
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::INDIRECT_COMMAND_READ,
+            vk::PipelineStageFlags::DRAW_INDIRECT
+        )
+    }
+
+    pub fn read_uniform_buffer(
+        &mut self,
+        read_node: RenderGraphNodeId,
+        buffer: RenderGraphBufferUsageId,
+        mut constraint: RenderGraphBufferConstraint,
+    ) -> RenderGraphBufferUsageId {
+        constraint.usage_flags |= vk::BufferUsageFlags::UNIFORM_BUFFER;
+
+        //TODO: In the future could consider options for determining stage flags to be compute or
+        // fragment. Check node queue? Check if attachments exist? Explicit?
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::UNIFORM_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+        )
+    }
+
     pub fn create_storage_buffer(
         &mut self,
         create_node: RenderGraphNodeId,
@@ -948,7 +1020,14 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        self.add_buffer_create(create_node, constraint)
+        //TODO: In the future could consider options for determining stage flags to be compute or
+        // fragment. Check node queue? Check if attachments exist? Explicit?
+        self.add_buffer_create(
+            create_node,
+            constraint,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+        )
     }
 
     pub fn read_storage_buffer(
@@ -959,7 +1038,15 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        self.add_buffer_read(read_node, buffer, constraint)
+        //TODO: In the future could consider options for determining stage flags to be compute or
+        // fragment. Check node queue? Check if attachments exist? Explicit?
+        self.add_buffer_read(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+        )
     }
 
     pub fn modify_storage_buffer(
@@ -970,7 +1057,17 @@ impl RenderGraphBuilder {
     ) -> RenderGraphBufferUsageId {
         constraint.usage_flags |= vk::BufferUsageFlags::STORAGE_BUFFER;
 
-        let (_read_buffer, write_buffer) = self.add_buffer_modify(read_node, buffer, constraint);
+        //TODO: In the future could consider options for determining stage flags to be compute or
+        // fragment. Check node queue? Check if attachments exist? Explicit?
+        let (_read_buffer, write_buffer) = self.add_buffer_modify(
+            read_node,
+            buffer,
+            constraint,
+            vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+        );
 
         write_buffer
     }
@@ -994,9 +1091,8 @@ impl RenderGraphBuilder {
             RenderGraphBufferUser::Output(output_buffer_id),
             version_id,
             RenderGraphBufferUsageType::Output,
-            // access_flags,
-            // stage_flags,
-            // specification.aspect_flags,
+            access_flags,
+            stage_flags,
         );
 
         let buffer_version = self.buffer_version_info_mut(buffer_id);
@@ -1059,16 +1155,6 @@ impl RenderGraphBuilder {
     ) {
         self.buffer_resource_mut(buffer_id).name = Some(name);
     }
-
-    // pub fn configure_node(
-    //     &mut self,
-    //     node_id: RenderGraphNodeId,
-    // ) -> RenderGraphNodeConfigureContext {
-    //     RenderGraphNodeConfigureContext {
-    //         graph: self,
-    //         node_id,
-    //     }
-    // }
 
     //
     // Get nodes
@@ -1172,6 +1258,13 @@ impl RenderGraphBuilder {
     //
     // Get buffer version infos
     //
+    pub(super) fn buffer_usage(
+        &self,
+        usage_id: RenderGraphBufferUsageId
+    ) -> &RenderGraphBufferUsage {
+        &self.buffer_usages[usage_id.0]
+    }
+
     pub(super) fn buffer_version_info(
         &self,
         usage_id: RenderGraphBufferUsageId,

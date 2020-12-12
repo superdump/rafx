@@ -2179,30 +2179,6 @@ fn build_node_barriers(
             barrier.invalidate.stage_flags |= vk::PipelineStageFlags::FRAGMENT_SHADER;
         }
 
-        //TODO: Do something smarter than this
-        #[allow(non_snake_case)]
-        let ALL_BUFFER_INVALIDATE_ACCESS_FLAGS: vk::AccessFlags =
-            vk::AccessFlags::VERTEX_ATTRIBUTE_READ
-                | vk::AccessFlags::INDEX_READ
-                | vk::AccessFlags::INDIRECT_COMMAND_READ
-                | vk::AccessFlags::UNIFORM_READ
-                | vk::AccessFlags::SHADER_READ
-                | vk::AccessFlags::SHADER_WRITE;
-        #[allow(non_snake_case)]
-        let ALL_BUFFER_INVALIDATE_STAGE_FLAGS: vk::PipelineStageFlags =
-            vk::PipelineStageFlags::VERTEX_INPUT
-                | vk::PipelineStageFlags::VERTEX_INPUT
-                | vk::PipelineStageFlags::DRAW_INDIRECT
-                | vk::PipelineStageFlags::COMPUTE_SHADER
-                | vk::PipelineStageFlags::FRAGMENT_SHADER;
-
-        //TODO: Do something smarter than this
-        #[allow(non_snake_case)]
-        let ALL_BUFFER_FLUSH_ACCESS_FLAGS: vk::AccessFlags = vk::AccessFlags::SHADER_WRITE;
-        #[allow(non_snake_case)]
-        let ALL_BUFFER_FLUSH_STAGE_FLAGS: vk::PipelineStageFlags =
-            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER;
-
         for buffer_create in &node.buffer_creates {
             let physical_buffer = physical_resources
                 .buffer_usage_to_physical
@@ -2213,9 +2189,9 @@ fn build_node_barriers(
                 .entry(*physical_buffer)
                 .or_insert_with(|| RenderGraphPassBufferBarriers::new());
 
-            // for now just do all of these
-            barrier.flush.access_flags |= ALL_BUFFER_FLUSH_ACCESS_FLAGS;
-            barrier.flush.stage_flags |= ALL_BUFFER_FLUSH_STAGE_FLAGS;
+            let usage = graph.buffer_usage(buffer_create.buffer);
+            barrier.flush.access_flags |= usage.access_flags;
+            barrier.flush.stage_flags |= usage.stage_flags;
         }
 
         for buffer_read in &node.buffer_reads {
@@ -2227,9 +2203,10 @@ fn build_node_barriers(
             let barrier = buffer_node_barriers
                 .entry(*physical_buffer)
                 .or_insert_with(|| RenderGraphPassBufferBarriers::new());
-            // for now just do all of these
-            barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
-            barrier.invalidate.stage_flags |= ALL_BUFFER_INVALIDATE_STAGE_FLAGS;
+
+            let usage = graph.buffer_usage(buffer_read.buffer);
+            barrier.invalidate.access_flags |= usage.access_flags;
+            barrier.invalidate.stage_flags |= usage.stage_flags;
         }
 
         for buffer_modify in &node.buffer_modifies {
@@ -2242,11 +2219,14 @@ fn build_node_barriers(
                 .entry(*physical_buffer)
                 .or_insert_with(|| RenderGraphPassBufferBarriers::new());
 
-            // for now just do all of these
-            barrier.invalidate.access_flags |= ALL_BUFFER_INVALIDATE_ACCESS_FLAGS;
-            barrier.invalidate.stage_flags |= ALL_BUFFER_INVALIDATE_STAGE_FLAGS;
-            barrier.flush.access_flags |= ALL_BUFFER_FLUSH_ACCESS_FLAGS;
-            barrier.flush.stage_flags |= ALL_BUFFER_FLUSH_STAGE_FLAGS;
+
+            let read_usage = graph.buffer_usage(buffer_modify.input);
+            barrier.invalidate.access_flags |= read_usage.access_flags;
+            barrier.invalidate.stage_flags |= read_usage.stage_flags;
+
+            let write_usage = graph.buffer_usage(buffer_modify.output);
+            barrier.flush.access_flags |= write_usage.access_flags;
+            barrier.flush.stage_flags |= write_usage.stage_flags;
         }
 
         resource_barriers.insert(

@@ -57,8 +57,8 @@ pub struct RenderGraphBufferUsage {
     pub(super) user: RenderGraphBufferUser,
     pub(super) usage_type: RenderGraphBufferUsageType,
     pub(super) version: RenderGraphBufferVersionId,
-    //pub(super) access_flags: vk::AccessFlags,
-    //pub(super) stage_flags: vk::PipelineStageFlags,
+    pub(super) access_flags: vk::AccessFlags,
+    pub(super) stage_flags: vk::PipelineStageFlags,
 }
 
 /// Immutable, fully-specified attributes of a buffer. A *constraint* is partially specified and
