@@ -956,7 +956,7 @@ impl RenderGraphBuilder {
             buffer,
             constraint,
             vk::AccessFlags::VERTEX_ATTRIBUTE_READ,
-            vk::PipelineStageFlags::VERTEX_INPUT
+            vk::PipelineStageFlags::VERTEX_INPUT,
         )
     }
 
@@ -973,7 +973,7 @@ impl RenderGraphBuilder {
             buffer,
             constraint,
             vk::AccessFlags::INDEX_READ,
-            vk::PipelineStageFlags::VERTEX_INPUT
+            vk::PipelineStageFlags::VERTEX_INPUT,
         )
     }
 
@@ -990,7 +990,7 @@ impl RenderGraphBuilder {
             buffer,
             constraint,
             vk::AccessFlags::INDIRECT_COMMAND_READ,
-            vk::PipelineStageFlags::DRAW_INDIRECT
+            vk::PipelineStageFlags::DRAW_INDIRECT,
         )
     }
 
@@ -1009,7 +1009,7 @@ impl RenderGraphBuilder {
             buffer,
             constraint,
             vk::AccessFlags::UNIFORM_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
         )
     }
 
@@ -1026,7 +1026,7 @@ impl RenderGraphBuilder {
             create_node,
             constraint,
             vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
         )
     }
 
@@ -1045,7 +1045,7 @@ impl RenderGraphBuilder {
             buffer,
             constraint,
             vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
         )
     }
 
@@ -1260,7 +1260,7 @@ impl RenderGraphBuilder {
     //
     pub(super) fn buffer_usage(
         &self,
-        usage_id: RenderGraphBufferUsageId
+        usage_id: RenderGraphBufferUsageId,
     ) -> &RenderGraphBufferUsage {
         &self.buffer_usages[usage_id.0]
     }

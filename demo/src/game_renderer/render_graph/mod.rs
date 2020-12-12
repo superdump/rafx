@@ -5,8 +5,8 @@ use ash::prelude::VkResult;
 use ash::vk;
 use rafx::graph::*;
 use rafx::nodes::{PreparedRenderData, RenderView};
-use rafx::resources::{ResourceContext, ComputePipelineResource};
 use rafx::resources::{vk_description as dsc, VertexDataSetLayout};
+use rafx::resources::{ComputePipelineResource, ResourceContext};
 use rafx::resources::{ImageViewResource, MaterialPassResource, ResourceArc};
 use rafx::vulkan::SwapchainInfo;
 
@@ -77,7 +77,7 @@ pub fn build_render_graph(
     bloom_extract_material_pass: ResourceArc<MaterialPassResource>,
     bloom_blur_material_pass: ResourceArc<MaterialPassResource>,
     bloom_combine_material_pass: ResourceArc<MaterialPassResource>,
-    test_compute_pipeline: &ResourceArc<ComputePipelineResource>
+    test_compute_pipeline: &ResourceArc<ComputePipelineResource>,
 ) -> VkResult<BuildRenderGraphResult> {
     profiling::scope!("Build Render Graph");
 
@@ -93,7 +93,8 @@ pub fn build_render_graph(
 
     let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context, shadow_map_views);
 
-    let compute_test_pass = compute_test::compute_test_pass(&mut graph_context, test_compute_pipeline);
+    let compute_test_pass =
+        compute_test::compute_test_pass(&mut graph_context, test_compute_pipeline);
 
     let opaque_pass = opaque_pass::opaque_pass(&mut graph_context, &shadow_maps);
     {

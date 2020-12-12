@@ -47,10 +47,10 @@ use crate::features::imgui::create_imgui_extract_job;
 use crate::RenderOptions;
 use arrayvec::ArrayVec;
 use ash::vk;
+use atelier_assets::loader::handle::AssetHandle;
 use fnv::FnvHashMap;
 use rafx::resources::vulkan::{VkTransferUpload, VkUploadError};
 pub use swapchain_handling::SwapchainLifetimeListener;
-use atelier_assets::loader::handle::AssetHandle;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
 pub fn perspective_rh(
@@ -635,7 +635,9 @@ impl GameRenderer {
             .unwrap();
 
         let compute_test_pipeline = asset_manager
-            .loaded_assets().compute_pipelines.get_committed(static_resources.compute_test.load_handle())
+            .loaded_assets()
+            .compute_pipelines
+            .get_committed(static_resources.compute_test.load_handle())
             .unwrap()
             .compute_pipeline
             .clone();

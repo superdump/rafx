@@ -2219,7 +2219,6 @@ fn build_node_barriers(
                 .entry(*physical_buffer)
                 .or_insert_with(|| RenderGraphPassBufferBarriers::new());
 
-
             let read_usage = graph.buffer_usage(buffer_modify.input);
             barrier.invalidate.access_flags |= read_usage.access_flags;
             barrier.invalidate.stage_flags |= read_usage.stage_flags;

@@ -14,7 +14,12 @@ use crate::{
 };
 use ash::prelude::*;
 use atelier_assets::loader::handle::Handle;
-use rafx_resources::{vk_description as dsc, DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef, DescriptorSetLayoutResource, DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource, ResourceArc, ComputePipelineResource};
+use rafx_resources::{
+    vk_description as dsc, ComputePipelineResource, DescriptorSetAllocatorMetrics,
+    DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef, DescriptorSetLayoutResource,
+    DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource,
+    ResourceArc,
+};
 use rafx_shell_vulkan::{VkBuffer, VkDeviceContext, VkImage};
 
 use super::asset_lookup::LoadedAssetMetrics;

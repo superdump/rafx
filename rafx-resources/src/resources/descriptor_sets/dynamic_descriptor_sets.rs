@@ -4,13 +4,15 @@ use super::DescriptorSetWriteSet;
 use crate::resources::descriptor_sets::descriptor_write_set::{
     DescriptorSetWriteElementBufferData, DescriptorSetWriteElementImageValue,
 };
-use crate::resources::descriptor_sets::{DescriptorSetAllocator, DescriptorSetWriteElementBufferDataBufferRef};
+use crate::resources::descriptor_sets::{
+    DescriptorSetAllocator, DescriptorSetWriteElementBufferDataBufferRef,
+};
 use crate::resources::resource_lookup::{DescriptorSetLayoutResource, ImageViewResource};
 use crate::resources::ResourceArc;
+use crate::vulkan::ash::vk;
+use crate::BufferResource;
 use ash::prelude::VkResult;
 use std::fmt::Formatter;
-use crate::BufferResource;
-use crate::vulkan::ash::vk;
 
 //TODO: Create a builder that is not initialized, this will help avoid forgetting to call flush
 // as well as prevent double-allocating (allocating a descriptor set based on a material instance
@@ -204,15 +206,17 @@ impl DynDescriptorSet {
             let what_to_bind = super::what_to_bind(element);
             if what_to_bind.bind_buffers {
                 if let Some(element_buffer) = element.buffer_info.get_mut(array_index) {
-                    element_buffer.buffer = Some(DescriptorSetWriteElementBufferData::BufferRef(DescriptorSetWriteElementBufferDataBufferRef {
-                        buffer: buffer.clone(),
-                        offset: 0,
-                        size: vk::WHOLE_SIZE,
-                    }));
+                    element_buffer.buffer = Some(DescriptorSetWriteElementBufferData::BufferRef(
+                        DescriptorSetWriteElementBufferDataBufferRef {
+                            buffer: buffer.clone(),
+                            offset: 0,
+                            size: vk::WHOLE_SIZE,
+                        },
+                    ));
 
                     self.pending_write_set.elements.insert(key, element.clone());
 
-                    //self.dirty.insert(key);
+                //self.dirty.insert(key);
                 } else {
                     log::warn!("Tried to set image index {} but it did not exist. The image array is {} elements long.", array_index, element.buffer_info.len());
                 }

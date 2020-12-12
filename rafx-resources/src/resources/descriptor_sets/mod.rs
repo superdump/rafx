@@ -96,7 +96,7 @@ pub fn what_to_bind(element_write: &DescriptorSetElementWrite) -> WhatToBind {
         }
         dsc::DescriptorType::UniformBuffer => {
             what.bind_buffers = true;
-        },
+        }
         dsc::DescriptorType::StorageBuffer => {
             what.bind_buffers = true;
         }

@@ -1,9 +1,9 @@
 use rafx::graph::*;
 
 use super::RenderGraphContext;
-use rafx::resources::{ComputePipelineResource, ResourceArc};
 use ash::version::DeviceV1_0;
 use ash::vk;
+use rafx::resources::{ComputePipelineResource, ResourceArc};
 
 pub(super) struct ComputeTestPass {
     pub(super) node: RenderGraphNodeId,
@@ -13,7 +13,7 @@ pub(super) struct ComputeTestPass {
 
 pub(super) fn compute_test_pass(
     context: &mut RenderGraphContext,
-    test_compute_pipeline: &ResourceArc<ComputePipelineResource>
+    test_compute_pipeline: &ResourceArc<ComputePipelineResource>,
 ) -> ComputeTestPass {
     let node = context
         .graph
@@ -43,9 +43,18 @@ pub(super) fn compute_test_pass(
     context
         .graph_callbacks
         .set_compute_callback(node, move |args, _user_context| {
-
-            let mut descriptor_set_allocator = args.graph_context.resource_context().create_descriptor_set_allocator();
-            let mut descriptor_set = descriptor_set_allocator.create_dyn_descriptor_set_uninitialized(&test_compute_pipeline.get_raw().pipeline_layout.get_raw().descriptor_sets[0])?;
+            let mut descriptor_set_allocator = args
+                .graph_context
+                .resource_context()
+                .create_descriptor_set_allocator();
+            let mut descriptor_set = descriptor_set_allocator
+                .create_dyn_descriptor_set_uninitialized(
+                    &test_compute_pipeline
+                        .get_raw()
+                        .pipeline_layout
+                        .get_raw()
+                        .descriptor_sets[0],
+                )?;
 
             let positions = args.graph_context.buffer(position_buffer).unwrap();
             let velocities = args.graph_context.buffer(velocity_buffer).unwrap();
@@ -60,15 +69,23 @@ pub(super) fn compute_test_pass(
             let device = args.graph_context.device_context().device();
 
             unsafe {
-                device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, test_compute_pipeline.get_raw().pipeline);
+                device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::COMPUTE,
+                    test_compute_pipeline.get_raw().pipeline,
+                );
 
                 device.cmd_bind_descriptor_sets(
                     command_buffer,
                     vk::PipelineBindPoint::COMPUTE,
-                    test_compute_pipeline.get_raw().pipeline_layout.get_raw().pipeline_layout,
+                    test_compute_pipeline
+                        .get_raw()
+                        .pipeline_layout
+                        .get_raw()
+                        .pipeline_layout,
                     0,
                     &[descriptor_set.descriptor_set().get()],
-                    &[]
+                    &[],
                 );
 
                 device.cmd_dispatch(command_buffer, 100, 1, 1);
@@ -76,5 +93,9 @@ pub(super) fn compute_test_pass(
             Ok(())
         });
 
-    ComputeTestPass { node, position_buffer, velocity_buffer }
+    ComputeTestPass {
+        node,
+        position_buffer,
+        velocity_buffer,
+    }
 }
