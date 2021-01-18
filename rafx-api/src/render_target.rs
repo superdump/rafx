@@ -34,7 +34,7 @@ impl RafxRenderTarget {
             #[cfg(feature = "rafx-vulkan")]
             RafxRenderTarget::Vk(inner) => inner.render_target_def(),
             #[cfg(feature = "rafx-metal")]
-            RafxRenderTarget::Metal(_inner) => unimplemented!(),
+            RafxRenderTarget::Metal(inner) => inner.render_target_def(),
         }
     }
 
@@ -44,7 +44,7 @@ impl RafxRenderTarget {
             #[cfg(feature = "rafx-vulkan")]
             RafxRenderTarget::Vk(inner) => inner.texture(),
             #[cfg(feature = "rafx-metal")]
-            RafxRenderTarget::Metal(_inner) => unimplemented!(),
+            RafxRenderTarget::Metal(inner) => inner.texture(),
         }
     }
 

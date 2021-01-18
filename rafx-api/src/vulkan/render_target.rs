@@ -121,57 +121,9 @@ impl RafxRenderTargetVulkan {
         existing_image: Option<RafxRawImageVulkan>,
         render_target_def: &RafxRenderTargetDef,
     ) -> RafxResult<Self> {
-        assert!(render_target_def.extents.width > 0);
-        assert!(render_target_def.extents.height > 0);
-        assert!(render_target_def.extents.depth > 0);
-        assert!(render_target_def.array_length > 0);
-        assert!(render_target_def.mip_count > 0);
+        render_target_def.verify();
 
-        // we support only one or the other
-        assert!(
-            !(render_target_def.resource_type.contains(
-                RafxResourceType::RENDER_TARGET_ARRAY_SLICES
-                    | RafxResourceType::RENDER_TARGET_DEPTH_SLICES
-            ))
-        );
-
-        let has_depth = render_target_def.format.has_depth();
-
-        assert!(
-            !(has_depth
-                && render_target_def
-                    .resource_type
-                    .intersects(RafxResourceType::TEXTURE_READ_WRITE)),
-            "Cannot use depth stencil as UAV"
-        );
-
-        assert!(render_target_def.mip_count > 0);
-        let depth_array_size_multiple =
-            render_target_def.extents.depth * render_target_def.array_length;
-
-        let array_or_depth_slices = render_target_def.resource_type.intersects(
-            RafxResourceType::RENDER_TARGET_ARRAY_SLICES
-                | RafxResourceType::RENDER_TARGET_DEPTH_SLICES,
-        );
-
-        let mut texture_def = RafxTextureDef {
-            extents: render_target_def.extents.clone(),
-            array_length: render_target_def.array_length,
-            mip_count: render_target_def.mip_count,
-            sample_count: render_target_def.sample_count,
-            format: render_target_def.format,
-            resource_type: render_target_def.resource_type,
-            dimensions: render_target_def.dimensions,
-        };
-
-        if render_target_def.format.has_depth_or_stencil() {
-            texture_def.resource_type |= RafxResourceType::RENDER_TARGET_DEPTH_STENCIL;
-        } else {
-            texture_def.resource_type |= RafxResourceType::RENDER_TARGET_COLOR;
-        }
-
-        // By default make SRV views for render targets
-        texture_def.resource_type |= RafxResourceType::TEXTURE;
+        let mut texture_def = render_target_def.to_texture_def();
 
         if has_depth {
             //TODO: Check the format is supported with vkGetPhysicalDeviceImageFormatProperties or VkSwapchain::choose_supported_format()
@@ -180,6 +132,9 @@ impl RafxRenderTargetVulkan {
 
         let texture =
             RafxTextureVulkan::from_existing(device_context, existing_image, &texture_def)?;
+
+        let depth_array_size_multiple =
+            render_target_def.extents.depth * render_target_def.array_length;
 
         let image_view_type = if render_target_def.dimensions != RafxTextureDimensions::Dim1D {
             if depth_array_size_multiple > 1 {
@@ -217,6 +172,11 @@ impl RafxRenderTargetVulkan {
                 .device()
                 .create_image_view(&*image_view_create_info, None)?
         };
+
+        let array_or_depth_slices = render_target_def.resource_type.intersects(
+            RafxResourceType::RENDER_TARGET_ARRAY_SLICES
+                | RafxResourceType::RENDER_TARGET_DEPTH_SLICES,
+        );
 
         let mut view_slices = vec![];
         for i in 0..render_target_def.mip_count {

@@ -167,6 +167,19 @@ impl Default for RafxTextureDef {
     }
 }
 
+impl RafxTextureDef {
+    pub fn verify(&self) {
+        assert!(self.extents.width > 0);
+        assert!(self.extents.height > 0);
+        assert!(self.extents.depth > 0);
+        assert!(self.array_length > 0);
+        assert!(self.mip_count > 0);
+        assert!(
+            self.mip_count < 2 || self.sample_count == RafxSampleCount::SampleCount1
+        );
+    }
+}
+
 //TODO: Could just use RafxTextureDef
 #[derive(Clone, Debug)]
 pub struct RafxRenderTargetDef {
@@ -196,6 +209,58 @@ impl Default for RafxRenderTargetDef {
             resource_type: RafxResourceType::RENDER_TARGET_COLOR,
             dimensions: RafxTextureDimensions::Auto,
         }
+    }
+}
+
+impl RafxRenderTargetDef {
+    pub fn to_texture_def(&self) -> RafxTextureDef {
+        let mut texture_def = RafxTextureDef {
+            extents: self.extents.clone(),
+            array_length: self.array_length,
+            mip_count: self.mip_count,
+            sample_count: self.sample_count,
+            format: self.format,
+            resource_type: self.resource_type,
+            dimensions: self.dimensions,
+        };
+
+        if self.format.has_depth_or_stencil() {
+            texture_def.resource_type |= RafxResourceType::RENDER_TARGET_DEPTH_STENCIL;
+        } else {
+            texture_def.resource_type |= RafxResourceType::RENDER_TARGET_COLOR;
+        }
+
+        // By default make SRV views for render targets
+        texture_def.resource_type |= RafxResourceType::TEXTURE;
+
+        texture_def
+    }
+}
+
+impl RafxRenderTargetDef {
+    pub fn verify(&self) {
+        assert!(self.extents.width > 0);
+        assert!(self.extents.height > 0);
+        assert!(self.extents.depth > 0);
+        assert!(self.array_length > 0);
+        assert!(self.mip_count > 0);
+
+
+        // we support only one or the other
+        assert!(
+            !(self.resource_type.contains(
+                RafxResourceType::RENDER_TARGET_ARRAY_SLICES
+                    | RafxResourceType::RENDER_TARGET_DEPTH_SLICES
+            ))
+        );
+
+        assert!(
+            !(self.format.has_depth()
+                && self
+                .resource_type
+                .intersects(RafxResourceType::TEXTURE_READ_WRITE)),
+            "Cannot use depth stencil as UAV"
+        );
     }
 }
 

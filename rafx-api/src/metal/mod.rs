@@ -73,22 +73,41 @@ pub use api::*;
 mod device_context;
 pub use device_context::*;
 
-#[derive(Debug)]
-pub struct RafxTextureMetal;
+mod swapchain;
+pub use swapchain::*;
+
+mod texture;
+pub use texture::*;
+
+mod render_target;
+pub use render_target::*;
+
+mod semaphore;
+pub use semaphore::*;
+
+mod fence;
+pub use fence::*;
+
+mod queue;
+pub use queue::*;
+
+mod command_pool;
+pub use command_pool::*;
+
+mod command_buffer;
+pub use command_buffer::*;
+
+mod buffer;
+pub use buffer::*;
+
+mod internal;
+
 #[derive(Clone, Debug)]
 pub struct RafxShaderModuleMetal;
-#[derive(Clone, Debug)]
-pub struct RafxQueueMetal;
-#[derive(Debug)]
-pub struct RafxBufferMetal;
-#[derive(Debug)]
-pub struct RafxCommandBufferMetal;
 
-pub struct RafxFenceMetal;
-pub struct RafxSemaphoreMetal;
-pub struct RafxSwapchainMetal;
-#[derive(Clone, Debug)]
-pub struct RafxRenderTargetMetal;
+//pub struct RafxSemaphoreMetal;
+// #[derive(Clone, Debug)]
+// pub struct RafxRenderTargetMetal;
 #[derive(Clone, Debug)]
 pub struct RafxShaderMetal;
 #[derive(Clone, Debug)]
@@ -101,4 +120,3 @@ pub struct RafxSamplerMetal;
 pub struct RafxDescriptorSetArrayMetal;
 #[derive(Clone, Debug)]
 pub struct RafxDescriptorSetHandleMetal;
-pub struct RafxCommandPoolMetal;

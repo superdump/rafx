@@ -19,11 +19,12 @@ use fnv::FnvHashMap;
 #[cfg(feature = "track-device-contexts")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal};
 
 pub struct RafxDeviceContextMetalInner {
-    //pub(crate) device_info: RafxDeviceInfo,
+    pub(crate) device_info: RafxDeviceInfo,
 
-    //device: ash::Device,
+    device: metal::Device,
     destroyed: AtomicBool,
 
     #[cfg(debug_assertions)]
@@ -49,13 +50,14 @@ impl Drop for RafxDeviceContextMetalInner {
 
 impl RafxDeviceContextMetalInner {
     pub fn new() -> RafxResult<Self> {
-        // let device_info = RafxDeviceInfo {
-        //     min_uniform_buffer_offset_alignment: limits.min_uniform_buffer_offset_alignment as u32,
-        //     min_storage_buffer_offset_alignment: limits.min_storage_buffer_offset_alignment as u32,
-        //     upload_buffer_texture_alignment: limits.optimal_buffer_copy_offset_alignment as u32,
-        //     upload_buffer_texture_row_alignment: limits.optimal_buffer_copy_row_pitch_alignment
-        //         as u32,
-        // };
+        let device_info = RafxDeviceInfo {
+            // pretty sure this is consistent across macOS device (maybe not M1, not sure)
+            min_uniform_buffer_offset_alignment: 256,
+            // based on one of the loosest vulkan limits (intel iGPU), can't find official value
+            min_storage_buffer_offset_alignment: 64,
+            upload_buffer_texture_alignment: 16,
+            upload_buffer_texture_row_alignment: 1,
+        };
 
         #[cfg(debug_assertions)]
         #[cfg(feature = "track-device-contexts")]
@@ -66,8 +68,11 @@ impl RafxDeviceContextMetalInner {
             all_contexts
         };
 
+        let device = metal::Device::system_default().expect("no device found");
+
         Ok(RafxDeviceContextMetalInner {
-            //device_info,
+            device_info,
+            device,
             destroyed: AtomicBool::new(false),
 
             #[cfg(debug_assertions)]
@@ -154,9 +159,13 @@ impl Into<RafxDeviceContext> for RafxDeviceContextMetal {
 }
 
 impl RafxDeviceContextMetal {
-    // pub fn device_info(&self) -> &RafxDeviceInfo {
-    //     &self.inner.device_info
-    // }
+    pub fn device_info(&self) -> &RafxDeviceInfo {
+        &self.inner.device_info
+    }
+
+    pub fn device(&self) -> &metal::Device {
+        &self.inner.device
+    }
 
     pub fn new(inner: Arc<RafxDeviceContextMetalInner>) -> RafxResult<Self> {
         Ok(RafxDeviceContextMetal {
@@ -166,55 +175,37 @@ impl RafxDeviceContextMetal {
             create_index: 0,
         })
     }
-    //
-    // pub fn create_queue(
-    //     &self,
-    //     queue_type: RafxQueueType,
-    // ) -> RafxResult<RafxQueueMetal> {
-    //     RafxQueueMetal::new(self, queue_type)
-    // }
-    //
-    // pub fn create_fence(&self) -> RafxResult<RafxFenceMetal> {
-    //     RafxFenceMetal::new(self)
-    // }
-    //
-    // pub fn create_semaphore(&self) -> RafxResult<RafxSemaphoreMetal> {
-    //     RafxSemaphoreMetal::new(self)
-    // }
-    //
-    // pub fn create_swapchain(
-    //     &self,
-    //     raw_window_handle: &dyn HasRawWindowHandle,
-    //     swapchain_def: &RafxSwapchainDef,
-    // ) -> RafxResult<RafxSwapchainMetal> {
-    //     RafxSwapchainMetal::new(self, raw_window_handle, swapchain_def)
-    // }
-    //
-    // pub fn wait_for_fences(
-    //     &self,
-    //     fences: &[&RafxFenceMetal],
-    // ) -> RafxResult<()> {
-    //     let mut fence_list = Vec::with_capacity(fences.len());
-    //     for fence in fences {
-    //         if fence.submitted() {
-    //             fence_list.push(fence.vk_fence());
-    //         }
-    //     }
-    //
-    //     if !fence_list.is_empty() {
-    //         let device = self.device();
-    //         unsafe {
-    //             device.wait_for_fences(&fence_list, true, std::u64::MAX)?;
-    //             device.reset_fences(&fence_list)?;
-    //         }
-    //     }
-    //
-    //     for fence in fences {
-    //         fence.set_submitted(false);
-    //     }
-    //
-    //     Ok(())
-    // }
+
+    pub fn create_queue(
+        &self,
+        queue_type: RafxQueueType,
+    ) -> RafxResult<RafxQueueMetal> {
+        RafxQueueMetal::new(self, queue_type)
+    }
+
+    pub fn create_fence(&self) -> RafxResult<RafxFenceMetal> {
+        RafxFenceMetal::new(self)
+    }
+
+    pub fn create_semaphore(&self) -> RafxResult<RafxSemaphoreMetal> {
+        RafxSemaphoreMetal::new(self)
+    }
+
+    pub fn create_swapchain(
+        &self,
+        raw_window_handle: &dyn HasRawWindowHandle,
+        swapchain_def: &RafxSwapchainDef,
+    ) -> RafxResult<RafxSwapchainMetal> {
+        RafxSwapchainMetal::new(self, raw_window_handle, swapchain_def)
+    }
+
+    pub fn wait_for_fences(
+        &self,
+        fences: &[&RafxFenceMetal],
+    ) -> RafxResult<()> {
+        RafxFenceMetal::wait_for_fences(self, fences)
+    }
+
     //
     // pub fn wait_for_device_idle(&self) -> RafxResult<()> {
     //     unsafe {
@@ -229,28 +220,28 @@ impl RafxDeviceContextMetal {
     // ) -> RafxResult<RafxSamplerMetal> {
     //     RafxSamplerMetal::new(self, sampler_def)
     // }
-    //
-    // pub fn create_texture(
-    //     &self,
-    //     texture_def: &RafxTextureDef,
-    // ) -> RafxResult<RafxTextureMetal> {
-    //     RafxTextureMetal::new(self, texture_def)
-    // }
-    //
-    // pub fn create_render_target(
-    //     &self,
-    //     render_target_def: &RafxRenderTargetDef,
-    // ) -> RafxResult<RafxRenderTargetMetal> {
-    //     RafxRenderTargetMetal::new(self, render_target_def)
-    // }
-    //
-    // pub fn create_buffer(
-    //     &self,
-    //     buffer_def: &RafxBufferDef,
-    // ) -> RafxResult<RafxBufferMetal> {
-    //     RafxBufferMetal::new(self, buffer_def)
-    // }
-    //
+
+    pub fn create_texture(
+        &self,
+        texture_def: &RafxTextureDef,
+    ) -> RafxResult<RafxTextureMetal> {
+        RafxTextureMetal::new(self, texture_def)
+    }
+
+    pub fn create_render_target(
+        &self,
+        render_target_def: &RafxRenderTargetDef,
+    ) -> RafxResult<RafxRenderTargetMetal> {
+        RafxRenderTargetMetal::new(self, render_target_def)
+    }
+
+    pub fn create_buffer(
+        &self,
+        buffer_def: &RafxBufferDef,
+    ) -> RafxResult<RafxBufferMetal> {
+        RafxBufferMetal::new(self, buffer_def)
+    }
+
     // pub fn create_shader(
     //     &self,
     //     stages: Vec<RafxShaderStageDef>,

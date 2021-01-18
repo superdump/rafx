@@ -376,26 +376,7 @@ impl RafxDeviceContextVulkan {
         &self,
         fences: &[&RafxFenceVulkan],
     ) -> RafxResult<()> {
-        let mut fence_list = Vec::with_capacity(fences.len());
-        for fence in fences {
-            if fence.submitted() {
-                fence_list.push(fence.vk_fence());
-            }
-        }
-
-        if !fence_list.is_empty() {
-            let device = self.device();
-            unsafe {
-                device.wait_for_fences(&fence_list, true, std::u64::MAX)?;
-                device.reset_fences(&fence_list)?;
-            }
-        }
-
-        for fence in fences {
-            fence.set_submitted(false);
-        }
-
-        Ok(())
+        RafxFenceVulkan::wait_for_fences(self, fences)
     }
 
     pub fn wait_for_device_idle(&self) -> RafxResult<()> {
