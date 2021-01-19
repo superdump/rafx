@@ -125,10 +125,10 @@ impl RafxRenderTargetVulkan {
 
         let mut texture_def = render_target_def.to_texture_def();
 
-        if has_depth {
+        //if has_depth {
             //TODO: Check the format is supported with vkGetPhysicalDeviceImageFormatProperties or VkSwapchain::choose_supported_format()
             // Either fail or default to something safe
-        }
+        //}
 
         let texture =
             RafxTextureVulkan::from_existing(device_context, existing_image, &texture_def)?;

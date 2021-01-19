@@ -19,7 +19,7 @@ use fnv::FnvHashMap;
 #[cfg(feature = "track-device-contexts")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal};
+use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxRootSignatureMetal};
 
 pub struct RafxDeviceContextMetalInner {
     pub(crate) device_info: RafxDeviceInfo,
@@ -242,19 +242,20 @@ impl RafxDeviceContextMetal {
         RafxBufferMetal::new(self, buffer_def)
     }
 
-    // pub fn create_shader(
-    //     &self,
-    //     stages: Vec<RafxShaderStageDef>,
-    // ) -> RafxResult<RafxShaderMetal> {
-    //     RafxShaderMetal::new(self, stages)
-    // }
-    //
-    // pub fn create_root_signature(
-    //     &self,
-    //     root_signature_def: &RafxRootSignatureDef,
-    // ) -> RafxResult<RafxRootSignatureMetal> {
-    //     RafxRootSignatureMetal::new(self, root_signature_def)
-    // }
+    pub fn create_shader(
+        &self,
+        stages: Vec<RafxShaderStageDef>,
+    ) -> RafxResult<RafxShaderMetal> {
+        RafxShaderMetal::new(self, stages)
+    }
+
+    pub fn create_root_signature(
+        &self,
+        root_signature_def: &RafxRootSignatureDef,
+    ) -> RafxResult<RafxRootSignatureMetal> {
+        RafxRootSignatureMetal::new(self, root_signature_def)
+    }
+
     //
     // pub fn create_descriptor_set_array(
     //     &self,
@@ -284,15 +285,12 @@ impl RafxDeviceContextMetal {
     //     RafxRenderpassMetal::new(self, renderpass_def)
     // }
     //
-    // pub fn create_shader_module(
-    //     &self,
-    //     data: RafxShaderModuleDefMetal
-    // ) -> RafxResult<RafxShaderModuleMetal> {
-    //     match data {
-    //         RafxShaderModuleDefMetal::VkSpvBytes(bytes) => RafxShaderModuleMetal::new_from_bytes(self, bytes),
-    //         RafxShaderModuleDefMetal::VkSpvPrepared(spv) => RafxShaderModuleMetal::new_from_spv(self, spv),
-    //     }
-    // }
+    pub fn create_shader_module(
+        &self,
+        data: RafxShaderModuleDefMetal
+    ) -> RafxResult<RafxShaderModuleMetal> {
+        RafxShaderModuleMetal::new(self, data)
+    }
     //
     // pub fn find_supported_format(
     //     &self,

@@ -460,14 +460,7 @@ impl RafxDeviceContextVulkan {
         &self,
         data: RafxShaderModuleDefVulkan,
     ) -> RafxResult<RafxShaderModuleVulkan> {
-        match data {
-            RafxShaderModuleDefVulkan::VkSpvBytes(bytes) => {
-                RafxShaderModuleVulkan::new_from_bytes(self, bytes)
-            }
-            RafxShaderModuleDefVulkan::VkSpvPrepared(spv) => {
-                RafxShaderModuleVulkan::new_from_spv(self, spv)
-            }
-        }
+        RafxShaderModuleVulkan::new(self, data)
     }
 
     // // Just expects bytes with no particular alignment requirements, suitable for reading from a file

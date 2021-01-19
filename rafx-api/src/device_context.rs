@@ -184,7 +184,9 @@ impl RafxDeviceContext {
                 RafxShaderModule::Vk(inner.create_shader_module(shader_module_def.vk.unwrap())?)
             }
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(_inner) => unimplemented!(),
+            RafxDeviceContext::Metal(inner) => {
+                RafxShaderModule::Metal(inner.create_shader_module(shader_module_def.metal.unwrap())?)
+            }
         })
     }
 
@@ -198,7 +200,7 @@ impl RafxDeviceContext {
             #[cfg(feature = "rafx-vulkan")]
             RafxDeviceContext::Vk(inner) => RafxShader::Vk(inner.create_shader(stages)?),
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(_inner) => unimplemented!(),
+            RafxDeviceContext::Metal(inner) => RafxShader::Metal(inner.create_shader(stages)?),
         })
     }
 
@@ -213,7 +215,9 @@ impl RafxDeviceContext {
                 RafxRootSignature::Vk(inner.create_root_signature(root_signature_def)?)
             }
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(_inner) => unimplemented!(),
+            RafxDeviceContext::Metal(inner) => {
+                RafxRootSignature::Metal(inner.create_root_signature(root_signature_def)?)
+            }
         })
     }
 

@@ -253,3 +253,7 @@ pub mod metal;
 
 pub mod extra;
 mod types;
+mod internal_shared;
+
+// Vulkan only guarantees up to 4 are available
+pub const MAX_DESCRIPTOR_SET_LAYOUTS: usize = 4;
