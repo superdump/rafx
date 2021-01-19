@@ -257,3 +257,5 @@ mod internal_shared;
 
 // Vulkan only guarantees up to 4 are available
 pub const MAX_DESCRIPTOR_SET_LAYOUTS: usize = 4;
+// In sync with RafxBlendStateTargets
+pub const MAX_RENDER_TARGET_ATTACHMENTS: usize = 8;

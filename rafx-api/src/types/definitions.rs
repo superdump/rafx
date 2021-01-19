@@ -791,6 +791,13 @@ impl RafxBlendStateRenderTarget {
 }
 
 impl RafxBlendStateRenderTarget {
+    pub fn blend_enabled(&self) -> bool {
+        self.src_factor != RafxBlendFactor::One
+            || self.src_factor_alpha != RafxBlendFactor::One
+            || self.dst_factor != RafxBlendFactor::Zero
+            || self.dst_factor_alpha != RafxBlendFactor::Zero
+    }
+
     #[cfg(feature = "rafx-vulkan")]
     pub fn into_vk_create_info(&self) -> vk::PipelineColorBlendAttachmentState {
         let blend_enable = self.src_factor != RafxBlendFactor::One
@@ -846,6 +853,14 @@ impl RafxBlendStateVkCreateInfo {
 }
 
 impl RafxBlendState {
+    pub fn verify(&self, color_attachment_count: usize) {
+        if !self.independent_blend {
+            assert_eq!(self.render_target_blend_states.len(), 1, "If RafxBlendState::independent_blend is false, RafxBlendState::render_target_blend_states must be 1");
+        } else {
+            assert_eq!(self.render_target_blend_states.len(), color_attachment_count, "If RafxBlendState::independent_blend is true, RafxBlendState::render_target_blend_states length must match color attachment count");
+        }
+    }
+
     #[cfg(feature = "rafx-vulkan")]
     pub fn into_vk_create_info(
         &self,
@@ -853,11 +868,7 @@ impl RafxBlendState {
     ) -> RafxBlendStateVkCreateInfo {
         let mut blend_attachments_states = vec![];
 
-        if !self.independent_blend {
-            assert_eq!(self.render_target_blend_states.len(), 1, "If RafxBlendState::independent_blend is false, RafxBlendState::render_target_blend_states must be 1");
-        } else {
-            assert_eq!(self.render_target_blend_states.len(), color_attachment_count, "If RafxBlendState::independent_blend is true, RafxBlendState::render_target_blend_states length must match color attachment count");
-        }
+        self.verify(color_attachment_count);
 
         if let Some(first_attachment) = self.render_target_blend_states.first() {
             for attachment_index in 0..color_attachment_count {

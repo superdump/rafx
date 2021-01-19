@@ -1,5 +1,5 @@
-use metal::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode};
-use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo};
+use metal::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode, MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptorArray, RenderPipelineColorAttachmentDescriptorArrayRef};
+use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo, RafxBlendState, RafxBlendStateTargets, MAX_RENDER_TARGET_ATTACHMENTS};
 
 pub(crate) fn resource_type_mtl_data_type(
     resource_type: RafxResourceType,
@@ -70,6 +70,45 @@ pub(crate) fn address_mode_mtl_sampler_address_mode(
             MTLSamplerAddressMode::ClampToBorderColor
         } else {
             MTLSamplerAddressMode::ClampToZero
+        }
+    }
+}
+
+pub(crate) fn blend_def_to_attachment(
+    blend_state: &RafxBlendState,
+    attachments: &RenderPipelineColorAttachmentDescriptorArrayRef,
+    color_attachment_count: usize,
+) {
+    blend_state.verify(color_attachment_count);
+    // for (index, render_target) in blend_state.render_target_blend_states.iter().enumerate() {
+    //     if (blend_state.render_target_mask.inter & (1<<index)) != 0 {
+    //
+    //     }
+    // }
+
+    if !blend_state.render_target_blend_states.is_empty() {
+        for attachment_index in 0..MAX_RENDER_TARGET_ATTACHMENTS {
+            if blend_state
+                .render_target_mask
+                .intersects(RafxBlendStateTargets::from_bits(1 << attachment_index).unwrap())
+            {
+                // Blend state can either be specified per target or once for all
+                let def_index = if blend_state.independent_blend {
+                    attachment_index
+                } else {
+                    0
+                };
+
+                let descriptor = attachments.object_at(attachment_index as _).unwrap();
+                let def = &blend_state.render_target_blend_states[def_index];
+                descriptor.set_blending_enabled(def.blend_enabled());
+                descriptor.set_rgb_blend_operation(def.blend_op.into());
+                descriptor.set_alpha_blend_operation(def.blend_op_alpha.into());
+                descriptor.set_source_rgb_blend_factor(def.src_factor.into());
+                descriptor.set_source_alpha_blend_factor(def.src_factor_alpha.into());
+                descriptor.set_destination_rgb_blend_factor(def.dst_factor.into());
+                descriptor.set_destination_alpha_blend_factor(def.dst_factor_alpha.into());
+            };
         }
     }
 }

@@ -14,6 +14,10 @@ pub struct RafxShaderModuleMetal {
 }
 
 impl RafxShaderModuleMetal {
+    pub fn library(&self) -> &metal::LibraryRef {
+        self.inner.library.as_ref()
+    }
+
     pub fn new(
         device_context: &RafxDeviceContextMetal,
         data: RafxShaderModuleDefMetal,
