@@ -1,5 +1,40 @@
-use crate::RafxMemoryUsage;
-use metal::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode};
+use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp};
+use metal::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction};
+
+pub mod util;
+
+impl Into<MTLSamplerMinMagFilter> for RafxFilterType {
+    fn into(self) -> MTLSamplerMinMagFilter {
+        match self {
+            RafxFilterType::Nearest => MTLSamplerMinMagFilter::Nearest,
+            RafxFilterType::Linear => MTLSamplerMinMagFilter::Linear,
+        }
+    }
+}
+
+impl Into<MTLSamplerMipFilter> for RafxMipMapMode {
+    fn into(self) -> MTLSamplerMipFilter {
+        match self {
+            RafxMipMapMode::Nearest => MTLSamplerMipFilter::Nearest,
+            RafxMipMapMode::Linear => MTLSamplerMipFilter::Linear,
+        }
+    }
+}
+
+impl Into<MTLCompareFunction> for RafxCompareOp {
+    fn into(self) -> MTLCompareFunction {
+        match self {
+            RafxCompareOp::Never => MTLCompareFunction::Never,
+            RafxCompareOp::Less => MTLCompareFunction::Less,
+            RafxCompareOp::Equal => MTLCompareFunction::Equal,
+            RafxCompareOp::LessOrEqual => MTLCompareFunction::LessEqual,
+            RafxCompareOp::Greater => MTLCompareFunction::Greater,
+            RafxCompareOp::NotEqual => MTLCompareFunction::NotEqual,
+            RafxCompareOp::GreaterOrEqual => MTLCompareFunction::GreaterEqual,
+            RafxCompareOp::Always => MTLCompareFunction::Always,
+        }
+    }
+}
 
 impl RafxMemoryUsage {
     pub fn resource_options(self) -> MTLResourceOptions {
@@ -34,3 +69,4 @@ impl RafxMemoryUsage {
         }
     }
 }
+

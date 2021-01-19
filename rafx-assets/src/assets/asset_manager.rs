@@ -983,6 +983,10 @@ impl Drop for AssetManager {
         log::info!("Cleaning up asset manager");
         log::trace!("Asset Manager Metrics:\n{:#?}", self.metrics());
 
+        // Wait for queues to be idle before destroying resources
+        self.transfer_queue.wait_for_queue_idle().unwrap();
+        self.graphics_queue.wait_for_queue_idle().unwrap();
+
         // Wipe out any loaded assets. This will potentially drop ref counts on resources
         self.loaded_assets.destroy();
 

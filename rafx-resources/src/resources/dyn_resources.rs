@@ -193,7 +193,6 @@ where
 
     fn destroy(
         &mut self,
-        device_context: &RafxDeviceContext,
     ) -> RafxResult<()> {
         self.handle_dropped_resources();
 
@@ -205,7 +204,7 @@ where
             );
         }
 
-        self.drop_sink.destroy(device_context)?;
+        self.drop_sink.destroy()?;
         Ok(())
     }
 
@@ -345,9 +344,9 @@ impl DynResourceAllocatorSetManager {
     pub fn destroy(&mut self) -> RafxResult<()> {
         //WARNING: These need to be in order of dependencies to avoid frame-delays on destroying
         // resources.
-        self.image_views.destroy(&self.device_context)?;
-        self.images.destroy(&self.device_context)?;
-        self.buffers.destroy(&self.device_context)?;
+        self.image_views.destroy()?;
+        self.images.destroy()?;
+        self.buffers.destroy()?;
         Ok(())
     }
 

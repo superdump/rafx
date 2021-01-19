@@ -212,7 +212,6 @@ impl ManagedDescriptorSetPool {
 
     pub fn destroy(
         &mut self,
-        device_context: &RafxDeviceContext,
     ) -> RafxResult<()> {
         for chunk in &mut self.chunks {
             chunk.destroy(
@@ -222,7 +221,7 @@ impl ManagedDescriptorSetPool {
         }
 
         self.descriptor_pool_allocator.destroy()?;
-        self.buffer_drop_sink.destroy(device_context)?;
+        self.buffer_drop_sink.destroy()?;
         self.chunks.clear();
         Ok(())
     }

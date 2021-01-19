@@ -19,7 +19,7 @@ use fnv::FnvHashMap;
 #[cfg(feature = "track-device-contexts")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxRootSignatureMetal};
+use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxRootSignatureMetal, RafxDescriptorSetArrayMetal, RafxSamplerMetal, RafxPipelineMetal};
 
 pub struct RafxDeviceContextMetalInner {
     pub(crate) device_info: RafxDeviceInfo,
@@ -57,6 +57,7 @@ impl RafxDeviceContextMetalInner {
             min_storage_buffer_offset_alignment: 64,
             upload_buffer_texture_alignment: 16,
             upload_buffer_texture_row_alignment: 1,
+            supports_clamp_to_border_color: true //TODO: Check for iOS support
         };
 
         #[cfg(debug_assertions)]
@@ -206,20 +207,12 @@ impl RafxDeviceContextMetal {
         RafxFenceMetal::wait_for_fences(self, fences)
     }
 
-    //
-    // pub fn wait_for_device_idle(&self) -> RafxResult<()> {
-    //     unsafe {
-    //         self.device().device_wait_idle()?;
-    //         Ok(())
-    //     }
-    // }
-    //
-    // pub fn create_sampler(
-    //     &self,
-    //     sampler_def: &RafxSamplerDef,
-    // ) -> RafxResult<RafxSamplerMetal> {
-    //     RafxSamplerMetal::new(self, sampler_def)
-    // }
+    pub fn create_sampler(
+        &self,
+        sampler_def: &RafxSamplerDef,
+    ) -> RafxResult<RafxSamplerMetal> {
+        RafxSamplerMetal::new(self, sampler_def)
+    }
 
     pub fn create_texture(
         &self,
@@ -256,27 +249,27 @@ impl RafxDeviceContextMetal {
         RafxRootSignatureMetal::new(self, root_signature_def)
     }
 
-    //
-    // pub fn create_descriptor_set_array(
-    //     &self,
-    //     descriptor_set_array_def: &RafxDescriptorSetArrayDef,
-    // ) -> RafxResult<RafxDescriptorSetArrayMetal> {
-    //     RafxDescriptorSetArrayMetal::new(self, self.descriptor_heap(), descriptor_set_array_def)
-    // }
-    //
-    // pub fn create_graphics_pipeline(
-    //     &self,
-    //     graphics_pipeline_def: &RafxGraphicsPipelineDef,
-    // ) -> RafxResult<RafxPipelineMetal> {
-    //     RafxPipelineMetal::new_graphics_pipeline(self, graphics_pipeline_def)
-    // }
-    //
-    // pub fn create_compute_pipeline(
-    //     &self,
-    //     compute_pipeline_def: &RafxComputePipelineDef,
-    // ) -> RafxResult<RafxPipelineMetal> {
-    //     RafxPipelineMetal::new_compute_pipeline(self, compute_pipeline_def)
-    // }
+
+    pub fn create_descriptor_set_array(
+        &self,
+        descriptor_set_array_def: &RafxDescriptorSetArrayDef,
+    ) -> RafxResult<RafxDescriptorSetArrayMetal> {
+        RafxDescriptorSetArrayMetal::new(self, descriptor_set_array_def)
+    }
+
+    pub fn create_graphics_pipeline(
+        &self,
+        graphics_pipeline_def: &RafxGraphicsPipelineDef,
+    ) -> RafxResult<RafxPipelineMetal> {
+        RafxPipelineMetal::new_graphics_pipeline(self, graphics_pipeline_def)
+    }
+
+    pub fn create_compute_pipeline(
+        &self,
+        compute_pipeline_def: &RafxComputePipelineDef,
+    ) -> RafxResult<RafxPipelineMetal> {
+        RafxPipelineMetal::new_compute_pipeline(self, compute_pipeline_def)
+    }
     //
     // pub(crate) fn create_renderpass(
     //     &self,
@@ -291,34 +284,19 @@ impl RafxDeviceContextMetal {
     ) -> RafxResult<RafxShaderModuleMetal> {
         RafxShaderModuleMetal::new(self, data)
     }
-    //
-    // pub fn find_supported_format(
-    //     &self,
-    //     candidates: &[RafxFormat],
-    //     resource_type: RafxResourceType,
-    // ) -> Option<RafxFormat> {
-    //     let mut features = vk::FormatFeatureFlags::empty();
-    //     if resource_type.intersects(RafxResourceType::RENDER_TARGET_COLOR) {
-    //         features |= vk::FormatFeatureFlags::COLOR_ATTACHMENT;
-    //     }
-    //
-    //     if resource_type.intersects(RafxResourceType::RENDER_TARGET_DEPTH_STENCIL) {
-    //         features |= vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
-    //     }
-    //
-    //     do_find_supported_format(
-    //         &self.inner.instance,
-    //         self.inner.physical_device,
-    //         candidates,
-    //         vk::ImageTiling::OPTIMAL,
-    //         features,
-    //     )
-    // }
-    //
-    // pub fn find_supported_sample_count(
-    //     &self,
-    //     candidates: &[RafxSampleCount],
-    // ) -> Option<RafxSampleCount> {
-    //     do_find_supported_sample_count(self.limits(), candidates)
-    // }
+
+    pub fn find_supported_format(
+        &self,
+        candidates: &[RafxFormat],
+        resource_type: RafxResourceType,
+    ) -> Option<RafxFormat> {
+        unimplemented!();
+    }
+
+    pub fn find_supported_sample_count(
+        &self,
+        candidates: &[RafxSampleCount],
+    ) -> Option<RafxSampleCount> {
+        unimplemented!();
+    }
 }

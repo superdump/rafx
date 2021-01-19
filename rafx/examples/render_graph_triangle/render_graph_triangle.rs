@@ -493,6 +493,9 @@ fn run() -> RafxResult<()> {
             let refs: Vec<&RafxCommandBuffer> = command_buffers.iter().map(|x| &**x).collect();
             presentable_frame.present(&graphics_queue, &refs)?;
         }
+
+        // Wait for all GPU work to complete before destroying resources it is using
+        graphics_queue.wait_for_queue_idle();
     }
 
     // Optional, but calling this verifies that all rafx objects/device contexts have been

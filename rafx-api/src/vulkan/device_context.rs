@@ -171,6 +171,7 @@ impl RafxDeviceContextVulkanInner {
             upload_buffer_texture_alignment: limits.optimal_buffer_copy_offset_alignment as u32,
             upload_buffer_texture_row_alignment: limits.optimal_buffer_copy_row_pitch_alignment
                 as u32,
+            supports_clamp_to_border_color: true,
         };
 
         let resource_cache = RafxDeviceVulkanResourceCache::default();
@@ -377,13 +378,6 @@ impl RafxDeviceContextVulkan {
         fences: &[&RafxFenceVulkan],
     ) -> RafxResult<()> {
         RafxFenceVulkan::wait_for_fences(self, fences)
-    }
-
-    pub fn wait_for_device_idle(&self) -> RafxResult<()> {
-        unsafe {
-            self.device().device_wait_idle()?;
-            Ok(())
-        }
     }
 
     pub fn create_sampler(

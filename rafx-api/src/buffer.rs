@@ -101,7 +101,7 @@ impl RafxBuffer {
     //         #[cfg(feature = "rafx-vulkan")]
     //         RafxBuffer::Vk(inner) => inner.mapped_memory(),
     //         #[cfg(feature = "rafx-metal")]
-    //         RafxBuffer::Metal(_inner) => unimplemented!(),
+    //         RafxBuffer::Metal(inner) => inner.mapped_memory(),
     //     }
     // }
 

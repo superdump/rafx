@@ -29,7 +29,6 @@ impl RafxRenderTargetMetal {
         device_context: &RafxDeviceContextMetal,
         render_target_def: &RafxRenderTargetDef,
     ) -> RafxResult<Self> {
-        unimplemented!();
         Self::from_existing(device_context, None, render_target_def)
     }
 

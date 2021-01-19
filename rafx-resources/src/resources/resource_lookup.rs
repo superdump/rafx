@@ -266,7 +266,6 @@ where
 
     fn destroy(
         &self,
-        device_context: &RafxDeviceContext,
     ) -> RafxResult<()> {
         let mut guard = self.inner.lock().unwrap();
         #[cfg(debug_assertions)]
@@ -284,7 +283,7 @@ where
             );
         }
 
-        guard.drop_sink.destroy(device_context)?;
+        guard.drop_sink.destroy()?;
         Ok(())
     }
 }
@@ -699,32 +698,34 @@ impl ResourceLookupSet {
         Ok(())
     }
 
+    // This assumes that no GPU work remains that relies on these resources. Use
+    // RafxQueue::wait_for_queue_idle
     pub fn destroy(&self) -> RafxResult<()> {
         //WARNING: These need to be in order of dependencies to avoid frame-delays on destroying
         // resources.
         self.inner
             .compute_pipelines
-            .destroy(&self.inner.device_context)?;
+            .destroy()?;
         self.inner
             .graphics_pipelines
-            .destroy(&self.inner.device_context)?;
+            .destroy()?;
         self.inner
             .material_passes
-            .destroy(&self.inner.device_context)?;
+            .destroy()?;
         self.inner
             .descriptor_set_layouts
-            .destroy(&self.inner.device_context)?;
+            .destroy()?;
         self.inner
             .root_signatures
-            .destroy(&self.inner.device_context)?;
-        self.inner.samplers.destroy(&self.inner.device_context)?;
-        self.inner.shaders.destroy(&self.inner.device_context)?;
+            .destroy()?;
+        self.inner.samplers.destroy()?;
+        self.inner.shaders.destroy()?;
         self.inner
             .shader_modules
-            .destroy(&self.inner.device_context)?;
-        self.inner.buffers.destroy(&self.inner.device_context)?;
-        self.inner.image_views.destroy(&self.inner.device_context)?;
-        self.inner.images.destroy(&self.inner.device_context)?;
+            .destroy()?;
+        self.inner.buffers.destroy()?;
+        self.inner.image_views.destroy()?;
+        self.inner.images.destroy()?;
         Ok(())
     }
 

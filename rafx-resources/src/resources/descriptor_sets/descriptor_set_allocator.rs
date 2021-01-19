@@ -68,7 +68,7 @@ impl DescriptorSetAllocator {
 
     pub fn destroy(&mut self) -> RafxResult<()> {
         for pool in self.pools.values_mut() {
-            pool.destroy(&self.device_context)?;
+            pool.destroy()?;
         }
 
         self.pools.clear();

@@ -43,9 +43,11 @@ pub use root_signature::*;
 mod descriptor_set_array;
 pub use descriptor_set_array::*;
 
-mod internal;
+mod sampler;
+pub use sampler::*;
 
-#[derive(Debug)]
-pub struct RafxPipelineMetal;
-#[derive(Debug, Clone)]
-pub struct RafxSamplerMetal;
+mod pipeline;
+pub use pipeline::*;
+
+mod internal;
+pub(crate) use internal::*;

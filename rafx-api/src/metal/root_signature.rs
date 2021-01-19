@@ -1,13 +1,25 @@
-use crate::metal::RafxDeviceContextMetal;
+use crate::metal::{RafxDeviceContextMetal, RafxSamplerMetal};
 use crate::{RafxRootSignatureDef, RafxResult, RafxResourceType, RafxSampler, RafxDescriptorIndex, RafxPipelineType, MAX_DESCRIPTOR_SET_LAYOUTS};
 use std::sync::Arc;
 use fnv::FnvHashMap;
+use metal::{MTLResourceUsage, MTLArgumentAccess, MTLTextureType};
+use cocoa_foundation::foundation::NSUInteger;
+
+#[derive(Debug)]
+pub(crate) struct ImmutableSampler {
+    //pub(crate) binding: u32,
+    pub(crate) samplers: Vec<RafxSamplerMetal>,
+
+    pub(crate) argument_buffer_id: NSUInteger,
+}
 
 //TODO: Could compact this down quite a bit
 #[derive(Clone, Debug)]
 pub(crate) struct DescriptorInfo {
     pub(crate) name: Option<String>,
     pub(crate) resource_type: RafxResourceType,
+    // Only valid for textures
+    //pub(crate) texture_dimensions: Option<RafxTextureDimension>,
 
     // Also the set layout
     pub(crate) set_index: u32,
@@ -19,36 +31,44 @@ pub(crate) struct DescriptorInfo {
     // NOT THE BINDING INDEX!!!
     pub(crate) descriptor_index: RafxDescriptorIndex,
 
-    pub(crate) immutable_sampler: Option<RafxSampler>,
+    // --- metal-specific ---
+    //pub(crate) immutable_sampler: Option<Vec<RafxSampler>>,
+    //pub(crate) usage: metal::MTLResourceUsage,
+    pub(crate) argument_buffer_id: NSUInteger,
 }
 
 #[derive(Default, Debug)]
 pub(crate) struct DescriptorSetLayoutInfo {
     // Settable descriptors, immutable samplers are omitted
     pub(crate) descriptors: Vec<RafxDescriptorIndex>,
-
     // Indexes binding index to the descriptors list
     pub(crate) binding_to_descriptor_index: FnvHashMap<u32, RafxDescriptorIndex>,
 
-    sampler_count: u32,
-    texture_count: u32,
-    buffer_count: u32,
+    // --- metal-specific ---
+    pub(crate) immutable_samplers: Vec<ImmutableSampler>,
+    // pub(crate) sampler_count: u32,
+    // pub(crate) texture_count: u32,
+    // pub(crate) buffer_count: u32,
 }
 
 #[derive(Debug)]
-struct RafxRootSignatureMetalInner {
+pub(crate) struct RafxRootSignatureMetalInner {
     pub(crate) device_context: RafxDeviceContextMetal,
     pub(crate) pipeline_type: RafxPipelineType,
+    pub(crate) layouts: [DescriptorSetLayoutInfo; MAX_DESCRIPTOR_SET_LAYOUTS],
     pub(crate) descriptors: Vec<DescriptorInfo>,
     pub(crate) name_to_descriptor_index: FnvHashMap<String, RafxDescriptorIndex>,
+
+    // --- metal-specific ---
     // Keeps them in scope so they don't drop
     //TODO: Can potentially remove, they are held in DescriptorInfo too
-    immutable_samplers: Vec<RafxSampler>,
+    //immutable_samplers: Vec<RafxSampler>,
+    pub(crate) argument_descriptors: [Vec<metal::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
 }
 
 #[derive(Clone, Debug)]
 pub struct RafxRootSignatureMetal {
-    inner: Arc<RafxRootSignatureMetalInner>
+    pub(crate) inner: Arc<RafxRootSignatureMetalInner>
 }
 
 impl RafxRootSignatureMetal {
@@ -67,17 +87,17 @@ impl RafxRootSignatureMetal {
         self.inner.name_to_descriptor_index.get(name).copied()
     }
 
-    // pub fn find_descriptor_by_binding(
-    //     &self,
-    //     set_index: u32,
-    //     binding: u32,
-    // ) -> Option<RafxDescriptorIndex> {
-    //     self.inner
-    //         .layouts
-    //         .get(set_index as usize)
-    //         .and_then(|x| x.binding_to_descriptor_index.get(&binding))
-    //         .copied()
-    // }
+    pub fn find_descriptor_by_binding(
+        &self,
+        set_index: u32,
+        binding: u32,
+    ) -> Option<RafxDescriptorIndex> {
+        self.inner
+            .layouts
+            .get(set_index as usize)
+            .and_then(|x| x.binding_to_descriptor_index.get(&binding))
+            .copied()
+    }
 
     pub(crate) fn descriptor(
         &self,
@@ -92,39 +112,39 @@ impl RafxRootSignatureMetal {
     ) -> RafxResult<Self> {
         log::trace!("Create RafxRootSignatureMetal");
 
-        let mut immutable_samplers = vec![];
-        for sampler_list in root_signature_def.immutable_samplers {
-            for sampler in sampler_list.samplers {
-                immutable_samplers.push(sampler.clone());
-            }
-        }
+        // let mut immutable_samplers = vec![];
+        // for sampler_list in root_signature_def.immutable_samplers {
+        //     for sampler in sampler_list.samplers {
+        //         immutable_samplers.push(sampler.clone());
+        //     }
+        // }
 
         // Make sure all shaders are compatible/build lookup of shared data from them
-        let (pipeline_type, merged_resources, _merged_resources_name_index_map) =
+        let (pipeline_type, mut merged_resources, _merged_resources_name_index_map) =
             crate::internal_shared::merge_resources(root_signature_def)?;
 
-        let mut sampler_count = 0;
-        let mut texture_count = 0;
-        let mut buffer_count = 0;
+        merged_resources.sort_by(|lhs, rhs| lhs.binding.cmp(&rhs.binding));
+
+        let mut layouts = [
+            DescriptorSetLayoutInfo::default(),
+            DescriptorSetLayoutInfo::default(),
+            DescriptorSetLayoutInfo::default(),
+            DescriptorSetLayoutInfo::default(),
+        ];
+
+        let mut next_argument_buffer_id = [0, 0, 0, 0];
 
         let mut descriptors = Vec::with_capacity(merged_resources.len());
         let mut name_to_descriptor_index = FnvHashMap::default();
 
         for resource in &merged_resources {
-            if resource.resource_type.intersects(RafxResourceType::SAMPLER) {
-                sampler_count += 1;
-            } else if resource.resource_type.intersects(RafxResourceType::TEXTURE | RafxResourceType::TEXTURE_READ_WRITE) {
-                texture_count += 1;
-            } else {
-                buffer_count += 1;
-            }
 
-            if resource.set_index as usize >= MAX_DESCRIPTOR_SET_LAYOUTS {
-                Err(format!(
-                    "Descriptor (set={:?} binding={:?}) named {:?} has a set index >= 4. This is not supported",
-                    resource.set_index, resource.binding, resource.name,
-                ))?;
-            }
+            resource.validate()?;
+
+            // Not currently supported
+            assert_ne!(resource.resource_type, RafxResourceType::ROOT_CONSTANT);
+
+            // Verify set index is valid
 
             let immutable_sampler = crate::internal_shared::find_immutable_sampler_index(
                 root_signature_def.immutable_samplers,
@@ -133,34 +153,109 @@ impl RafxRootSignatureMetal {
                 resource.binding,
             );
 
+            // Check that if an immutable sampler is set, the array size matches the resource element count
+            if let Some(immutable_sampler_index) = immutable_sampler {
+                if resource.element_count_normalized() as usize
+                    != root_signature_def.immutable_samplers[immutable_sampler_index].samplers.len()
+                {
+                    Err(format!(
+                        "Descriptor (set={:?} binding={:?}) named {:?} specifies {} elements but the count of provided immutable samplers ({}) did not match",
+                        resource.set_index,
+                        resource.binding,
+                        resource.name,
+                        resource.element_count_normalized(),
+                        root_signature_def.immutable_samplers[immutable_sampler_index].samplers.len()
+                    ))?;
+                }
+            }
+
+            let layout: &mut DescriptorSetLayoutInfo =
+                &mut layouts[resource.set_index as usize];
+
             let descriptor_index = RafxDescriptorIndex(descriptors.len() as u32);
 
-            // Add it to the descriptor list
-            descriptors.push(DescriptorInfo {
-                name: resource.name.clone(),
-                resource_type: resource.resource_type,
-                //texture_dimensions: resource.texture_dimensions,
-                set_index: resource.set_index,
-                binding: resource.binding,
-                element_count: resource.element_count_normalized(),
-                descriptor_index,
-                immutable_sampler: immutable_sampler.map(|x| immutable_samplers[x].clone()),
-            });
+            let argument_buffer_id = next_argument_buffer_id[resource.set_index as usize];
+            next_argument_buffer_id[resource.set_index as usize] += resource.element_count;
 
-            if let Some(name) = resource.name.as_ref() {
-                name_to_descriptor_index.insert(name.clone(), descriptor_index);
+            //let update_data_offset_in_set = Some(layout.update_data_count_per_set);
+
+            if let Some(immutable_sampler_index) = immutable_sampler {
+                let samplers = root_signature_def
+                    .immutable_samplers[immutable_sampler_index]
+                    .samplers
+                    .iter()
+                    .map(|x| x.metal_sampler().unwrap().clone())
+                    .collect();
+
+                layout.immutable_samplers.push(ImmutableSampler {
+                    //binding: resource.binding,
+                    samplers,
+                    argument_buffer_id: argument_buffer_id as _
+                });
+            } else {
+                // Add it to the descriptor list
+                descriptors.push(DescriptorInfo {
+                    name: resource.name.clone(),
+                    resource_type: resource.resource_type,
+                    //texture_dimensions: resource.texture_dimensions,
+                    set_index: resource.set_index,
+                    binding: resource.binding,
+                    element_count: resource.element_count_normalized(),
+                    descriptor_index,
+                    //immutable_sampler: immutable_sampler.map(|x| immutable_samplers[x].clone()),
+                    //update_data_offset_in_set,
+                    //usage
+                    argument_buffer_id: argument_buffer_id as _,
+                });
+
+                if let Some(name) = resource.name.as_ref() {
+                    name_to_descriptor_index.insert(name.clone(), descriptor_index);
+                }
+
+                layout.descriptors.push(descriptor_index);
+                layout
+                    .binding_to_descriptor_index
+                    .insert(resource.binding, descriptor_index);
+
+                // if resource.resource_type.intersects(RafxResourceType::SAMPLER) {
+                //     layout.sampler_count += 1;
+                // } else if resource.resource_type.intersects(RafxResourceType::TEXTURE | RafxResourceType::TEXTURE_READ_WRITE) {
+                //     layout.texture_count += 1;
+                // } else {
+                //     layout.buffer_count += 1;
+                // }
+            }
+
+            //layout.update_data_count_per_set += resource.element_count_normalized();
+        }
+
+        let mut argument_descriptors = [
+            vec![], vec![], vec![], vec![]
+        ];
+        for i in 0..MAX_DESCRIPTOR_SET_LAYOUTS {
+            for &resource_index in &layouts[i].descriptors {
+                let descriptor = &descriptors[resource_index.0 as usize];
+
+                let mut argument_descriptor = metal::ArgumentDescriptor::new().to_owned();
+
+                let access = super::util::resource_type_mtl_argument_access(descriptor.resource_type);
+                let data_type = super::util::resource_type_mtl_data_type(descriptor.resource_type).unwrap();
+                argument_descriptor.set_access(access);
+                argument_descriptor.set_array_length(descriptor.element_count as _);
+                argument_descriptor.set_data_type(data_type);
+                argument_descriptor.set_index(descriptor.argument_buffer_id as _);
+                argument_descriptor.set_texture_type(MTLTextureType::D2); //TODO: Temp, not sure if it's this gets changed when bound
+                argument_descriptors[i].push(argument_descriptor);
             }
         }
 
         let inner = RafxRootSignatureMetalInner {
             device_context: device_context.clone(),
             pipeline_type,
+            layouts,
             descriptors,
             name_to_descriptor_index,
-            immutable_samplers,
-            texture_count,
-            sampler_count,
-            buffer_count,
+            argument_descriptors
         };
 
         Ok(RafxRootSignatureMetal {

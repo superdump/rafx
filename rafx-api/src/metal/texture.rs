@@ -36,7 +36,6 @@ impl RafxTextureMetal {
         device_context: &RafxDeviceContextMetal,
         texture_def: &RafxTextureDef,
     ) -> RafxResult<RafxTextureMetal> {
-        unimplemented!();
         Self::from_existing(device_context, None, texture_def)
     }
 

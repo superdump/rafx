@@ -35,7 +35,7 @@ impl RafxQueue {
             #[cfg(feature = "rafx-vulkan")]
             RafxQueue::Vk(inner) => inner.queue_id(),
             #[cfg(feature = "rafx-metal")]
-            RafxQueue::Metal(_inner) => unimplemented!(),
+            RafxQueue::Metal(inner) => inner.queue_id(),
         }
     }
 

@@ -13,6 +13,10 @@ impl RafxBufferMetal {
         &self.buffer_def
     }
 
+    pub fn metal_buffer(&self) -> &metal::BufferRef {
+        self.buffer.as_ref()
+    }
+
     pub fn map_buffer(&self) -> RafxResult<*mut u8> {
         if self.buffer_def.memory_usage == RafxMemoryUsage::GpuOnly {
             return Err("Cannot map GPU-only buffer")?;

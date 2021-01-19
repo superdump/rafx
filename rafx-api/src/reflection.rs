@@ -1,5 +1,5 @@
 use crate::types::{RafxResourceType, RafxShaderStageFlags};
-use crate::{RafxResult, RafxShaderStageDef};
+use crate::{RafxResult, RafxShaderStageDef, MAX_DESCRIPTOR_SET_LAYOUTS};
 use fnv::FnvHashMap;
 #[cfg(feature = "serde-support")]
 use serde::{Deserialize, Serialize};
@@ -111,6 +111,13 @@ impl RafxShaderResource {
                         self.resource_type
                     )
                 )?;
+            }
+
+            if self.set_index as usize >= MAX_DESCRIPTOR_SET_LAYOUTS {
+                Err(format!(
+                    "Descriptor (set={:?} binding={:?}) named {:?} has a set index >= 4. This is not supported",
+                    self.set_index, self.binding, self.name,
+                ))?;
             }
         }
 

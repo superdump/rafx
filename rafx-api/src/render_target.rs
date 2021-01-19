@@ -48,26 +48,6 @@ impl RafxRenderTarget {
         }
     }
 
-    // each render target gets a new ID, meant for hashing
-    pub(crate) fn render_target_id(&self) -> u32 {
-        match self {
-            #[cfg(feature = "rafx-vulkan")]
-            RafxRenderTarget::Vk(inner) => inner.render_target_id(),
-            #[cfg(feature = "rafx-metal")]
-            RafxRenderTarget::Metal(_inner) => unimplemented!(),
-        }
-    }
-
-    // used to transition the resource from UNKNOWN state on first use
-    pub(crate) fn take_is_undefined_layout(&self) -> bool {
-        match self {
-            #[cfg(feature = "rafx-vulkan")]
-            RafxRenderTarget::Vk(inner) => inner.take_is_undefined_layout(),
-            #[cfg(feature = "rafx-metal")]
-            RafxRenderTarget::Metal(_inner) => unimplemented!(),
-        }
-    }
-
     /// Get the underlying vulkan API object. This provides access to any internally created
     /// vulkan objects.
     #[cfg(feature = "rafx-vulkan")]
