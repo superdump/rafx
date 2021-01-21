@@ -57,14 +57,18 @@ impl RafxCommandBufferMetal {
 
 
     pub fn begin(&self) -> RafxResult<()> {
-        let command_buffer = self.queue.metal_queue().new_command_buffer();
-        self.swap_command_buffer(Some(command_buffer.to_owned()));
-        self.last_pipeline_type.store(0, Ordering::Relaxed);
-        Ok(())
+        objc::rc::autoreleasepool(|| {
+            let command_buffer = self.queue.metal_queue().new_command_buffer();
+            self.swap_command_buffer(Some(command_buffer.to_owned()));
+            self.last_pipeline_type.store(0, Ordering::Relaxed);
+            Ok(())
+        })
     }
 
     pub fn end(&self) -> RafxResult<()> {
-        self.end_current_encoders(true)
+        objc::rc::autoreleasepool(|| {
+            self.end_current_encoders(true)
+        })
     }
 
     pub fn return_to_pool(&self) -> RafxResult<()> {
@@ -87,69 +91,73 @@ impl RafxCommandBufferMetal {
             Err("No color or depth target supplied to cmd_bind_render_targets")?;
         }
 
-        let descriptor = metal_rs::RenderPassDescriptor::new();
-        for (i, color_target) in color_targets.iter().enumerate() {
-            let color_descriptor = descriptor.color_attachments().object_at(i as _).unwrap();
-            let texture = color_target.render_target.texture().metal_texture().unwrap();
-            color_descriptor.set_texture(Some(texture.metal_texture()));
-            color_descriptor.set_level(color_target.mip_slice.unwrap_or(0) as _);
-            if color_target.array_slice.is_some() {
-                if texture.texture_def().extents.depth > 1 {
-                    color_descriptor.set_depth_plane(color_target.array_slice.unwrap() as _);
-                } else {
-                    color_descriptor.set_slice(color_target.array_slice.unwrap() as _);
+        objc::rc::autoreleasepool(|| {
+            let descriptor = metal_rs::RenderPassDescriptor::new();
+
+            for (i, color_target) in color_targets.iter().enumerate() {
+                let color_descriptor = descriptor.color_attachments().object_at(i as _).unwrap();
+                let texture = color_target.render_target.texture().metal_texture().unwrap();
+                color_descriptor.set_texture(Some(texture.metal_texture()));
+                color_descriptor.set_level(color_target.mip_slice.unwrap_or(0) as _);
+                if color_target.array_slice.is_some() {
+                    if texture.texture_def().extents.depth > 1 {
+                        color_descriptor.set_depth_plane(color_target.array_slice.unwrap() as _);
+                    } else {
+                        color_descriptor.set_slice(color_target.array_slice.unwrap() as _);
+                    }
+                }
+
+                color_descriptor.set_load_action(color_target.load_op.into());
+                let store_action = super::util::color_render_target_binding_mtl_store_op(color_target);
+                color_descriptor.set_store_action(store_action);
+
+                if color_target.load_op == RafxLoadOp::Clear {
+                    color_descriptor.set_clear_color(color_target.clear_value.into());
                 }
             }
 
-            color_descriptor.set_load_action(color_target.load_op.into());
-            let store_action = super::util::color_render_target_binding_mtl_store_op(color_target);
-            color_descriptor.set_store_action(store_action);
+            if let Some(depth_target) = depth_target {
+                let depth_descriptor = descriptor.depth_attachment().unwrap();
+                let texture = depth_target.render_target.texture().metal_texture().unwrap();
 
-            if color_target.load_op == RafxLoadOp::Clear {
-                color_descriptor.set_clear_color(color_target.clear_value.into());
-            }
-        }
+                depth_descriptor.set_texture(Some(texture.metal_texture()));
+                depth_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
+                depth_descriptor.set_slice(depth_target.array_slice.unwrap_or(0) as _);
+                depth_descriptor.set_load_action(depth_target.depth_load_op.into());
+                depth_descriptor.set_store_action(depth_target.depth_store_op.into());
 
-        if let Some(depth_target) = depth_target {
-            let depth_descriptor = descriptor.depth_attachment().unwrap();
-            let texture = depth_target.render_target.texture().metal_texture().unwrap();
-
-            depth_descriptor.set_texture(Some(texture.metal_texture()));
-            depth_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
-            depth_descriptor.set_slice(depth_target.array_slice.unwrap_or(0) as _);
-            depth_descriptor.set_load_action(depth_target.depth_load_op.into());
-            depth_descriptor.set_store_action(depth_target.depth_store_op.into());
-
-            let has_stencil = texture.texture_def().format.has_stencil();
-            if has_stencil {
-                let stencil_descriptor = descriptor.stencil_attachment().unwrap();
-                stencil_descriptor.set_texture(Some(texture.metal_texture()));
-                stencil_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
-                stencil_descriptor.set_slice(depth_target.array_slice.unwrap_or(0) as _);
-                stencil_descriptor.set_load_action(depth_target.stencil_load_op.into());
-                stencil_descriptor.set_store_action(depth_target.stencil_store_op.into());
+                let has_stencil = texture.texture_def().format.has_stencil();
+                if has_stencil {
+                    let stencil_descriptor = descriptor.stencil_attachment().unwrap();
+                    stencil_descriptor.set_texture(Some(texture.metal_texture()));
+                    stencil_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
+                    stencil_descriptor.set_slice(depth_target.array_slice.unwrap_or(0) as _);
+                    stencil_descriptor.set_load_action(depth_target.stencil_load_op.into());
+                    stencil_descriptor.set_store_action(depth_target.stencil_store_op.into());
+                } else {
+                    //let stencil_descriptor = descriptor.stencil_attachment().unwrap();
+                    //stencil_descriptor.set_load_action(RafxStoreOp::DontCare.into());
+                    //stencil_descriptor.set_store_action(RafxStoreOp::DontCare.into());
+                }
             } else {
-                //let stencil_descriptor = descriptor.stencil_attachment().unwrap();
-                //stencil_descriptor.set_load_action(RafxStoreOp::DontCare.into());
-                //stencil_descriptor.set_store_action(RafxStoreOp::DontCare.into());
+                // let depth_descriptor = descriptor.depth_attachment().unwrap();
+                // depth_descriptor.set_load_action(RafxStoreOp::DontCare.into());
+                // depth_descriptor.set_store_action(RafxStoreOp::DontCare.into());
+                // let stencil_descriptor = descriptor.stencil_attachment().unwrap();
+                // stencil_descriptor.set_load_action(RafxStoreOp::DontCare.into());
+                // stencil_descriptor.set_store_action(RafxStoreOp::DontCare.into());
             }
-        } else {
-            // let depth_descriptor = descriptor.depth_attachment().unwrap();
-            // depth_descriptor.set_load_action(RafxStoreOp::DontCare.into());
-            // depth_descriptor.set_store_action(RafxStoreOp::DontCare.into());
-            // let stencil_descriptor = descriptor.stencil_attachment().unwrap();
-            // stencil_descriptor.set_load_action(RafxStoreOp::DontCare.into());
-            // stencil_descriptor.set_store_action(RafxStoreOp::DontCare.into());
-        }
 
-        // end encoders
-        self.end_current_encoders(false)?;
-        let render_encoder = self.metal_command_buffer().unwrap().new_render_command_encoder(descriptor);
-        self.swap_render_encoder(Some(render_encoder.to_owned()));
-        self.wait_for_barriers()?;
-        // set heaps?
+            // end encoders
+            self.end_current_encoders(false)?;
+            let cmd_buffer = self.metal_command_buffer().unwrap();
+            let render_encoder = cmd_buffer.new_render_command_encoder(descriptor);
+            self.swap_render_encoder(Some(render_encoder.to_owned()));
+            self.wait_for_barriers()?;
+            // set heaps?
 
-        Ok(())
+            Ok(())
+        })
     }
 
     pub(crate) fn end_current_encoders(&self, force_barrier: bool) -> RafxResult<()> {
@@ -240,40 +248,42 @@ impl RafxCommandBufferMetal {
         &self,
         pipeline: &RafxPipelineMetal,
     ) -> RafxResult<()> {
-        let last_pipeline_type = self.last_pipeline_type.load(Ordering::Relaxed);
-        self.last_pipeline_type.store(pipeline.pipeline_type() as u8, Ordering::Relaxed);
+        objc::rc::autoreleasepool(|| {
+            let last_pipeline_type = self.last_pipeline_type.load(Ordering::Relaxed);
+            self.last_pipeline_type.store(pipeline.pipeline_type() as u8, Ordering::Relaxed);
 
-        let barrier_required = last_pipeline_type != pipeline.pipeline_type() as u8;
+            let barrier_required = last_pipeline_type != pipeline.pipeline_type() as u8;
 
-        match pipeline.pipeline_type() {
-            RafxPipelineType::Graphics => {
-                let render_encoder = self.metal_render_encoder().unwrap();
-                render_encoder.set_render_pipeline_state(pipeline.metal_render_pipeline().unwrap());
-                render_encoder.set_cull_mode(pipeline.mtl_cull_mode);
-                render_encoder.set_triangle_fill_mode(pipeline.mtl_triangle_fill_mode);
-                render_encoder.set_depth_bias(pipeline.mtl_depth_bias, pipeline.mtl_depth_bias_slope_scaled, 0.0);
-                render_encoder.set_depth_clip_mode(pipeline.mtl_depth_clip_mode);
-                if let Some(mtl_depth_stencil_state) = &pipeline.mtl_depth_stencil_state {
-                    render_encoder.set_depth_stencil_state(mtl_depth_stencil_state);
+            match pipeline.pipeline_type() {
+                RafxPipelineType::Graphics => {
+                    let render_encoder = self.metal_render_encoder().unwrap();
+                    render_encoder.set_render_pipeline_state(pipeline.metal_render_pipeline().unwrap());
+                    render_encoder.set_cull_mode(pipeline.mtl_cull_mode);
+                    render_encoder.set_triangle_fill_mode(pipeline.mtl_triangle_fill_mode);
+                    render_encoder.set_depth_bias(pipeline.mtl_depth_bias, pipeline.mtl_depth_bias_slope_scaled, 0.0);
+                    render_encoder.set_depth_clip_mode(pipeline.mtl_depth_clip_mode);
+                    if let Some(mtl_depth_stencil_state) = &pipeline.mtl_depth_stencil_state {
+                        render_encoder.set_depth_stencil_state(mtl_depth_stencil_state);
+                    }
+
+                    self.primitive_type.store(mtl_primitve_type_to_u8(pipeline.mtl_primitive_type), Ordering::Relaxed);
+                    self.flush_render_targets_to_make_readable();
                 }
+                RafxPipelineType::Compute => {
+                    if !self.metal_compute_encoder().is_some() {
+                        self.end_current_encoders(barrier_required);
 
-                self.primitive_type.store(mtl_primitve_type_to_u8(pipeline.mtl_primitive_type), Ordering::Relaxed);
-                self.flush_render_targets_to_make_readable();
-            }
-            RafxPipelineType::Compute => {
-                if !self.metal_compute_encoder().is_some() {
-                    self.end_current_encoders(barrier_required);
+                        let compute_encoder = self.metal_command_buffer().unwrap().new_compute_command_encoder();
+                        self.swap_compute_encoder(Some(compute_encoder.to_owned()));
+                    }
 
-                    let compute_encoder = self.metal_command_buffer().unwrap().new_compute_command_encoder();
-                    self.swap_compute_encoder(Some(compute_encoder.to_owned()));
+                    self.metal_compute_encoder().unwrap().set_compute_pipeline_state(pipeline.metal_compute_pipeline().unwrap());
+                    self.flush_render_targets_to_make_readable();
                 }
-
-                self.metal_compute_encoder().unwrap().set_compute_pipeline_state(pipeline.metal_compute_pipeline().unwrap());
-                self.flush_render_targets_to_make_readable();
             }
-        }
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn flush_render_targets_to_make_readable(&self) {
@@ -461,7 +471,9 @@ impl RafxCommandBufferMetal {
         use foreign_types_shared::ForeignTypeRef;
 
         let ptr = if let Some(command_buffer) = command_buffer {
-            command_buffer.as_ptr()
+            let ptr = command_buffer.as_ptr();
+            std::mem::forget(command_buffer);
+            ptr
         } else {
             std::ptr::null_mut() as _
         };
@@ -482,7 +494,9 @@ impl RafxCommandBufferMetal {
 
         let _has_render_encoder = render_encoder.is_some();
         let ptr = if let Some(render_encoder) = render_encoder {
-            render_encoder.as_ptr()
+            let ptr = render_encoder.as_ptr();
+            std::mem::forget(render_encoder);
+            ptr
         } else {
             std::ptr::null_mut() as _
         };
@@ -508,7 +522,9 @@ impl RafxCommandBufferMetal {
 
         let _has_compute_encoder = compute_encoder.is_some();
         let ptr = if let Some(compute_encoder) = compute_encoder {
-            compute_encoder.as_ptr()
+            let ptr = compute_encoder.as_ptr();
+            std::mem::forget(compute_encoder);
+            ptr
         } else {
             std::ptr::null_mut() as _
         };
@@ -534,7 +550,9 @@ impl RafxCommandBufferMetal {
 
         let _has_blit_encoder = blit_encoder.is_some();
         let ptr = if let Some(blit_encoder) = blit_encoder {
-            blit_encoder.as_ptr()
+            let ptr = blit_encoder.as_ptr();
+            std::mem::forget(blit_encoder);
+            ptr
         } else {
             std::ptr::null_mut() as _
         };

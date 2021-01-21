@@ -101,41 +101,43 @@ impl RafxSwapchainMetal {
     pub fn acquire_next_image(
         &mut self,
     ) -> RafxResult<RafxSwapchainImage> {
-        let drawable = self
-            .layer
-            .next_drawable()
-            .ok_or("Timed out while trying to acquire drawable".to_string())?;
+        objc::rc::autoreleasepool(|| {
+            let drawable = self
+                .layer
+                .next_drawable()
+                .ok_or("Timed out while trying to acquire drawable".to_string())?;
 
-        let old = self.swap_drawable(Some(drawable.to_owned()));
-        assert!(old.is_none());
+            let old = self.swap_drawable(Some(drawable.to_owned()));
+            assert!(old.is_none());
 
-        let raw_image = RafxRawImageMetal::Ref(drawable.texture().to_owned());
+            let raw_image = RafxRawImageMetal::Ref(drawable.texture().to_owned());
 
-        // This ends up being cheap because it doesn't allocate anything. We could cache it but it doesn't
-        // seem worthwhile
-        let render_target = RafxRenderTargetMetal::from_existing(&self.device_context, Some(raw_image), &RafxRenderTargetDef {
-            extents: RafxExtents3D {
-                width: self.swapchain_def.width,
-                height: self.swapchain_def.height,
-                depth: 1
-            },
-            array_length: 1,
-            mip_count: 1,
-            format: self.format,
-            resource_type: RafxResourceType::UNDEFINED,
-            sample_count: RafxSampleCount::SampleCount1,
-            dimensions: RafxTextureDimensions::Dim2D,
-        })?;
+            // This ends up being cheap because it doesn't allocate anything. We could cache it but it doesn't
+            // seem worthwhile
+            let render_target = RafxRenderTargetMetal::from_existing(&self.device_context, Some(raw_image), &RafxRenderTargetDef {
+                extents: RafxExtents3D {
+                    width: self.swapchain_def.width,
+                    height: self.swapchain_def.height,
+                    depth: 1
+                },
+                array_length: 1,
+                mip_count: 1,
+                format: self.format,
+                resource_type: RafxResourceType::UNDEFINED,
+                sample_count: RafxSampleCount::SampleCount1,
+                dimensions: RafxTextureDimensions::Dim2D,
+            })?;
 
-        let swapchain_image_index = self.next_swapchain_image_index;
-        self.next_swapchain_image_index += 1;
-        if self.next_swapchain_image_index >= SWAPCHAIN_IMAGE_COUNT {
-            self.next_swapchain_image_index = 0;
-        }
+            let swapchain_image_index = self.next_swapchain_image_index;
+            self.next_swapchain_image_index += 1;
+            if self.next_swapchain_image_index >= SWAPCHAIN_IMAGE_COUNT {
+                self.next_swapchain_image_index = 0;
+            }
 
-        Ok(RafxSwapchainImage {
-            render_target: RafxRenderTarget::Metal(render_target),
-            swapchain_image_index
+            Ok(RafxSwapchainImage {
+                render_target: RafxRenderTarget::Metal(render_target),
+                swapchain_image_index
+            })
         })
     }
 
@@ -144,7 +146,9 @@ impl RafxSwapchainMetal {
         use foreign_types_shared::ForeignTypeRef;
 
         let ptr = if let Some(drawable) = drawable {
-            drawable.as_ptr()
+            let ptr = drawable.as_ptr();
+            std::mem::forget(drawable);
+            ptr
         } else {
             std::ptr::null_mut() as _
         };

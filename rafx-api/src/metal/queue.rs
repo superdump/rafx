@@ -120,45 +120,47 @@ impl RafxQueueMetal {
         signal_semaphores: &[&RafxSemaphoreMetal],
         signal_fence: Option<&RafxFenceMetal>,
     ) -> RafxResult<()> {
-        assert!(!command_buffers.is_empty());
+        objc::rc::autoreleasepool(|| {
+            assert!(!command_buffers.is_empty());
 
-        // If a signal fence exists, mark it as submitted and add a closure to execute at the end
-        // of each command buffer. The closure will have a shared atomic counter that is incremented
-        // each time it is executed. When the counter reaches the number of command buffers, we know
-        // that all command buffers are finished executing and will signal the semaphore
-        if let Some(signal_fence) = signal_fence {
-            signal_fence.set_submitted(true);
+            // If a signal fence exists, mark it as submitted and add a closure to execute at the end
+            // of each command buffer. The closure will have a shared atomic counter that is incremented
+            // each time it is executed. When the counter reaches the number of command buffers, we know
+            // that all command buffers are finished executing and will signal the semaphore
+            if let Some(signal_fence) = signal_fence {
+                signal_fence.set_submitted(true);
 
-            let command_count = command_buffers.len();
-            let complete_count = Arc::new(AtomicUsize::new(0));
-            let dispatch_semaphore = signal_fence.metal_dispatch_semaphore().clone();
-            let block = block::ConcreteBlock::new(move |command_buffer_ref| {
-                // Add 1 because fetch_add returns the value from before the add
-                let complete = complete_count.fetch_add(1, Ordering::Relaxed) + 1 == command_count;
-                if complete {
-                    dispatch_semaphore.signal();
+                let command_count = command_buffers.len();
+                let complete_count = Arc::new(AtomicUsize::new(0));
+                let dispatch_semaphore = signal_fence.metal_dispatch_semaphore().clone();
+                let block = block::ConcreteBlock::new(move |command_buffer_ref| {
+                    // Add 1 because fetch_add returns the value from before the add
+                    let complete = complete_count.fetch_add(1, Ordering::Relaxed) + 1 == command_count;
+                    if complete {
+                        dispatch_semaphore.signal();
+                    }
+                }).copy();
+
+                for command_buffer in command_buffers {
+                    command_buffer.metal_command_buffer().unwrap().add_completed_handler(&block);
                 }
-            }).copy();
+            }
+
+            for signal_semaphore in signal_semaphores {
+                command_buffers.last().unwrap().metal_command_buffer().unwrap().encode_signal_event(signal_semaphore.metal_event(), 1);
+                signal_semaphore.set_signal_available(true);
+            }
+
+            self.submit_semaphore_wait(wait_semaphores);
 
             for command_buffer in command_buffers {
-                command_buffer.metal_command_buffer().unwrap().add_completed_handler(&block);
+                command_buffer.end_current_encoders(false);
+                command_buffer.metal_command_buffer().unwrap().commit();
+                command_buffer.swap_command_buffer(None);
             }
-        }
 
-        for signal_semaphore in signal_semaphores {
-            command_buffers.last().unwrap().metal_command_buffer().unwrap().encode_signal_event(signal_semaphore.metal_event(), 1);
-            signal_semaphore.set_signal_available(true);
-        }
-
-        self.submit_semaphore_wait(wait_semaphores);
-
-        for command_buffer in command_buffers {
-            command_buffer.end_current_encoders(false);
-            command_buffer.metal_command_buffer().unwrap().commit();
-            command_buffer.swap_command_buffer(None);
-        }
-
-        Ok(())
+            Ok(())
+        })
     }
 
     pub fn present(
@@ -167,14 +169,16 @@ impl RafxQueueMetal {
         wait_semaphores: &[&RafxSemaphoreMetal],
         image_index: u32,
     ) -> RafxResult<RafxPresentSuccessResult> {
-        self.submit_semaphore_wait(wait_semaphores);
+        objc::rc::autoreleasepool(|| {
+            self.submit_semaphore_wait(wait_semaphores);
 
-        let command_buffer = self.inner.queue.new_command_buffer();
-        let drawable = swapchain.swap_drawable(None).unwrap();
-        command_buffer.present_drawable(drawable.as_ref());
-        // Invalidate swapchain texture in some way?
-        command_buffer.commit();
+            let command_buffer = self.inner.queue.new_command_buffer();
+            let drawable = swapchain.swap_drawable(None).unwrap();
+            command_buffer.present_drawable(drawable.as_ref());
+            // Invalidate swapchain texture in some way?
+            command_buffer.commit();
 
-        Ok(RafxPresentSuccessResult::Success)
+            Ok(RafxPresentSuccessResult::Success)
+        })
     }
 }
