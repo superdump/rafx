@@ -1,10 +1,11 @@
 use crate::metal::RafxDeviceContextMetal;
 use crate::{RafxResult, RafxFenceStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub struct RafxFenceMetal {
     device_context: RafxDeviceContextMetal,
-    mtl_semaphore: dispatch::Semaphore,
+    mtl_semaphore: Arc<dispatch::Semaphore>,
     // Set to true when an operation is scheduled to signal this fence
     // Cleared when an operation is scheduled to consume this fence
     submitted: AtomicBool,
@@ -16,9 +17,13 @@ impl RafxFenceMetal {
 
         Ok(RafxFenceMetal {
             device_context: device_context.clone(),
-            mtl_semaphore,
+            mtl_semaphore: Arc::new(mtl_semaphore),
             submitted: AtomicBool::new(false),
         })
+    }
+
+    pub(crate) fn metal_dispatch_semaphore(&self) -> &Arc<dispatch::Semaphore> {
+        &self.mtl_semaphore
     }
 
     pub(crate) fn submitted(&self) -> bool {

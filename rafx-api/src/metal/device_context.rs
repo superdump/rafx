@@ -24,7 +24,7 @@ use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxT
 pub struct RafxDeviceContextMetalInner {
     pub(crate) device_info: RafxDeviceInfo,
 
-    device: metal::Device,
+    device: metal_rs::Device,
     destroyed: AtomicBool,
 
     #[cfg(debug_assertions)]
@@ -69,7 +69,7 @@ impl RafxDeviceContextMetalInner {
             all_contexts
         };
 
-        let device = metal::Device::system_default().expect("no device found");
+        let device = metal_rs::Device::system_default().expect("no device found");
 
         Ok(RafxDeviceContextMetalInner {
             device_info,
@@ -164,7 +164,7 @@ impl RafxDeviceContextMetal {
         &self.inner.device_info
     }
 
-    pub fn device(&self) -> &metal::Device {
+    pub fn device(&self) -> &metal_rs::Device {
         &self.inner.device
     }
 

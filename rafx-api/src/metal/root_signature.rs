@@ -2,7 +2,7 @@ use crate::metal::{RafxDeviceContextMetal, RafxSamplerMetal};
 use crate::{RafxRootSignatureDef, RafxResult, RafxResourceType, RafxSampler, RafxDescriptorIndex, RafxPipelineType, MAX_DESCRIPTOR_SET_LAYOUTS};
 use std::sync::Arc;
 use fnv::FnvHashMap;
-use metal::{MTLResourceUsage, MTLArgumentAccess, MTLTextureType};
+use metal_rs::{MTLResourceUsage, MTLArgumentAccess, MTLTextureType};
 use cocoa_foundation::foundation::NSUInteger;
 
 #[derive(Debug)]
@@ -63,7 +63,7 @@ pub(crate) struct RafxRootSignatureMetalInner {
     // Keeps them in scope so they don't drop
     //TODO: Can potentially remove, they are held in DescriptorInfo too
     //immutable_samplers: Vec<RafxSampler>,
-    pub(crate) argument_descriptors: [Vec<metal::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
+    pub(crate) argument_descriptors: [Vec<metal_rs::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
 }
 
 #[derive(Clone, Debug)]
@@ -236,16 +236,16 @@ impl RafxRootSignatureMetal {
             for &resource_index in &layouts[i].descriptors {
                 let descriptor = &descriptors[resource_index.0 as usize];
 
-                let mut argument_descriptor = metal::ArgumentDescriptor::new().to_owned();
+                let mut argument_descriptor = metal_rs::ArgumentDescriptor::new();
 
                 let access = super::util::resource_type_mtl_argument_access(descriptor.resource_type);
                 let data_type = super::util::resource_type_mtl_data_type(descriptor.resource_type).unwrap();
-                argument_descriptor.set_access(access);
+                argument_descriptor.set_access(MTLArgumentAccess::ReadWrite);
                 argument_descriptor.set_array_length(descriptor.element_count as _);
                 argument_descriptor.set_data_type(data_type);
                 argument_descriptor.set_index(descriptor.argument_buffer_id as _);
                 argument_descriptor.set_texture_type(MTLTextureType::D2); //TODO: Temp, not sure if it's this gets changed when bound
-                argument_descriptors[i].push(argument_descriptor);
+                argument_descriptors[i].push(argument_descriptor.to_owned());
             }
         }
 

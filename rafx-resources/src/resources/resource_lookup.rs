@@ -3,7 +3,7 @@ use crate::resources::resource_arc::{ResourceId, ResourceWithHash, WeakResourceA
 use crate::resources::DescriptorSetLayout;
 use crate::resources::ResourceArc;
 use crate::ResourceDropSink;
-use bitflags::_core::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU64;
 use crossbeam_channel::{Receiver, Sender};
 use fnv::{FnvHashMap, FnvHasher};
 use rafx_api::extra::image::RafxImage;

@@ -1,8 +1,17 @@
-use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp, RafxSampleCount, RafxVertexAttributeRate, RafxPrimitiveTopology, RafxBlendOp, RafxBlendFactor};
-use metal::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction, MTLStepFunction, MTLPrimitiveTopologyClass, MTLBlendOperation, MTLBlendFactor, MTLVertexStepFunction};
+use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp, RafxSampleCount, RafxVertexAttributeRate, RafxPrimitiveTopology, RafxBlendOp, RafxBlendFactor, RafxLoadOp, RafxStoreOp, RafxColorRenderTargetBinding, RafxColorClearValue, RafxCullMode, RafxFillMode, RafxFrontFace, RafxStencilOp};
+use metal_rs::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction, MTLStepFunction, MTLPrimitiveTopologyClass, MTLBlendOperation, MTLBlendFactor, MTLVertexStepFunction, MTLLoadAction, MTLStoreAction, MTLClearColor, MTLCullMode, MTLTriangleFillMode, MTLDepthClipMode, MTLWinding, MTLPrimitiveType, MTLStencilOperation};
 use cocoa_foundation::foundation::NSUInteger;
 
 pub mod util;
+
+bitflags::bitflags! {
+    pub struct BarrierFlagsMetal: u8 {
+        const BUFFERS = 1;
+        const TEXTURES = 2;
+        const RENDER_TARGETS = 4;
+        const FENCE = 8;
+    }
+}
 
 impl Into<MTLSamplerMinMagFilter> for RafxFilterType {
     fn into(self) -> MTLSamplerMinMagFilter {
@@ -56,6 +65,62 @@ impl Into<MTLPrimitiveTopologyClass> for RafxPrimitiveTopology {
     }
 }
 
+impl Into<MTLPrimitiveType> for RafxPrimitiveTopology {
+    fn into(self) -> MTLPrimitiveType {
+        match self {
+            RafxPrimitiveTopology::PointList => MTLPrimitiveType::Point,
+            RafxPrimitiveTopology::LineList => MTLPrimitiveType::Line,
+            RafxPrimitiveTopology::LineStrip => MTLPrimitiveType::LineStrip,
+            RafxPrimitiveTopology::TriangleList => MTLPrimitiveType::Triangle,
+            RafxPrimitiveTopology::TriangleStrip => MTLPrimitiveType::LineStrip,
+            RafxPrimitiveTopology::PatchList => MTLPrimitiveType::Triangle,
+        }
+    }
+}
+
+impl Into<MTLTriangleFillMode> for RafxFillMode {
+    fn into(self) -> MTLTriangleFillMode {
+        match self {
+            RafxFillMode::Solid => MTLTriangleFillMode::Fill,
+            RafxFillMode::Wireframe => MTLTriangleFillMode::Lines,
+        }
+    }
+}
+
+impl Into<MTLWinding> for RafxFrontFace {
+    fn into(self) -> MTLWinding {
+        match self {
+            RafxFrontFace::CounterClockwise => MTLWinding::CounterClockwise,
+            RafxFrontFace::Clockwise => MTLWinding::Clockwise,
+        }
+    }
+}
+
+impl Into<MTLCullMode> for RafxCullMode {
+    fn into(self) -> MTLCullMode {
+        match self {
+            RafxCullMode::None => MTLCullMode::None,
+            RafxCullMode::Back => MTLCullMode::Back,
+            RafxCullMode::Front => MTLCullMode::Front,
+        }
+    }
+}
+
+impl Into<MTLStencilOperation> for RafxStencilOp {
+    fn into(self) -> MTLStencilOperation {
+        match self {
+            RafxStencilOp::Keep => MTLStencilOperation::Keep,
+            RafxStencilOp::Zero => MTLStencilOperation::Zero,
+            RafxStencilOp::Replace => MTLStencilOperation::Replace,
+            RafxStencilOp::IncrementAndClamp => MTLStencilOperation::IncrementClamp,
+            RafxStencilOp::DecrementAndClamp => MTLStencilOperation::DecrementClamp,
+            RafxStencilOp::Invert => MTLStencilOperation::Invert,
+            RafxStencilOp::IncrementAndWrap => MTLStencilOperation::IncrementWrap,
+            RafxStencilOp::DecrementAndWrap => MTLStencilOperation::DecrementWrap,
+        }
+    }
+}
+
 impl Into<MTLCompareFunction> for RafxCompareOp {
     fn into(self) -> MTLCompareFunction {
         match self {
@@ -100,6 +165,32 @@ impl Into<MTLBlendFactor> for RafxBlendFactor {
             RafxBlendFactor::ConstantColor => MTLBlendFactor::BlendColor,
             RafxBlendFactor::OneMinusConstantColor => MTLBlendFactor::OneMinusBlendColor,
         }
+    }
+}
+
+impl Into<MTLLoadAction> for RafxLoadOp {
+    fn into(self) -> MTLLoadAction {
+        match self {
+            RafxLoadOp::DontCare => MTLLoadAction::DontCare,
+            RafxLoadOp::Load => MTLLoadAction::Load,
+            RafxLoadOp::Clear => MTLLoadAction::Clear,
+        }
+    }
+}
+
+
+impl Into<MTLStoreAction> for RafxStoreOp {
+    fn into(self) -> MTLStoreAction {
+        match self {
+            RafxStoreOp::DontCare => MTLStoreAction::DontCare,
+            RafxStoreOp::Store => MTLStoreAction::Store,
+        }
+    }
+}
+
+impl Into<MTLClearColor> for RafxColorClearValue {
+    fn into(self) -> MTLClearColor {
+        MTLClearColor::new(self.0[0] as f64, self.0[1] as f64, self.0[2] as f64, self.0[3] as f64)
     }
 }
 

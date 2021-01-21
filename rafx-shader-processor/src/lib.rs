@@ -11,6 +11,7 @@ mod parse_declarations;
 mod include;
 use include::include_impl;
 use include::IncludeType;
+use shaderc::ShaderKind;
 
 mod codegen;
 
@@ -337,6 +338,7 @@ fn process_glsl_shader(
         None
     };
 
+    let entry_points = ast.get_entry_points()?;
     log::trace!("{:?}: create msl", glsl_file);
     let mut msl_ast =
         spirv_cross::spirv::Ast::<spirv_cross::msl::Target>::parse(&spirv_cross_module)?;

@@ -256,7 +256,7 @@ impl Into<vk_mem::MemoryUsage> for RafxMemoryUsage {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RafxPresentSuccessResult {
     Success,
     SuccessSuboptimal,
@@ -358,8 +358,8 @@ impl Into<vk::ShaderStageFlags> for RafxShaderStageFlags {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum RafxPipelineType {
-    Graphics,
-    Compute,
+    Graphics = 0,
+    Compute = 1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -384,7 +384,7 @@ impl Into<vk::VertexInputRate> for RafxVertexAttributeRate {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq)]
 pub enum RafxLoadOp {
     DontCare,
     Load,
@@ -408,7 +408,7 @@ impl Into<vk::AttachmentLoadOp> for RafxLoadOp {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq)]
 pub enum RafxStoreOp {
     /// Do not store the render target, leaving the contents of it undefined
     DontCare,
@@ -630,7 +630,6 @@ pub enum RafxCullMode {
     None,
     Back,
     Front,
-    Both,
 }
 
 impl Default for RafxCullMode {
@@ -646,7 +645,6 @@ impl Into<vk::CullModeFlags> for RafxCullMode {
             RafxCullMode::None => vk::CullModeFlags::NONE,
             RafxCullMode::Back => vk::CullModeFlags::BACK,
             RafxCullMode::Front => vk::CullModeFlags::FRONT,
-            RafxCullMode::Both => vk::CullModeFlags::FRONT_AND_BACK,
         }
     }
 }

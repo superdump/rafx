@@ -1,5 +1,5 @@
-use metal::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode, MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptorArray, RenderPipelineColorAttachmentDescriptorArrayRef};
-use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo, RafxBlendState, RafxBlendStateTargets, MAX_RENDER_TARGET_ATTACHMENTS};
+use metal_rs::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode, MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptorArray, RenderPipelineColorAttachmentDescriptorArrayRef, MTLStoreAction, MTLCompareFunction};
+use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo, RafxBlendState, RafxBlendStateTargets, MAX_RENDER_TARGET_ATTACHMENTS, RafxColorRenderTargetBinding, RafxStoreOp, RafxDepthState};
 
 pub(crate) fn resource_type_mtl_data_type(
     resource_type: RafxResourceType,
@@ -109,6 +109,64 @@ pub(crate) fn blend_def_to_attachment(
                 descriptor.set_destination_rgb_blend_factor(def.dst_factor.into());
                 descriptor.set_destination_alpha_blend_factor(def.dst_factor_alpha.into());
             };
+        }
+    }
+}
+
+pub(crate) fn depth_state_to_descriptor(depth_state: &RafxDepthState) -> metal_rs::DepthStencilDescriptor {
+    let descriptor = metal_rs::DepthStencilDescriptor::new();
+
+    let depth_compare_function = if depth_state.depth_test_enable {
+        depth_state.depth_compare_op.into()
+    } else {
+        MTLCompareFunction::Always
+    };
+
+    descriptor.set_depth_compare_function(depth_compare_function);
+    descriptor.set_depth_write_enabled(depth_state.depth_write_enable);
+
+    let back_face_stencil = descriptor.back_face_stencil().unwrap();
+    let stencil_compare_function = if depth_state.stencil_test_enable {
+        depth_state.back_stencil_compare_op.into()
+    } else {
+        MTLCompareFunction::Always
+    };
+    back_face_stencil.set_stencil_compare_function(stencil_compare_function);
+    back_face_stencil.set_depth_failure_operation(depth_state.back_depth_fail_op.into());
+    back_face_stencil.set_stencil_failure_operation(depth_state.back_stencil_fail_op.into());
+    back_face_stencil.set_depth_stencil_pass_operation(depth_state.back_stencil_pass_op.into());
+    back_face_stencil.set_read_mask(depth_state.stencil_read_mask as u32);
+    back_face_stencil.set_write_mask(depth_state.stencil_write_mask as u32);
+
+    let front_face_stencil = descriptor.front_face_stencil().unwrap();
+    let stencil_compare_function = if depth_state.stencil_test_enable {
+        depth_state.front_stencil_compare_op.into()
+    } else {
+        MTLCompareFunction::Always
+    };
+    front_face_stencil.set_stencil_compare_function(stencil_compare_function);
+    front_face_stencil.set_depth_failure_operation(depth_state.front_depth_fail_op.into());
+    front_face_stencil.set_stencil_failure_operation(depth_state.front_stencil_fail_op.into());
+    front_face_stencil.set_depth_stencil_pass_operation(depth_state.front_stencil_pass_op.into());
+    front_face_stencil.set_read_mask(depth_state.stencil_read_mask as u32);
+    front_face_stencil.set_write_mask(depth_state.stencil_write_mask as u32);
+
+    descriptor
+}
+
+pub fn color_render_target_binding_mtl_store_op(color_binding: &RafxColorRenderTargetBinding) -> MTLStoreAction {
+    let resolve = color_binding.resolve_target.is_some() && color_binding.resolve_store_op == RafxStoreOp::Store;
+    if color_binding.store_op == RafxStoreOp::Store {
+        if resolve {
+            MTLStoreAction::StoreAndMultisampleResolve
+        } else {
+            MTLStoreAction::Store
+        }
+    } else {
+        if resolve {
+            MTLStoreAction::MultisampleResolve
+        } else {
+            MTLStoreAction::DontCare
         }
     }
 }

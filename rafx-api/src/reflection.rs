@@ -35,10 +35,10 @@ use serde::{Deserialize, Serialize};
 //     //pub size: u32,
 // }
 
-#[derive(PartialEq, Eq, Hash)]
-struct RafxShaderResourceBindingKey {
-    set: u32,
-    binding: u32,
+#[derive(PartialEq, Eq, Hash, Default)]
+pub struct RafxShaderResourceBindingKey {
+    pub set: u32,
+    pub binding: u32,
 }
 
 //TODO: Consider separate type for bindings vs. push constants

@@ -190,6 +190,8 @@
 pub use ash;
 #[cfg(feature = "rafx-vulkan")]
 pub use vk_mem;
+#[cfg(feature = "rafx-metal")]
+pub use metal_rs;
 
 pub use raw_window_handle;
 

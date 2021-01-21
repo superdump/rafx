@@ -175,6 +175,10 @@ fn run() -> RafxResult<()> {
                 // Example binding
                 color_shader_resource.clone(),
             ],
+            metal_info: Some(RafxShaderStageMetalInfo {
+                entry_point_override: Some("main0".to_string()),
+                ..Default::default()
+            })
         };
 
         let frag_shader_stage_def = RafxShaderStageDef {
@@ -185,6 +189,10 @@ fn run() -> RafxResult<()> {
                 // Example binding
                 color_shader_resource,
             ],
+            metal_info: Some(RafxShaderStageMetalInfo {
+                entry_point_override: Some("main0".to_string()),
+                ..Default::default()
+            })
         };
 
         //
@@ -350,6 +358,7 @@ fn run() -> RafxResult<()> {
             )?;
 
             cmd_buffer.cmd_bind_pipeline(&pipeline)?;
+
             cmd_buffer.cmd_bind_vertex_buffers(
                 0,
                 &[RafxVertexBufferBinding {
@@ -357,13 +366,14 @@ fn run() -> RafxResult<()> {
                     offset: 0,
                 }],
             )?;
-            cmd_buffer.cmd_bind_descriptor_set(
-                &descriptor_set_array,
-                presentable_frame.rotating_frame_index() as u32,
-            )?;
+            // cmd_buffer.cmd_bind_descriptor_set(
+            //     &descriptor_set_array,
+            //     presentable_frame.rotating_frame_index() as u32,
+            // )?;
             cmd_buffer.cmd_draw(3, 0)?;
 
             // Put it into a layout where we can present it
+
             cmd_buffer.cmd_unbind_render_targets()?;
 
             cmd_buffer.cmd_resource_barrier(

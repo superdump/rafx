@@ -5,9 +5,10 @@ use crate::{
 };
 use ash::version::DeviceV1_0;
 use ash::vk;
-use bitflags::_core::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
 static RENDER_TARGET_NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -40,6 +41,20 @@ impl Drop for RafxRenderTargetVulkanInner {
 #[derive(Clone, Debug)]
 pub struct RafxRenderTargetVulkan {
     inner: Arc<RafxRenderTargetVulkanInner>,
+}
+
+impl PartialEq for RafxRenderTargetVulkan {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.render_target_id == other.inner.render_target_id
+    }
+}
+
+impl Eq for RafxRenderTargetVulkan {}
+
+impl Hash for RafxRenderTargetVulkan {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.render_target_id.hash(state);
+    }
 }
 
 impl RafxRenderTargetVulkan {

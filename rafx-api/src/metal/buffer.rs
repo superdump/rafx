@@ -5,7 +5,7 @@ use crate::{RafxBufferDef, RafxResult, RafxResourceType, RafxMemoryUsage};
 pub struct RafxBufferMetal {
     device_context: RafxDeviceContextMetal,
     buffer_def: RafxBufferDef,
-    buffer: metal::Buffer,
+    buffer: metal_rs::Buffer,
 }
 
 impl RafxBufferMetal {
@@ -13,7 +13,7 @@ impl RafxBufferMetal {
         &self.buffer_def
     }
 
-    pub fn metal_buffer(&self) -> &metal::BufferRef {
+    pub fn metal_buffer(&self) -> &metal_rs::BufferRef {
         self.buffer.as_ref()
     }
 

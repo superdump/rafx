@@ -3,17 +3,17 @@ use crate::metal::RafxDeviceContextMetal;
 
 #[derive(Debug)]
 pub enum RafxRawImageMetal {
-    Owned(metal::Texture),
-    Ref(metal::Texture),
-    Null,
+    Owned(metal_rs::Texture),
+    Ref(metal_rs::Texture),
+    //Null,
 }
 
 impl RafxRawImageMetal {
-    pub fn metal_texture(&self) -> Option<&metal::TextureRef> {
+    pub fn metal_texture(&self) -> &metal_rs::TextureRef {
         match self {
-            RafxRawImageMetal::Owned(owned) => Some(owned.as_ref()),
-            RafxRawImageMetal::Ref(r) => Some(r.as_ref()),
-            RafxRawImageMetal::Null => None
+            RafxRawImageMetal::Owned(owned) => owned.as_ref(),
+            RafxRawImageMetal::Ref(r) => r.as_ref(),
+            //RafxRawImageMetal::Null => None
         }
     }
 }
@@ -30,6 +30,10 @@ pub struct RafxTextureMetal {
 impl RafxTextureMetal {
     pub fn texture_def(&self) -> &RafxTextureDef {
         &self.texture_def
+    }
+
+    pub fn metal_texture(&self) -> &metal_rs::TextureRef {
+        self.image.metal_texture()
     }
 
     pub fn new(

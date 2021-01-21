@@ -1,16 +1,24 @@
 use crate::metal::{RafxDeviceContextMetal, RafxRenderTargetMetal, RafxRawImageMetal};
 use crate::{RafxSwapchainDef, RafxFormat, RafxResult, RafxSwapchainImage, RafxRenderTargetDef, RafxExtents3D, RafxResourceType, RafxSampleCount, RafxTextureDimensions, RafxRenderTarget};
 use raw_window_handle::HasRawWindowHandle;
+use std::sync::atomic::{Ordering, AtomicPtr};
 
 const SWAPCHAIN_IMAGE_COUNT : u32 = 3;
 
 pub struct RafxSwapchainMetal {
     device_context: RafxDeviceContextMetal,
-    layer: metal::CoreAnimationLayer,
+    layer: metal_rs::MetalLayer,
+    drawable: AtomicPtr<metal_rs::CAMetalDrawable>,
     swapchain_def: RafxSwapchainDef,
     format: RafxFormat,
     // Just fake this
     next_swapchain_image_index: u32,
+}
+
+impl Drop for RafxSwapchainMetal {
+    fn drop(&mut self) {
+        self.swap_drawable(None);
+    }
 }
 
 impl RafxSwapchainMetal {
@@ -24,6 +32,10 @@ impl RafxSwapchainMetal {
 
     pub fn format(&self) -> RafxFormat {
         self.format
+    }
+
+    pub fn metal_layer(&self) -> &metal_rs::MetalLayerRef {
+        self.layer.as_ref()
     }
 
     pub fn new(
@@ -50,26 +62,27 @@ impl RafxSwapchainMetal {
         }.unwrap();
 
         let layer =
-            unsafe { std::mem::transmute::<_, &metal::CoreAnimationLayerRef>(layer).to_owned() };
+            unsafe { std::mem::transmute::<_, &metal_rs::MetalLayerRef>(layer).to_owned() };
 
         layer.set_device(device_context.device());
         //TODO: Don't hardcode pixel format
-        layer.set_pixel_format(metal::MTLPixelFormat::BGRA8Unorm);
+        // https://developer.apple.com/documentation/quartzcore/cametallayer/1478155-pixelformat
+        layer.set_pixel_format(metal_rs::MTLPixelFormat::BGRA8Unorm);
         layer.set_presents_with_transaction(false);
-        //TODO: Add to metal crate, following presents_with_transaction as an example
-        //layer.set_display_sync_enabled(swapchain_def.enable_vsync);
+        layer.set_display_sync_enabled(swapchain_def.enable_vsync);
 
         //TODO: disable timeout on acquire drawable?
-        layer.set_drawable_size(metal::CGSize::new(swapchain_def.width as f64, swapchain_def.height as f64));
+        layer.set_drawable_size(metal_rs::CGSize::new(swapchain_def.width as f64, swapchain_def.height as f64));
 
         let swapchain_def = swapchain_def.clone();
 
         Ok(RafxSwapchainMetal {
             device_context: device_context.clone(),
             layer,
+            drawable: Default::default(),
             swapchain_def,
             next_swapchain_image_index: 0,
-            format: RafxFormat::B8G8R8_UNORM
+            format: RafxFormat::B8G8R8A8_UNORM
         })
     }
 
@@ -77,7 +90,7 @@ impl RafxSwapchainMetal {
         &mut self,
         swapchain_def: &RafxSwapchainDef,
     ) -> RafxResult<()> {
-        self.layer.set_drawable_size(metal::CGSize::new(swapchain_def.width as f64, swapchain_def.height as f64));
+        self.layer.set_drawable_size(metal_rs::CGSize::new(swapchain_def.width as f64, swapchain_def.height as f64));
         //TODO: Add to metal crate, following presents_with_transaction as an example
         //self.layer.set_display_sync_enabled(swapchain_def.enable_vsync);
 
@@ -91,8 +104,10 @@ impl RafxSwapchainMetal {
         let drawable = self
             .layer
             .next_drawable()
-            .ok_or("Timed out while trying to acquire drawable".to_string())?
-            .to_owned();
+            .ok_or("Timed out while trying to acquire drawable".to_string())?;
+
+        let old = self.swap_drawable(Some(drawable.to_owned()));
+        assert!(old.is_none());
 
         let raw_image = RafxRawImageMetal::Ref(drawable.texture().to_owned());
 
@@ -122,5 +137,25 @@ impl RafxSwapchainMetal {
             render_target: RafxRenderTarget::Metal(render_target),
             swapchain_image_index
         })
+    }
+
+    pub(crate) fn swap_drawable(&self, drawable: Option<metal_rs::MetalDrawable>) -> Option<metal_rs::MetalDrawable> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+
+        let ptr = if let Some(drawable) = drawable {
+            drawable.as_ptr()
+        } else {
+            std::ptr::null_mut() as _
+        };
+
+        let ptr = self.drawable.swap(ptr, Ordering::Relaxed);
+        if !ptr.is_null() {
+            unsafe {
+                Some(metal_rs::MetalDrawable::from_ptr(ptr))
+            }
+        } else {
+            None
+        }
     }
 }

@@ -5,7 +5,7 @@ use crate::{RafxSamplerDef, RafxResult};
 #[derive(Debug)]
 pub struct RafxSamplerMetalInner {
     device_context: RafxDeviceContextMetal,
-    sampler: metal::SamplerState,
+    sampler: metal_rs::SamplerState,
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ impl RafxSamplerMetal {
         device_context: &RafxDeviceContextMetal,
         sampler_def: &RafxSamplerDef,
     ) -> RafxResult<RafxSamplerMetal> {
-        let mut descriptor = metal::SamplerDescriptor::new();
+        let mut descriptor = metal_rs::SamplerDescriptor::new();
         descriptor.set_min_filter(sampler_def.min_filter.into());
         descriptor.set_mag_filter(sampler_def.mag_filter.into());
         descriptor.set_mip_filter(sampler_def.mip_map_mode.into());

@@ -3,8 +3,9 @@ use ash::vk;
 #[cfg(feature = "serde-support")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "rafx-metal")]
-use metal::MTLPixelFormat;
-use metal::MTLVertexFormat;
+use metal_rs::MTLPixelFormat;
+#[cfg(feature = "rafx-metal")]
+use metal_rs::MTLVertexFormat;
 
 //TODO: Try using Some/None instead of UNDEFINED format
 
@@ -787,59 +788,59 @@ impl Into<MTLPixelFormat> for RafxFormat {
     }
 }
 
+#[cfg(feature = "rafx-metal")]
 impl Into<MTLVertexFormat> for RafxFormat {
     fn into(self) -> MTLVertexFormat {
-        use MTLVertexFormat::*;
         match self {
-            RafxFormat::R8_UNORM => UCharNormalized,
-            RafxFormat::R8_SNORM => CharNormalized,
-            RafxFormat::R8_UINT => UChar,
-            RafxFormat::R8_SINT => Char,
-            RafxFormat::R8G8_UNORM => UChar2Normalized,
-            RafxFormat::R8G8_SNORM => Char2Normalized,
-            RafxFormat::R8G8_UINT => UChar2,
-            RafxFormat::R8G8_SINT => Char2,
-            RafxFormat::R8G8B8_UNORM => UChar3Normalized,
-            RafxFormat::R8G8B8_SNORM => Char3Normalized,
-            RafxFormat::R8G8B8_UINT => UChar3,
-            RafxFormat::R8G8B8_SINT => Char3,
-            RafxFormat::R8G8B8A8_UNORM => UChar4Normalized,
-            RafxFormat::R8G8B8A8_SNORM => Char4Normalized,
-            RafxFormat::R8G8B8A8_UINT => UChar4,
-            RafxFormat::R8G8B8A8_SINT => Char4,
-            RafxFormat::B8G8R8A8_UNORM => UChar4Normalized_BGRA,
-            RafxFormat::R16_UNORM => UShortNormalized,
-            RafxFormat::R16_SNORM => ShortNormalized,
-            RafxFormat::R16_UINT => UShort,
-            RafxFormat::R16_SINT => Short,
-            RafxFormat::R16_SFLOAT => Half,
-            RafxFormat::R16G16_UNORM => UShort2Normalized,
-            RafxFormat::R16G16_SNORM => Short2Normalized,
-            RafxFormat::R16G16_UINT => UShort2,
-            RafxFormat::R16G16_SINT => Short2,
-            RafxFormat::R16G16_SFLOAT => Half2,
-            RafxFormat::R16G16B16_UNORM => UShort3Normalized,
-            RafxFormat::R16G16B16_SNORM => Short3Normalized,
-            RafxFormat::R16G16B16_UINT => UShort3,
-            RafxFormat::R16G16B16_SINT => Short3,
-            RafxFormat::R16G16B16_SFLOAT => Half3,
-            RafxFormat::R16G16B16A16_UNORM => UShort4Normalized,
-            RafxFormat::R16G16B16A16_SNORM => Short4Normalized,
-            RafxFormat::R16G16B16A16_UINT => UShort4,
-            RafxFormat::R16G16B16A16_SINT => Short4,
-            RafxFormat::R16G16B16A16_SFLOAT => Half4,
-            RafxFormat::R32_UINT => UInt,
-            RafxFormat::R32_SINT => Int,
-            RafxFormat::R32_SFLOAT => Float,
-            RafxFormat::R32G32_UINT => UInt2,
-            RafxFormat::R32G32_SINT => Int2,
-            RafxFormat::R32G32_SFLOAT => Float2,
-            RafxFormat::R32G32B32_UINT => UInt3,
-            RafxFormat::R32G32B32_SINT => Int3,
-            RafxFormat::R32G32B32_SFLOAT => Float3,
-            RafxFormat::R32G32B32A32_UINT => UInt4,
-            RafxFormat::R32G32B32A32_SINT => Int4,
-            RafxFormat::R32G32B32A32_SFLOAT => Float4,
+            RafxFormat::R8_UNORM => MTLVertexFormat::UCharNormalized,
+            RafxFormat::R8_SNORM => MTLVertexFormat::CharNormalized,
+            RafxFormat::R8_UINT => MTLVertexFormat::UChar,
+            RafxFormat::R8_SINT => MTLVertexFormat::Char,
+            RafxFormat::R8G8_UNORM => MTLVertexFormat::UChar2Normalized,
+            RafxFormat::R8G8_SNORM => MTLVertexFormat::Char2Normalized,
+            RafxFormat::R8G8_UINT => MTLVertexFormat::UChar2,
+            RafxFormat::R8G8_SINT => MTLVertexFormat::Char2,
+            RafxFormat::R8G8B8_UNORM => MTLVertexFormat::UChar3Normalized,
+            RafxFormat::R8G8B8_SNORM => MTLVertexFormat::Char3Normalized,
+            RafxFormat::R8G8B8_UINT => MTLVertexFormat::UChar3,
+            RafxFormat::R8G8B8_SINT => MTLVertexFormat::Char3,
+            RafxFormat::R8G8B8A8_UNORM => MTLVertexFormat::UChar4Normalized,
+            RafxFormat::R8G8B8A8_SNORM => MTLVertexFormat::Char4Normalized,
+            RafxFormat::R8G8B8A8_UINT => MTLVertexFormat::UChar4,
+            RafxFormat::R8G8B8A8_SINT => MTLVertexFormat::Char4,
+            RafxFormat::B8G8R8A8_UNORM => MTLVertexFormat::UChar4Normalized_BGRA,
+            RafxFormat::R16_UNORM => MTLVertexFormat::UShortNormalized,
+            RafxFormat::R16_SNORM => MTLVertexFormat::ShortNormalized,
+            RafxFormat::R16_UINT => MTLVertexFormat::UShort,
+            RafxFormat::R16_SINT => MTLVertexFormat::Short,
+            RafxFormat::R16_SFLOAT => MTLVertexFormat::Half,
+            RafxFormat::R16G16_UNORM => MTLVertexFormat::UShort2Normalized,
+            RafxFormat::R16G16_SNORM => MTLVertexFormat::Short2Normalized,
+            RafxFormat::R16G16_UINT => MTLVertexFormat::UShort2,
+            RafxFormat::R16G16_SINT => MTLVertexFormat::Short2,
+            RafxFormat::R16G16_SFLOAT => MTLVertexFormat::Half2,
+            RafxFormat::R16G16B16_UNORM => MTLVertexFormat::UShort3Normalized,
+            RafxFormat::R16G16B16_SNORM => MTLVertexFormat::Short3Normalized,
+            RafxFormat::R16G16B16_UINT => MTLVertexFormat::UShort3,
+            RafxFormat::R16G16B16_SINT => MTLVertexFormat::Short3,
+            RafxFormat::R16G16B16_SFLOAT => MTLVertexFormat::Half3,
+            RafxFormat::R16G16B16A16_UNORM => MTLVertexFormat::UShort4Normalized,
+            RafxFormat::R16G16B16A16_SNORM => MTLVertexFormat::Short4Normalized,
+            RafxFormat::R16G16B16A16_UINT => MTLVertexFormat::UShort4,
+            RafxFormat::R16G16B16A16_SINT => MTLVertexFormat::Short4,
+            RafxFormat::R16G16B16A16_SFLOAT => MTLVertexFormat::Half4,
+            RafxFormat::R32_UINT => MTLVertexFormat::UInt,
+            RafxFormat::R32_SINT => MTLVertexFormat::Int,
+            RafxFormat::R32_SFLOAT => MTLVertexFormat::Float,
+            RafxFormat::R32G32_UINT => MTLVertexFormat::UInt2,
+            RafxFormat::R32G32_SINT => MTLVertexFormat::Int2,
+            RafxFormat::R32G32_SFLOAT => MTLVertexFormat::Float2,
+            RafxFormat::R32G32B32_UINT => MTLVertexFormat::UInt3,
+            RafxFormat::R32G32B32_SINT => MTLVertexFormat::Int3,
+            RafxFormat::R32G32B32_SFLOAT => MTLVertexFormat::Float3,
+            RafxFormat::R32G32B32A32_UINT => MTLVertexFormat::UInt4,
+            RafxFormat::R32G32B32A32_SINT => MTLVertexFormat::Int4,
+            RafxFormat::R32G32B32A32_SFLOAT => MTLVertexFormat::Float4,
             _ => unimplemented!()
         }
     }

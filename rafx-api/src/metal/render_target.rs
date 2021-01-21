@@ -1,7 +1,10 @@
 use crate::metal::{RafxTextureMetal, RafxDeviceContextMetal, RafxRawImageMetal};
 use crate::{RafxTexture, RafxRenderTargetDef, RafxResult};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
+use std::hash::{Hash, Hasher};
+
+static RENDER_TARGET_NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
 #[derive(Debug)]
 pub struct RafxRenderTargetMetalInner {
@@ -9,11 +12,26 @@ pub struct RafxRenderTargetMetalInner {
     pub texture: RafxTexture,
     //is_undefined_layout: AtomicBool,
     pub render_target_def: RafxRenderTargetDef,
+    render_target_id: u32,
 }
 
 #[derive(Clone, Debug)]
 pub struct RafxRenderTargetMetal {
     inner: Arc<RafxRenderTargetMetalInner>,
+}
+
+impl PartialEq for RafxRenderTargetMetal {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.render_target_id == other.inner.render_target_id
+    }
+}
+
+impl Eq for RafxRenderTargetMetal {}
+
+impl Hash for RafxRenderTargetMetal {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.render_target_id.hash(state);
+    }
 }
 
 impl RafxRenderTargetMetal {
@@ -23,6 +41,11 @@ impl RafxRenderTargetMetal {
 
     pub fn texture(&self) -> &RafxTexture {
         &self.inner.texture
+    }
+
+    // Used internally as part of the hash for creating/reusing framebuffers
+    pub(crate) fn render_target_id(&self) -> u32 {
+        self.inner.render_target_id
     }
 
     pub fn new(
@@ -44,10 +67,12 @@ impl RafxRenderTargetMetal {
         let texture =
             RafxTextureMetal::from_existing(device_context, existing_image, &texture_def)?;
 
+        let render_target_id = RENDER_TARGET_NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let inner = RafxRenderTargetMetalInner {
             texture: RafxTexture::Metal(texture),
             //is_undefined_layout: AtomicBool::new(true),
             render_target_def: render_target_def.clone(),
+            render_target_id,
         };
 
         Ok(RafxRenderTargetMetal {

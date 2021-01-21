@@ -27,7 +27,7 @@ pub struct RafxDescriptorSetHandleMetal;
 
 pub struct ArgumentBufferData {
     buffer: RafxBufferMetal,
-    encoder: metal::ArgumentEncoder,
+    encoder: metal_rs::ArgumentEncoder,
     stride: u32,
 }
 
@@ -84,7 +84,7 @@ impl RafxDescriptorSetArrayMetal {
             //     RafxShaderStageFlags::VERTEX | RafxShaderStageFlags::FRAGMENT
             // };
 
-            let array = metal::Array::from_owned_slice(&argument_descriptors);
+            let array = metal_rs::Array::from_owned_slice(&argument_descriptors);
             let encoder = device_context.device().new_argument_encoder(array);
 
             let required_alignment = 256;

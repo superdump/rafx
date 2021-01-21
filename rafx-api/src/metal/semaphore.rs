@@ -8,17 +8,25 @@ pub struct RafxSemaphoreMetal {
     // Set to true when an operation is scheduled to signal this semaphore
     // Cleared when an operation is scheduled to consume this semaphore
     signal_available: AtomicBool,
+
+    metal_event: metal_rs::Event,
 }
 
 impl RafxSemaphoreMetal {
     pub fn new(device_context: &RafxDeviceContextMetal) -> RafxResult<RafxSemaphoreMetal> {
         //TODO: Need to add support for new_event() in metal crate
 
+        let metal_event = device_context.device().new_event();
+
         Ok(RafxSemaphoreMetal {
             device_context: device_context.clone(),
-            //vk_semaphore,
+            metal_event,
             signal_available: AtomicBool::new(false),
         })
+    }
+
+    pub fn metal_event(&self) -> &metal_rs::EventRef {
+        self.metal_event.as_ref()
     }
 
     pub(crate) fn signal_available(&self) -> bool {
