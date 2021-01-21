@@ -8,12 +8,12 @@ enum MetalPipelineState {
 }
 
 #[derive(Debug)]
-pub struct RafxPipelineMetal {
-    pipeline_type: RafxPipelineType,
-    // It's a RafxRootSignatureMetal, but stored as RafxRootSignature so we can return refs to it
-    root_signature: RafxRootSignature,
-    pipeline: MetalPipelineState,
+pub(crate) struct PipelineComputeEncoderInfo {
+    pub compute_threads_per_group: [u32; 3],
+}
 
+#[derive(Debug)]
+pub(crate) struct PipelineRenderEncoderInfo {
     // This is all set on the render encoder, so cache it now so we can set it later
     pub(crate) mtl_cull_mode: metal_rs::MTLCullMode,
     pub(crate) mtl_triangle_fill_mode: metal_rs::MTLTriangleFillMode,
@@ -23,6 +23,17 @@ pub struct RafxPipelineMetal {
     pub(crate) mtl_depth_clip_mode: metal_rs::MTLDepthClipMode,
     pub(crate) mtl_depth_stencil_state: Option<metal_rs::DepthStencilState>,
     pub(crate) mtl_primitive_type: metal_rs::MTLPrimitiveType,
+}
+
+#[derive(Debug)]
+pub struct RafxPipelineMetal {
+    pipeline_type: RafxPipelineType,
+    // It's a RafxRootSignatureMetal, but stored as RafxRootSignature so we can return refs to it
+    root_signature: RafxRootSignature,
+    pipeline: MetalPipelineState,
+
+    pub(crate) render_encoder_info: Option<PipelineRenderEncoderInfo>,
+    pub(crate) compute_encoder_info: Option<PipelineComputeEncoderInfo>,
 }
 
 impl RafxPipelineMetal {
@@ -152,10 +163,7 @@ impl RafxPipelineMetal {
             None
         };
 
-        Ok(RafxPipelineMetal {
-            root_signature: pipeline_def.root_signature.clone(),
-            pipeline_type: pipeline_def.root_signature.pipeline_type(),
-            pipeline: MetalPipelineState::Graphics(pipeline),
+        let render_encoder_info = PipelineRenderEncoderInfo {
             mtl_cull_mode,
             mtl_triangle_fill_mode,
             mtl_front_facing_winding,
@@ -164,6 +172,14 @@ impl RafxPipelineMetal {
             mtl_depth_clip_mode,
             mtl_depth_stencil_state,
             mtl_primitive_type
+        };
+
+        Ok(RafxPipelineMetal {
+            root_signature: pipeline_def.root_signature.clone(),
+            pipeline_type: pipeline_def.root_signature.pipeline_type(),
+            pipeline: MetalPipelineState::Graphics(pipeline),
+            render_encoder_info: Some(render_encoder_info),
+            compute_encoder_info: None,
         })
     }
 
@@ -171,6 +187,42 @@ impl RafxPipelineMetal {
         device_context: &RafxDeviceContextMetal,
         pipeline_def: &RafxComputePipelineDef,
     ) -> RafxResult<Self> {
-        unimplemented!();
+        let mut compute_function = None;
+        let mut compute_threads_per_group = None;
+
+        for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
+            if stage.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+                let entry_point = stage
+                    .metal_info
+                    .as_ref()
+                    .map(|x| x.entry_point_override.as_ref())
+                    .flatten()
+                    .unwrap_or(&stage.entry_point);
+
+                assert!(compute_function.is_none());
+                compute_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
+                    entry_point,
+                    None
+                )?);
+
+                compute_threads_per_group = stage.compute_threads_per_group;
+            }
+        }
+
+        let compute_function = compute_function.ok_or("Could not find compute function")?;
+
+        let pipeline = device_context.device().new_compute_pipeline_state_with_function(compute_function.as_ref())?;
+
+        let compute_encoder_info = PipelineComputeEncoderInfo {
+            compute_threads_per_group: compute_threads_per_group.unwrap()
+        };
+
+        Ok(RafxPipelineMetal {
+            root_signature: pipeline_def.root_signature.clone(),
+            pipeline_type: pipeline_def.root_signature.pipeline_type(),
+            pipeline: MetalPipelineState::Compute(pipeline),
+            render_encoder_info: None,
+            compute_encoder_info: Some(compute_encoder_info),
+        })
     }
 }

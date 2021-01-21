@@ -1,5 +1,5 @@
-use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp, RafxSampleCount, RafxVertexAttributeRate, RafxPrimitiveTopology, RafxBlendOp, RafxBlendFactor, RafxLoadOp, RafxStoreOp, RafxColorRenderTargetBinding, RafxColorClearValue, RafxCullMode, RafxFillMode, RafxFrontFace, RafxStencilOp};
-use metal_rs::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction, MTLStepFunction, MTLPrimitiveTopologyClass, MTLBlendOperation, MTLBlendFactor, MTLVertexStepFunction, MTLLoadAction, MTLStoreAction, MTLClearColor, MTLCullMode, MTLTriangleFillMode, MTLDepthClipMode, MTLWinding, MTLPrimitiveType, MTLStencilOperation};
+use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp, RafxSampleCount, RafxVertexAttributeRate, RafxPrimitiveTopology, RafxBlendOp, RafxBlendFactor, RafxLoadOp, RafxStoreOp, RafxColorRenderTargetBinding, RafxColorClearValue, RafxCullMode, RafxFillMode, RafxFrontFace, RafxStencilOp, RafxIndexType};
+use metal_rs::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction, MTLStepFunction, MTLPrimitiveTopologyClass, MTLBlendOperation, MTLBlendFactor, MTLVertexStepFunction, MTLLoadAction, MTLStoreAction, MTLClearColor, MTLCullMode, MTLTriangleFillMode, MTLDepthClipMode, MTLWinding, MTLPrimitiveType, MTLStencilOperation, MTLIndexType};
 use cocoa_foundation::foundation::NSUInteger;
 
 pub mod util;
@@ -74,6 +74,15 @@ impl Into<MTLPrimitiveType> for RafxPrimitiveTopology {
             RafxPrimitiveTopology::TriangleList => MTLPrimitiveType::Triangle,
             RafxPrimitiveTopology::TriangleStrip => MTLPrimitiveType::LineStrip,
             RafxPrimitiveTopology::PatchList => MTLPrimitiveType::Triangle,
+        }
+    }
+}
+
+impl Into<MTLIndexType> for RafxIndexType {
+    fn into(self) -> MTLIndexType {
+        match self {
+            RafxIndexType::Uint32 => MTLIndexType::UInt32,
+            RafxIndexType::Uint16 => MTLIndexType::UInt16,
         }
     }
 }

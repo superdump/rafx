@@ -175,6 +175,7 @@ fn run() -> RafxResult<()> {
                 // Example binding
                 color_shader_resource.clone(),
             ],
+            compute_threads_per_group: None,
             metal_info: Some(RafxShaderStageMetalInfo {
                 entry_point_override: Some("main0".to_string()),
                 ..Default::default()
@@ -189,6 +190,7 @@ fn run() -> RafxResult<()> {
                 // Example binding
                 color_shader_resource,
             ],
+            compute_threads_per_group: None,
             metal_info: Some(RafxShaderStageMetalInfo {
                 entry_point_override: Some("main0".to_string()),
                 ..Default::default()

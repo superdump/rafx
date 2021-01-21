@@ -215,7 +215,7 @@ pub struct RafxShaderStageReflection {
     //pub vertex_inputs: Vec<RafxVertexInput>,
     pub shader_stage: RafxShaderStageFlags,
     pub resources: Vec<RafxShaderResource>,
-    pub thread_count: [u32; 3],
+    pub compute_threads_per_group: Option<[u32; 3]>,
     pub entry_point_name: String,
 }
 
@@ -223,6 +223,7 @@ pub struct RafxShaderStageReflection {
 pub struct RafxPipelineReflection {
     pub shader_stages: RafxShaderStageFlags,
     pub resources: Vec<RafxShaderResource>,
+    pub compute_threads_per_group: Option<[u32; 3]>,
 }
 
 impl RafxPipelineReflection {
@@ -246,6 +247,13 @@ impl RafxPipelineReflection {
                 let mut resource = resource.clone();
                 resource.used_in_shader_stages |= stage.shader_stage;
                 unmerged_resources.push(resource);
+            }
+        }
+
+        let mut compute_threads_per_group = None;
+        for stage in stages {
+            if stage.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+                compute_threads_per_group = stage.compute_threads_per_group;
             }
         }
 
@@ -303,6 +311,7 @@ impl RafxPipelineReflection {
 
         Ok(RafxPipelineReflection {
             shader_stages: all_shader_stages,
+            compute_threads_per_group,
             resources,
         })
     }

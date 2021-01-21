@@ -1,10 +1,11 @@
-use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType};
+use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType, RafxIndexType};
 use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal};
-use std::sync::atomic::{AtomicPtr, AtomicU8, AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicPtr, AtomicU8, AtomicBool, AtomicU64, AtomicU32};
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use fnv::FnvHashSet;
-use metal_rs::{MTLRenderStages, MTLPrimitiveType, MTLCommandBuffer, MTLRenderCommandEncoder, MTLComputeCommandEncoder, MTLBlitCommandEncoder, MTLResourceUsage};
+use metal_rs::{MTLRenderStages, MTLPrimitiveType, MTLCommandBuffer, MTLRenderCommandEncoder, MTLComputeCommandEncoder, MTLBlitCommandEncoder, MTLResourceUsage, MTLViewport, MTLScissorRect, MTLSize, MTLOrigin, MTLBlitOption, MTLBuffer, MTLIndexType};
+use cocoa_foundation::foundation::NSUInteger;
 
 // Mutable state stored in a lock. (Hopefully we can optimize away the lock later)
 #[derive(Debug)]
@@ -20,8 +21,17 @@ pub struct RafxCommandBufferMetal {
     render_encoder: AtomicPtr<MTLRenderCommandEncoder>,
     compute_encoder: AtomicPtr<MTLComputeCommandEncoder>,
     blit_encoder: AtomicPtr<MTLBlitCommandEncoder>,
+    current_index_buffer: AtomicPtr<MTLBuffer>,
+    current_index_buffer_offset: AtomicU64,
+    current_index_buffer_type: AtomicU8, // MTLIndexType
+    current_index_buffer_stride: AtomicU8,
     last_pipeline_type: AtomicU8, // RafxPipelineType
     primitive_type: AtomicU8, // MTLPrimitiveType
+    current_render_targets_width: AtomicU32,
+    current_render_targets_height: AtomicU32,
+    compute_threads_per_group_x: AtomicU32,
+    compute_threads_per_group_y: AtomicU32,
+    compute_threads_per_group_z: AtomicU32,
 }
 
 impl Drop for RafxCommandBufferMetal {
@@ -51,6 +61,15 @@ impl RafxCommandBufferMetal {
             blit_encoder: Default::default(),
             last_pipeline_type: AtomicU8::new(u8::max_value()),
             primitive_type: Default::default(),
+            current_render_targets_width: Default::default(),
+            current_render_targets_height: Default::default(),
+            compute_threads_per_group_x: Default::default(),
+            compute_threads_per_group_y: Default::default(),
+            compute_threads_per_group_z: Default::default(),
+            current_index_buffer: Default::default(),
+            current_index_buffer_offset: Default::default(),
+            current_index_buffer_type: Default::default(),
+            current_index_buffer_stride: Default::default(),
             inner: Mutex::new(inner),
         })
     }
@@ -97,6 +116,12 @@ impl RafxCommandBufferMetal {
             for (i, color_target) in color_targets.iter().enumerate() {
                 let color_descriptor = descriptor.color_attachments().object_at(i as _).unwrap();
                 let texture = color_target.render_target.texture().metal_texture().unwrap();
+
+                // Ensure current_render_targets_width/current_render_targets_depth are set
+                let extents = texture.texture_def().extents;
+                self.current_render_targets_width.store(extents.width, Ordering::Relaxed);
+                self.current_render_targets_height.store(extents.height, Ordering::Relaxed);
+
                 color_descriptor.set_texture(Some(texture.metal_texture()));
                 color_descriptor.set_level(color_target.mip_slice.unwrap_or(0) as _);
                 if color_target.array_slice.is_some() {
@@ -119,6 +144,11 @@ impl RafxCommandBufferMetal {
             if let Some(depth_target) = depth_target {
                 let depth_descriptor = descriptor.depth_attachment().unwrap();
                 let texture = depth_target.render_target.texture().metal_texture().unwrap();
+
+                // Ensure current_render_targets_width/current_render_targets_depth are set
+                let extents = depth_target.render_target.texture().texture_def().extents;
+                self.current_render_targets_width.store(extents.width, Ordering::Relaxed);
+                self.current_render_targets_height.store(extents.height, Ordering::Relaxed);
 
                 depth_descriptor.set_texture(Some(texture.metal_texture()));
                 depth_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
@@ -224,24 +254,49 @@ impl RafxCommandBufferMetal {
         depth_min: f32,
         depth_max: f32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        self.metal_render_encoder().unwrap().set_viewport(MTLViewport {
+            originX: x as _,
+            originY: y as _,
+            width: width as _,
+            height: height as _,
+            znear: depth_min as _,
+            zfar: depth_max as _,
+        });
+
+        Ok(())
     }
 
     pub fn cmd_set_scissor(
         &self,
-        x: u32,
-        y: u32,
-        width: u32,
-        height: u32,
+        mut x: u32,
+        mut y: u32,
+        mut width: u32,
+        mut height: u32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let max_x = self.current_render_targets_width.load(Ordering::Relaxed);
+        let max_y = self.current_render_targets_height.load(Ordering::Relaxed);
+
+        x = x.min(max_x);
+        y = y.min(max_y);
+        width = width.min(max_x - x);
+        height = height.min(max_y - y);
+
+        self.metal_render_encoder().unwrap().set_scissor_rect(MTLScissorRect {
+            x: x as _,
+            y: y as _,
+            width: width as _,
+            height: height as _,
+        });
+
+        Ok(())
     }
 
     pub fn cmd_set_stencil_reference_value(
         &self,
         value: u32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        self.metal_render_encoder().unwrap().set_stencil_reference_value(value);
+        Ok(())
     }
 
     pub fn cmd_bind_pipeline(
@@ -257,16 +312,17 @@ impl RafxCommandBufferMetal {
             match pipeline.pipeline_type() {
                 RafxPipelineType::Graphics => {
                     let render_encoder = self.metal_render_encoder().unwrap();
+                    let render_encoder_info = pipeline.render_encoder_info.as_ref().unwrap();
                     render_encoder.set_render_pipeline_state(pipeline.metal_render_pipeline().unwrap());
-                    render_encoder.set_cull_mode(pipeline.mtl_cull_mode);
-                    render_encoder.set_triangle_fill_mode(pipeline.mtl_triangle_fill_mode);
-                    render_encoder.set_depth_bias(pipeline.mtl_depth_bias, pipeline.mtl_depth_bias_slope_scaled, 0.0);
-                    render_encoder.set_depth_clip_mode(pipeline.mtl_depth_clip_mode);
-                    if let Some(mtl_depth_stencil_state) = &pipeline.mtl_depth_stencil_state {
+                    render_encoder.set_cull_mode(render_encoder_info.mtl_cull_mode);
+                    render_encoder.set_triangle_fill_mode(render_encoder_info.mtl_triangle_fill_mode);
+                    render_encoder.set_depth_bias(render_encoder_info.mtl_depth_bias, render_encoder_info.mtl_depth_bias_slope_scaled, 0.0);
+                    render_encoder.set_depth_clip_mode(render_encoder_info.mtl_depth_clip_mode);
+                    if let Some(mtl_depth_stencil_state) = &render_encoder_info.mtl_depth_stencil_state {
                         render_encoder.set_depth_stencil_state(mtl_depth_stencil_state);
                     }
 
-                    self.primitive_type.store(mtl_primitve_type_to_u8(pipeline.mtl_primitive_type), Ordering::Relaxed);
+                    self.primitive_type.store(mtl_primitive_type_to_u8(render_encoder_info.mtl_primitive_type), Ordering::Relaxed);
                     self.flush_render_targets_to_make_readable();
                 }
                 RafxPipelineType::Compute => {
@@ -276,6 +332,12 @@ impl RafxCommandBufferMetal {
                         let compute_encoder = self.metal_command_buffer().unwrap().new_compute_command_encoder();
                         self.swap_compute_encoder(Some(compute_encoder.to_owned()));
                     }
+
+                    let compute_encoder_info = pipeline.compute_encoder_info.as_ref().unwrap();
+                    let compute_threads_per_group = compute_encoder_info.compute_threads_per_group;
+                    self.compute_threads_per_group_x.store(compute_threads_per_group[0], Ordering::Relaxed);
+                    self.compute_threads_per_group_y.store(compute_threads_per_group[1], Ordering::Relaxed);
+                    self.compute_threads_per_group_z.store(compute_threads_per_group[2], Ordering::Relaxed);
 
                     self.metal_compute_encoder().unwrap().set_compute_pipeline_state(pipeline.metal_compute_pipeline().unwrap());
                     self.flush_render_targets_to_make_readable();
@@ -329,7 +391,14 @@ impl RafxCommandBufferMetal {
         &self,
         binding: &RafxIndexBufferBinding,
     ) -> RafxResult<()> {
-        unimplemented!();
+        self.swap_current_index_buffer(Some(binding.buffer.metal_buffer().unwrap().metal_buffer().to_owned()));
+        self.current_index_buffer_offset.store(binding.offset, Ordering::Relaxed);
+        self.current_index_buffer_type.store(mtl_index_type_to_u8(binding.index_type.into()), Ordering::Relaxed);
+        self.current_index_buffer_stride.store(match binding.index_type {
+            RafxIndexType::Uint32 => std::mem::size_of::<u32>() as _,
+            RafxIndexType::Uint16 => std::mem::size_of::<u16>() as _,
+        }, Ordering::Relaxed);
+        Ok(())
     }
 
     pub fn cmd_bind_descriptor_set(
@@ -405,7 +474,25 @@ impl RafxCommandBufferMetal {
         group_count_y: u32,
         group_count_z: u32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        self.wait_for_barriers();
+        let thread_per_group_x = self.compute_threads_per_group_x.load(Ordering::Relaxed);
+        let thread_per_group_y = self.compute_threads_per_group_y.load(Ordering::Relaxed);
+        let thread_per_group_z = self.compute_threads_per_group_z.load(Ordering::Relaxed);
+
+        let thread_per_group = MTLSize {
+            width: thread_per_group_x as _,
+            height: thread_per_group_y as _,
+            depth: thread_per_group_z as _
+        };
+
+        let group_count = MTLSize {
+            width: group_count_x as _,
+            height: group_count_y as _,
+            depth: group_count_z as _
+        };
+
+        self.metal_compute_encoder().unwrap().dispatch_thread_groups(group_count, thread_per_group);
+        Ok(())
     }
 
     pub fn cmd_resource_barrier(
@@ -445,7 +532,23 @@ impl RafxCommandBufferMetal {
         dst_offset: u64,
         size: u64,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let blit_encoder = self.metal_blit_encoder().unwrap_or_else(|| {
+            objc::rc::autoreleasepool(|| {
+                self.end_current_encoders(false);
+                let encoder = self.metal_command_buffer().unwrap().new_blit_command_encoder();
+                self.swap_blit_encoder(Some(encoder.to_owned()));
+                self.metal_blit_encoder().unwrap()
+            })
+        });
+
+        blit_encoder.copy_from_buffer(
+            src_buffer.metal_buffer(),
+            src_offset as _,
+            dst_buffer.metal_buffer(),
+            dst_offset as _,
+            size as _
+        );
+        Ok(())
     }
 
     pub fn cmd_copy_buffer_to_texture(
@@ -454,7 +557,48 @@ impl RafxCommandBufferMetal {
         dst_texture: &RafxTextureMetal,
         params: &RafxCmdCopyBufferToTextureParams,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let blit_encoder = self.metal_blit_encoder().unwrap_or_else(|| {
+            objc::rc::autoreleasepool(|| {
+                self.end_current_encoders(false);
+                let encoder = self.metal_command_buffer().unwrap().new_blit_command_encoder();
+                self.swap_blit_encoder(Some(encoder.to_owned()));
+                self.metal_blit_encoder().unwrap()
+            })
+        });
+
+        let texture_def = dst_texture.texture_def();
+        let width = 1.max(texture_def.extents.width >> params.mip_level);
+        let height = 1.max(texture_def.extents.height >> params.mip_level);
+        let depth = 1.max(texture_def.extents.depth >> params.mip_level);
+
+        let format_size_in_bytes = dst_texture.texture_def().format.size_of_format_in_bytes().unwrap();
+
+        let device_info = self.queue.device_context().device_info();
+        let texture_alignment = device_info.upload_buffer_texture_alignment;
+        let row_alignment = device_info.upload_buffer_texture_row_alignment;
+
+        let source_bytes_per_row = rafx_base::memory::round_size_up_to_alignment_u32(width as u32 * format_size_in_bytes as u32, row_alignment);
+        let source_bytes_per_image = rafx_base::memory::round_size_up_to_alignment_u32(height * source_bytes_per_row, texture_alignment);
+
+        let source_size = MTLSize {
+            width: width as _,
+            height: height as _,
+            depth: depth as _
+        };
+
+        blit_encoder.copy_from_buffer_to_texture(
+            src_buffer.metal_buffer(),
+            params.buffer_offset as _,
+            source_bytes_per_row as _,
+            source_bytes_per_image as _,
+            source_size,
+            dst_texture.metal_texture(),
+            params.array_layer as _,
+            params.mip_level as _,
+            MTLOrigin { x: 0, y: 0, z: 0 },
+            MTLBlitOption::empty(),
+        );
+        Ok(())
     }
 
     pub fn cmd_blit(
@@ -463,6 +607,8 @@ impl RafxCommandBufferMetal {
         dst_texture: &RafxTextureMetal,
         params: &RafxCmdBlitParams,
     ) -> RafxResult<()> {
+        //TODO: Implementing this requires having a custom shader/pipeline loaded and drawing
+        //triangles
         unimplemented!();
     }
 
@@ -572,6 +718,30 @@ impl RafxCommandBufferMetal {
         old_encoder
     }
 
+    fn swap_current_index_buffer(&self, index_buffer: Option<metal_rs::Buffer>) -> Option<metal_rs::Buffer> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+
+        let ptr = if let Some(index_buffer) = index_buffer {
+            let ptr = index_buffer.as_ptr();
+            std::mem::forget(index_buffer);
+            ptr
+        } else {
+            std::ptr::null_mut() as _
+        };
+
+        let ptr = self.current_index_buffer.swap(ptr, Ordering::Relaxed);
+        let old_encoder = if !ptr.is_null() {
+            unsafe {
+                Some(metal_rs::Buffer::from_ptr(ptr))
+            }
+        } else {
+            None
+        };
+
+        old_encoder
+    }
+
     pub fn metal_command_buffer(&self) -> Option<&metal_rs::CommandBufferRef> {
         use foreign_types_shared::ForeignType;
         use foreign_types_shared::ForeignTypeRef;
@@ -628,12 +798,31 @@ impl RafxCommandBufferMetal {
         }
     }
 
+    pub fn metal_current_index_buffer(&self) -> Option<&metal_rs::BufferRef> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+
+        let index_buffer = self.current_index_buffer.load(Ordering::Relaxed);
+        if !index_buffer.is_null() {
+            unsafe {
+                Some(metal_rs::BufferRef::from_ptr(index_buffer))
+            }
+        } else {
+            None
+        }
+    }
+
     fn primitive_type(&self) -> MTLPrimitiveType {
-        u8_to_mtl_primitve_type(self.primitive_type.load(Ordering::Relaxed))
+        u8_to_mtl_primitive_type(self.primitive_type.load(Ordering::Relaxed))
+    }
+
+
+    fn index_type(&self) -> MTLIndexType {
+        u8_to_mtl_index_type(self.current_index_buffer_type.load(Ordering::Relaxed))
     }
 }
 
-fn mtl_primitve_type_to_u8(primitive_type: MTLPrimitiveType) -> u8 {
+fn mtl_primitive_type_to_u8(primitive_type: MTLPrimitiveType) -> u8 {
     match primitive_type {
         MTLPrimitiveType::Point => 0,
         MTLPrimitiveType::Line => 1,
@@ -643,13 +832,28 @@ fn mtl_primitve_type_to_u8(primitive_type: MTLPrimitiveType) -> u8 {
     }
 }
 
-fn u8_to_mtl_primitve_type(primitive_type: u8) -> MTLPrimitiveType {
+fn u8_to_mtl_primitive_type(primitive_type: u8) -> MTLPrimitiveType {
     match primitive_type {
         0 => MTLPrimitiveType::Point,
         1 => MTLPrimitiveType::Line,
         2 => MTLPrimitiveType::LineStrip,
         3 => MTLPrimitiveType::Triangle,
         4 => MTLPrimitiveType::TriangleStrip,
+        _ => unreachable!()
+    }
+}
+
+fn mtl_index_type_to_u8(index_type: MTLIndexType) -> u8 {
+    match index_type {
+        MTLIndexType::UInt16 => 0,
+        MTLIndexType::UInt32 => 1,
+    }
+}
+
+fn u8_to_mtl_index_type(index_type: u8) -> MTLIndexType {
+    match index_type {
+        0 => MTLIndexType::UInt16,
+        1 => MTLIndexType::UInt32,
         _ => unreachable!()
     }
 }
