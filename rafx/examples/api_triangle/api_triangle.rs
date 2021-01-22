@@ -368,10 +368,10 @@ fn run() -> RafxResult<()> {
                     offset: 0,
                 }],
             )?;
-            // cmd_buffer.cmd_bind_descriptor_set(
-            //     &descriptor_set_array,
-            //     presentable_frame.rotating_frame_index() as u32,
-            // )?;
+            cmd_buffer.cmd_bind_descriptor_set(
+                &descriptor_set_array,
+                presentable_frame.rotating_frame_index() as u32,
+            )?;
             cmd_buffer.cmd_draw(3, 0)?;
 
             // Put it into a layout where we can present it

@@ -3,6 +3,7 @@ use metal_rs::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMi
 use cocoa_foundation::foundation::NSUInteger;
 
 pub mod util;
+pub mod features;
 
 bitflags::bitflags! {
     pub struct BarrierFlagsMetal: u8 {

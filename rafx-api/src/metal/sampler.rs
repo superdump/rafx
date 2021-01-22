@@ -14,6 +14,10 @@ pub struct RafxSamplerMetal {
 }
 
 impl RafxSamplerMetal {
+    pub fn metal_sampler(&self) -> &metal_rs::SamplerStateRef {
+        self.inner.sampler.as_ref()
+    }
+
     pub fn new(
         device_context: &RafxDeviceContextMetal,
         sampler_def: &RafxSamplerDef,

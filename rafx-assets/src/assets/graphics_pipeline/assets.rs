@@ -335,6 +335,8 @@ impl MaterialPass {
                 entry_point: stage.entry_name.clone(),
                 shader_stage: stage.stage.into(),
                 resources: reflection_data.rafx_reflection.resources.clone(),
+                compute_threads_per_group: reflection_data.rafx_reflection.compute_threads_per_group,
+                metal_info: None,
             });
 
             // Check that the compiled shader supports the given stage

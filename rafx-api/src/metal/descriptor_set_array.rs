@@ -1,5 +1,6 @@
 use crate::{RafxRootSignature, RafxDescriptorUpdate, RafxResult, RafxDescriptorSetArrayDef, RafxPipelineType, RafxShaderStageFlags, RafxBufferDef, RafxResourceType, RafxMemoryUsage, RafxQueueType, RafxDescriptorKey, RafxTextureBindType};
 use crate::metal::{RafxDeviceContextMetal, DescriptorSetLayoutInfo, RafxBufferMetal};
+use foreign_types_shared::ForeignTypeRef;
 
 // struct DescriptorUpdateData {
 //     // one per set * elements in each descriptor
@@ -23,7 +24,23 @@ use crate::metal::{RafxDeviceContextMetal, DescriptorSetLayoutInfo, RafxBufferMe
 // }
 
 #[derive(Copy, Clone, Debug)]
-pub struct RafxDescriptorSetHandleMetal;
+pub struct RafxDescriptorSetHandleMetal {
+    buffer: *mut metal_rs::MTLBuffer,
+    offset: u32,
+}
+
+impl RafxDescriptorSetHandleMetal {
+    pub fn metal_buffer(&self) -> &metal_rs::BufferRef {
+        use foreign_types_shared::ForeignTypeRef;
+        unsafe {
+            metal_rs::BufferRef::from_ptr(self.buffer)
+        }
+    }
+
+    pub fn offset(&self) -> u32 {
+        self.offset
+    }
+}
 
 pub struct ArgumentBufferData {
     buffer: RafxBufferMetal,
@@ -34,6 +51,7 @@ pub struct ArgumentBufferData {
 pub struct RafxDescriptorSetArrayMetal {
     root_signature: RafxRootSignature,
     set_index: u32,
+    //shader_stages: RafxShaderStageFlags,
     //update_data: DescriptorUpdateData,
     argument_buffer_data: Option<ArgumentBufferData>,
 }
@@ -47,11 +65,24 @@ impl RafxDescriptorSetArrayMetal {
         self.set_index
     }
 
+    pub fn metal_argument_buffer_and_offset(&self, index: u32) -> Option<(&metal_rs::BufferRef, u32)> {
+        if let Some(argument_buffer_data) = &self.argument_buffer_data {
+            Some((argument_buffer_data.buffer.metal_buffer(), index * argument_buffer_data.stride))
+        } else {
+            None
+        }
+    }
+
     pub fn handle(
         &self,
         index: u32,
     ) -> Option<RafxDescriptorSetHandleMetal> {
-        unimplemented!();
+        self.metal_argument_buffer_and_offset(index).map(|(buffer, offset)| {
+            RafxDescriptorSetHandleMetal {
+                buffer: buffer.as_ptr(),
+                offset,
+            }
+        })
     }
 
     pub(crate) fn new(
@@ -78,12 +109,6 @@ impl RafxDescriptorSetArrayMetal {
         let argument_descriptors = &root_signature.inner.argument_descriptors[layout_index];
         let immutable_samplers = &layout.immutable_samplers;
         let argument_buffer_data = if !argument_descriptors.is_empty() || !immutable_samplers.is_empty() {
-            // let shader_stages = if root_signature.pipeline_type() == RafxPipelineType::Compute {
-            //     RafxShaderStageFlags::COMPUTE
-            // } else {
-            //     RafxShaderStageFlags::VERTEX | RafxShaderStageFlags::FRAGMENT
-            // };
-
             let array = metal_rs::Array::from_owned_slice(&argument_descriptors);
             let encoder = device_context.device().new_argument_encoder(array);
 
@@ -107,6 +132,7 @@ impl RafxDescriptorSetArrayMetal {
                 for array_index in 0..descriptor_set_array_def.array_length {
                     encoder.set_argument_buffer(buffer.metal_buffer(), (array_index as u32 * stride) as _);
 
+                    //TODO: Implement
                     //let samplers = immutable_sampler.samplers.iter().map(|x| x.metal_sampler()).collect();
                     //encoder.set_sampler_states(0, samplers);
                 }
@@ -122,10 +148,17 @@ impl RafxDescriptorSetArrayMetal {
             None
         };
 
+        // let shader_stages = if root_signature.pipeline_type() == RafxPipelineType::Compute {
+        //     RafxShaderStageFlags::COMPUTE
+        // } else {
+        //     RafxShaderStageFlags::VERTEX | RafxShaderStageFlags::FRAGMENT
+        // };
+
         Ok(RafxDescriptorSetArrayMetal {
             root_signature: RafxRootSignature::Metal(root_signature),
             set_index: descriptor_set_array_def.set_index,
-            argument_buffer_data
+            argument_buffer_data,
+            //shader_stages,
             //descriptor_sets,
             //update_data,
             //pending_writes:
@@ -151,7 +184,6 @@ impl RafxDescriptorSetArrayMetal {
         &mut self,
         update: &RafxDescriptorUpdate,
     ) -> RafxResult<()> {
-        /*
         let root_signature = self.root_signature.metal_root_signature().unwrap();
         let layout: &DescriptorSetLayoutInfo =
             &root_signature.inner.layouts[self.set_index as usize];
@@ -256,8 +288,8 @@ impl RafxDescriptorSetArrayMetal {
                 // );
 
                 let begin_index =
-                    (descriptor.argument_buffer_id + update.dst_element_offset) as usize;
-                assert!(update.dst_element_offset + samplers.len() <= descriptor.element_count as usize);
+                    descriptor.argument_buffer_id as usize + update.dst_element_offset as usize;
+                assert!(update.dst_element_offset + samplers.len() as u32 <= descriptor.element_count);
 
                 // Modify the update data
                 let mut next_index = begin_index;
@@ -266,6 +298,7 @@ impl RafxDescriptorSetArrayMetal {
                     next_index += 1;
                 }
             }
+            /*
             RafxResourceType::COMBINED_IMAGE_SAMPLER => {
                 if !descriptor.has_immutable_sampler {
                     Err(format!(
@@ -499,14 +532,15 @@ impl RafxDescriptorSetArrayMetal {
                         .build(),
                 );
             }
+            */
             RafxResourceType::UNIFORM_BUFFER
             | RafxResourceType::BUFFER
             | RafxResourceType::BUFFER_READ_WRITE => {
-                if descriptor.vk_type == vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC {
-                    //TODO: Add support for dynamic uniforms
-                    unimplemented!();
-                }
-
+                // if descriptor.vk_type == vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC {
+                //     //TODO: Add support for dynamic uniforms
+                //     unimplemented!();
+                // }
+                //
                 let buffers = update.elements.buffers.ok_or_else(||
                     format!(
                         "Tried to update binding {:?} (set: {:?} binding: {} name: {:?} type: {:?}) but the buffers element list was None",
@@ -517,38 +551,55 @@ impl RafxDescriptorSetArrayMetal {
                         descriptor.resource_type,
                     )
                 )?;
+
                 let begin_index =
-                    (descriptor_first_update_data + update.dst_element_offset) as usize;
-                assert!(begin_index + buffers.len() <= self.update_data.update_data_count);
+                    descriptor.argument_buffer_id as usize + update.dst_element_offset as usize;
+                assert!(update.dst_element_offset + buffers.len() as u32 <= descriptor.element_count);
 
                 // Modify the update data
                 let mut next_index = begin_index;
                 for (buffer_index, buffer) in buffers.iter().enumerate() {
-                    let buffer_info = &mut self.update_data.buffer_infos[next_index];
+                    argument_buffer.encoder.set_buffer(
+                        next_index as _,
+                        buffer.metal_buffer().unwrap().metal_buffer(),
+                        update.elements.buffer_offset_sizes.map(|x| x[buffer_index].offset).unwrap_or(0)
+                    );
                     next_index += 1;
-
-                    buffer_info.buffer = buffer.vk_buffer().unwrap().vk_buffer();
-                    buffer_info.offset = 0;
-                    buffer_info.range = vk::WHOLE_SIZE;
-
-                    if let Some(offset_size) = update.elements.buffer_offset_sizes {
-                        if offset_size[buffer_index].offset != 0 {
-                            buffer_info.offset = offset_size[buffer_index].offset;
-                        }
-
-                        if offset_size[buffer_index].size != 0 {
-                            buffer_info.range = offset_size[buffer_index].size;
-                        }
-                    }
                 }
 
-                // Queue a descriptor write
-                self.pending_writes.push(
-                    write_descriptor_builder
-                        .buffer_info(&self.update_data.buffer_infos[begin_index..next_index])
-                        .build(),
-                );
+                // let begin_index =
+                //     (descriptor_first_update_data + update.dst_element_offset) as usize;
+                // assert!(begin_index + buffers.len() <= self.update_data.update_data_count);
+                //
+                // // Modify the update data
+                // let mut next_index = begin_index;
+                // for (buffer_index, buffer) in buffers.iter().enumerate() {
+                //     let buffer_info = &mut self.update_data.buffer_infos[next_index];
+                //     next_index += 1;
+                //
+                //     buffer_info.buffer = buffer.vk_buffer().unwrap().vk_buffer();
+                //     buffer_info.offset = 0;
+                //     buffer_info.range = vk::WHOLE_SIZE;
+                //
+                //     if let Some(offset_size) = update.elements.buffer_offset_sizes {
+                //         if offset_size[buffer_index].offset != 0 {
+                //             buffer_info.offset = offset_size[buffer_index].offset;
+                //         }
+                //
+                //         if offset_size[buffer_index].size != 0 {
+                //             buffer_info.range = offset_size[buffer_index].size;
+                //         }
+                //     }
+                // }
+                //
+                // // Queue a descriptor write
+                // self.pending_writes.push(
+                //     write_descriptor_builder
+                //         .buffer_info(&self.update_data.buffer_infos[begin_index..next_index])
+                //         .build(),
+                // );
             }
+            /*
             RafxResourceType::TEXEL_BUFFER | RafxResourceType::TEXEL_BUFFER_READ_WRITE => {
                 let buffers = update.elements.buffers.ok_or_else(||
                     format!(
@@ -602,9 +653,9 @@ impl RafxDescriptorSetArrayMetal {
                         .build(),
                 );
             }
+            */
             _ => unimplemented!(),
         }
-        */
         Ok(())
     }
 }

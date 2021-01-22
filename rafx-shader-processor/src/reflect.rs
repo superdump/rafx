@@ -474,11 +474,11 @@ where
             shader_stage: stage_flags,
             resources: rafx_bindings,
             entry_point_name: entry_point_name.clone(),
-            thread_count: [
+            compute_threads_per_group: Some([
                 entry_point.work_group_size.x,
                 entry_point.work_group_size.y,
                 entry_point.work_group_size.z,
-            ],
+            ]),
         };
 
         reflected_entry_points.push(ReflectedEntryPoint {

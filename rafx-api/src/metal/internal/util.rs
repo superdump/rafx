@@ -1,5 +1,12 @@
 use metal_rs::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode, MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptorArray, RenderPipelineColorAttachmentDescriptorArrayRef, MTLStoreAction, MTLCompareFunction};
 use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo, RafxBlendState, RafxBlendStateTargets, MAX_RENDER_TARGET_ATTACHMENTS, RafxColorRenderTargetBinding, RafxStoreOp, RafxDepthState};
+use cocoa_foundation::foundation::NSUInteger;
+
+pub fn vertex_buffer_adjusted_buffer_index(binding: u32) -> NSUInteger {
+    // Argument buffers will be 0-4
+    // vertex buffers will be 30 - n
+    (30 - binding) as _
+}
 
 pub(crate) fn resource_type_mtl_data_type(
     resource_type: RafxResourceType,

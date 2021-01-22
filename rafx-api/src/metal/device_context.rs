@@ -20,6 +20,7 @@ use fnv::FnvHashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxRootSignatureMetal, RafxDescriptorSetArrayMetal, RafxSamplerMetal, RafxPipelineMetal};
+use crate::metal::features::MetalFeatures;
 
 pub struct RafxDeviceContextMetalInner {
     pub(crate) device_info: RafxDeviceInfo,
@@ -30,6 +31,7 @@ pub struct RafxDeviceContextMetalInner {
     #[cfg(debug_assertions)]
     #[cfg(feature = "track-device-contexts")]
     next_create_index: AtomicU64,
+    metal_features: MetalFeatures,
 
     #[cfg(debug_assertions)]
     #[cfg(feature = "track-device-contexts")]
@@ -71,9 +73,12 @@ impl RafxDeviceContextMetalInner {
 
         let device = metal_rs::Device::system_default().expect("no device found");
 
+        let metal_features = MetalFeatures::from_device(device.as_ref());
+
         Ok(RafxDeviceContextMetalInner {
             device_info,
             device,
+            metal_features,
             destroyed: AtomicBool::new(false),
 
             #[cfg(debug_assertions)]
@@ -166,6 +171,10 @@ impl RafxDeviceContextMetal {
 
     pub fn device(&self) -> &metal_rs::Device {
         &self.inner.device
+    }
+
+    pub fn metal_features(&self) -> &MetalFeatures {
+        &self.inner.metal_features
     }
 
     pub fn new(inner: Arc<RafxDeviceContextMetalInner>) -> RafxResult<Self> {
@@ -290,13 +299,47 @@ impl RafxDeviceContextMetal {
         candidates: &[RafxFormat],
         resource_type: RafxResourceType,
     ) -> Option<RafxFormat> {
-        unimplemented!();
+        // https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
+        use metal_rs::PixelFormatCapabilities;
+
+        let mut required_capabilities = PixelFormatCapabilities::empty();
+
+        // Some formats include color and not write, so I think it's not necessary to have write
+        // capability for color attachments
+        if resource_type.intersects(RafxResourceType::RENDER_TARGET_COLOR) {
+            required_capabilities |= PixelFormatCapabilities::Color;
+        }
+
+        // Depth formats don't include write, so presumably it's implied that a depth format can
+        // be a depth attachment
+        // if resource_type.intersects(RafxResourceType::RENDER_TARGET_DEPTH_STENCIL) {
+        //     required_capabilities |= PixelFormatCapabilities::Write;
+        // }
+
+        if resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
+            required_capabilities |= PixelFormatCapabilities::Write;
+        }
+
+        for &candidate in candidates {
+            let capabilities = self.inner.metal_features.pixel_format_capabilities(candidate.into());
+            if capabilities.contains(required_capabilities) {
+                return Some(candidate);
+            }
+        }
+
+        None
     }
 
     pub fn find_supported_sample_count(
         &self,
         candidates: &[RafxSampleCount],
     ) -> Option<RafxSampleCount> {
-        unimplemented!();
+        for &candidate in candidates {
+            if self.inner.device.supports_texture_sample_count(candidate.into()) {
+                return Some(candidate);
+            }
+        }
+
+        None
     }
 }

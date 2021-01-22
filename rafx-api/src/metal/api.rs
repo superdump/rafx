@@ -1,8 +1,10 @@
 use crate::{RafxApiDef, RafxResult, RafxValidationMode};
 use raw_window_handle::HasRawWindowHandle;
 use std::sync::Arc;
+use metal_rs::{MTLGPUFamily, MTLFeatureSet};
 
 use crate::metal::{RafxDeviceContextMetal, RafxDeviceContextMetalInner};
+use crate::metal::internal::features::MetalFeatures;
 
 /// Metal-specific configuration
 #[derive(Default)]

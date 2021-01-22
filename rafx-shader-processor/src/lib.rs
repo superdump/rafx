@@ -344,7 +344,7 @@ fn process_glsl_shader(
         spirv_cross::spirv::Ast::<spirv_cross::msl::Target>::parse(&spirv_cross_module)?;
     let mut spirv_cross_msl_options = spirv_cross::msl::CompilerOptions::default();
     spirv_cross_msl_options.version = spirv_cross::msl::Version::V2_0;
-    spirv_cross_msl_options.enable_argument_buffers = false;
+    spirv_cross_msl_options.enable_argument_buffers = true;
     msl_ast.set_compiler_options(&spirv_cross_msl_options)?;
     let metal_src = msl_ast.compile()?;
     //println!("{}", metal_src);

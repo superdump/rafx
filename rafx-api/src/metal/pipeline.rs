@@ -109,14 +109,16 @@ impl RafxPipelineMetal {
 
         let mut vertex_descriptor = metal_rs::VertexDescriptor::new();
         for attribute in &pipeline_def.vertex_layout.attributes {
+            let buffer_index = super::util::vertex_buffer_adjusted_buffer_index(attribute.buffer_index);
             let mut attribute_descriptor = vertex_descriptor.attributes().object_at(attribute.location as _).unwrap();
-            attribute_descriptor.set_buffer_index(attribute.buffer_index as _);
+            attribute_descriptor.set_buffer_index(buffer_index);
             attribute_descriptor.set_format(attribute.format.into());
             attribute_descriptor.set_offset(attribute.offset as _);
         }
 
         for (index, binding) in pipeline_def.vertex_layout.buffers.iter().enumerate() {
-            let mut layout_descriptor = vertex_descriptor.layouts().object_at(index as _).unwrap();
+            let buffer_index = super::util::vertex_buffer_adjusted_buffer_index(index as u32);
+            let mut layout_descriptor = vertex_descriptor.layouts().object_at(buffer_index).unwrap();
             layout_descriptor.set_stride(binding.stride as _);
             layout_descriptor.set_step_function(binding.rate.into());
             layout_descriptor.set_step_rate(1);

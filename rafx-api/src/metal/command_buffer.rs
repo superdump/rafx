@@ -1,5 +1,5 @@
 use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType, RafxIndexType};
-use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal};
+use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal, RafxRootSignatureMetalInner};
 use std::sync::atomic::{AtomicPtr, AtomicU8, AtomicBool, AtomicU64, AtomicU32};
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
@@ -24,7 +24,7 @@ pub struct RafxCommandBufferMetal {
     current_index_buffer: AtomicPtr<MTLBuffer>,
     current_index_buffer_offset: AtomicU64,
     current_index_buffer_type: AtomicU8, // MTLIndexType
-    current_index_buffer_stride: AtomicU8,
+    current_index_buffer_stride: AtomicU32,
     last_pipeline_type: AtomicU8, // RafxPipelineType
     primitive_type: AtomicU8, // MTLPrimitiveType
     current_render_targets_width: AtomicU32,
@@ -376,7 +376,7 @@ impl RafxCommandBufferMetal {
         let mut binding_index = first_binding;
         for binding in bindings {
             render_encoder.set_vertex_buffer(
-                binding_index as _,
+                super::util::vertex_buffer_adjusted_buffer_index(binding_index),
                 Some(binding.buffer.metal_buffer().unwrap().metal_buffer()),
                 binding.offset as _
             );
@@ -406,7 +406,13 @@ impl RafxCommandBufferMetal {
         descriptor_set_array: &RafxDescriptorSetArrayMetal,
         index: u32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let (buffer, offset) = descriptor_set_array.metal_argument_buffer_and_offset(index).unwrap();
+        self.do_bind_descriptor_set(
+            descriptor_set_array.root_signature().metal_root_signature().unwrap(),
+            descriptor_set_array.set_index(),
+            buffer,
+            offset
+        )
     }
 
     pub fn cmd_bind_descriptor_set_handle(
@@ -415,7 +421,31 @@ impl RafxCommandBufferMetal {
         set_index: u32,
         descriptor_set_handle: &RafxDescriptorSetHandleMetal,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let buffer = descriptor_set_handle.metal_buffer();
+        let offset = descriptor_set_handle.offset();
+        self.do_bind_descriptor_set(root_signature, set_index, buffer, offset)
+    }
+
+    fn do_bind_descriptor_set(
+        &self,
+        root_signature: &RafxRootSignatureMetal,
+        set_index: u32,
+        buffer: &metal_rs::BufferRef,
+        offset:u32,
+    ) -> RafxResult<()> {
+        match root_signature.pipeline_type() {
+            RafxPipelineType::Graphics => {
+                let render_encoder = self.metal_render_encoder().ok_or("Must bind render targets before binding graphics descriptor sets")?;
+                render_encoder.set_vertex_buffer(set_index as _, Some(buffer), offset as _);
+                render_encoder.set_fragment_buffer(set_index as _, Some(buffer), offset as _);
+            }
+            RafxPipelineType::Compute => {
+                let compute_encoder = self.metal_compute_encoder().ok_or("Must bind compute pipeline before binding compute descriptor sets")?;
+                compute_encoder.set_buffer(set_index as _, Some(buffer), offset as _);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn cmd_draw(
@@ -438,13 +468,27 @@ impl RafxCommandBufferMetal {
         instance_count: u32,
         first_instance: u32,
     ) -> RafxResult<()> {
-        self.metal_render_encoder().unwrap().draw_primitives_instanced_base_instance(
-            self.primitive_type(),
-            first_vertex as _,
-            vertex_count as _,
-            instance_count as _,
-            first_instance as _,
-        );
+        let features = self.queue.device_context().metal_features();
+        if !features.supports_base_vertex_instance_drawing {
+            assert_eq!(first_instance, 0);
+        }
+
+        if first_instance == 0 {
+            self.metal_render_encoder().unwrap().draw_primitives_instanced(
+                self.primitive_type(),
+                first_vertex as _,
+                vertex_count as _,
+                instance_count as _,
+            );
+        } else {
+            self.metal_render_encoder().unwrap().draw_primitives_instanced_base_instance(
+                self.primitive_type(),
+                first_vertex as _,
+                vertex_count as _,
+                instance_count as _,
+                first_instance as _,
+            );
+        }
         Ok(())
     }
 
@@ -454,7 +498,34 @@ impl RafxCommandBufferMetal {
         first_index: u32,
         vertex_offset: i32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let features = self.queue.device_context().metal_features();
+        if !features.supports_base_vertex_instance_drawing {
+            assert_eq!(vertex_offset, 0);
+        }
+
+        let stride = self.current_index_buffer_stride.load(Ordering::Relaxed);
+        if vertex_offset == 0 {
+            self.metal_render_encoder().unwrap().draw_indexed_primitives(
+                self.primitive_type(),
+                index_count as _,
+                self.index_type(),
+                self.metal_current_index_buffer().unwrap(),
+                (stride * first_index) as _,
+            );
+        } else {
+            self.metal_render_encoder().unwrap().draw_indexed_primitives_instanced_base_instance(
+                self.primitive_type(),
+                index_count as _,
+                self.index_type(),
+                self.metal_current_index_buffer().unwrap(),
+                (stride * first_index) as _,
+                1,
+                vertex_offset as _,
+                0
+            );
+        }
+
+        Ok(())
     }
 
     pub fn cmd_draw_indexed_instanced(
@@ -465,7 +536,36 @@ impl RafxCommandBufferMetal {
         first_instance: u32,
         vertex_offset: i32,
     ) -> RafxResult<()> {
-        unimplemented!();
+        let features = self.queue.device_context().metal_features();
+        if !features.supports_base_vertex_instance_drawing {
+            assert_eq!(vertex_offset, 0);
+            assert_eq!(first_instance, 0);
+        }
+
+        let stride = self.current_index_buffer_stride.load(Ordering::Relaxed);
+        if vertex_offset == 0 && first_instance == 0 {
+            self.metal_render_encoder().unwrap().draw_indexed_primitives_instanced(
+                self.primitive_type(),
+                index_count as _,
+                self.index_type(),
+                self.metal_current_index_buffer().unwrap(),
+                (stride * first_index) as _,
+                instance_count as _,
+            );
+        } else {
+            self.metal_render_encoder().unwrap().draw_indexed_primitives_instanced_base_instance(
+                self.primitive_type(),
+                index_count as _,
+                self.index_type(),
+                self.metal_current_index_buffer().unwrap(),
+                (stride * first_index) as _,
+                instance_count as _,
+                vertex_offset as _,
+                first_instance as _
+            );
+        }
+
+        Ok(())
     }
 
     pub fn cmd_dispatch(
