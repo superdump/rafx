@@ -227,6 +227,7 @@ pub struct MetalFeatures {
     pub supports_array_of_textures: bool,
     pub supports_base_vertex_instance_drawing: bool,
     pub supports_combined_msaa_store_and_resolve_action: bool,
+    pub supports_cube_map_texture_arrays: bool,
     pub supports_resource_heaps: bool,
 }
 
@@ -248,6 +249,7 @@ impl MetalFeatures {
         let mut supports_array_of_textures = false;
         let mut supports_base_vertex_instance_drawing = false;
         let mut supports_combined_msaa_store_and_resolve_action = false;
+        let mut supports_cube_map_texture_arrays = false;
         let mut supports_resource_heaps = false;
 
         if let Some(feature_set_ios) = feature_set_ios {
@@ -256,6 +258,7 @@ impl MetalFeatures {
             supports_array_of_textures = feature_set_ios.supports_array_of_textures();
             supports_base_vertex_instance_drawing = feature_set_ios.supports_base_vertex_instance_drawing();
             supports_combined_msaa_store_and_resolve_action = feature_set_ios.supports_combined_msaa_store_and_resolve_action();
+            supports_cube_map_texture_arrays = feature_set_ios.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_ios.supports_resource_heaps();
         }
 
@@ -265,6 +268,7 @@ impl MetalFeatures {
             supports_array_of_textures = feature_set_macos.supports_array_of_textures();
             supports_base_vertex_instance_drawing = feature_set_macos.supports_base_vertex_instance_drawing();
             supports_combined_msaa_store_and_resolve_action = feature_set_macos.supports_combined_msaa_store_and_resolve_action();
+            supports_cube_map_texture_arrays = feature_set_macos.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_macos.supports_resource_heaps();
         }
 
@@ -274,6 +278,7 @@ impl MetalFeatures {
             supports_array_of_textures = feature_set_tvos.supports_array_of_textures();
             supports_base_vertex_instance_drawing = feature_set_tvos.supports_base_vertex_instance_drawing();
             supports_combined_msaa_store_and_resolve_action = feature_set_tvos.supports_combined_msaa_store_and_resolve_action();
+            supports_cube_map_texture_arrays = feature_set_tvos.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_tvos.supports_resource_heaps();
         }
 
@@ -293,6 +298,7 @@ impl MetalFeatures {
             supports_array_of_textures,
             supports_base_vertex_instance_drawing,
             supports_combined_msaa_store_and_resolve_action,
+            supports_cube_map_texture_arrays,
             supports_resource_heaps,
         }
     }

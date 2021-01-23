@@ -1,5 +1,7 @@
-use crate::{RafxTextureDef, RafxResult, RafxResourceType};
+use crate::{RafxTextureDef, RafxResult, RafxResourceType, RafxMemoryUsage, RafxTextureDimensions, RafxSampleCount};
 use crate::metal::RafxDeviceContextMetal;
+use metal_rs::{MTLTextureType, MTLTextureUsage};
+use cocoa_foundation::foundation::{NSUInteger};
 
 #[derive(Debug)]
 pub enum RafxRawImageMetal {
@@ -25,6 +27,7 @@ pub struct RafxTextureMetal {
     device_context: RafxDeviceContextMetal,
     texture_def: RafxTextureDef,
     image: RafxRawImageMetal,
+    mip_level_uav_views: Vec<metal_rs::Texture>
 }
 
 impl RafxTextureMetal {
@@ -34,6 +37,10 @@ impl RafxTextureMetal {
 
     pub fn metal_texture(&self) -> &metal_rs::TextureRef {
         self.image.metal_texture()
+    }
+
+    pub fn metal_mip_level_uav_views(&self) -> &[metal_rs::Texture] {
+        &self.mip_level_uav_views
     }
 
     pub fn new(
@@ -51,27 +58,110 @@ impl RafxTextureMetal {
     ) -> RafxResult<RafxTextureMetal> {
         texture_def.verify();
 
+        let dimensions = texture_def
+            .dimensions
+            .determine_dimensions(texture_def.extents);
+
+        let (mtl_texture_type, mtl_array_length) = match dimensions {
+            RafxTextureDimensions::Dim1D => {
+                if texture_def.array_length > 1 {
+                    if !device_context.metal_features().supports_array_of_textures {
+                        return Err("Texture arrays not supported")?;
+                    }
+
+                    (MTLTextureType::D1Array, texture_def.array_length)
+                } else {
+                    (MTLTextureType::D1, texture_def.array_length)
+                }
+            }
+            RafxTextureDimensions::Dim2D => {
+                if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_CUBE) {
+                    if texture_def.array_length == 6 {
+                        (MTLTextureType::Cube, 1)
+                    } else {
+                        if !device_context.metal_features().supports_cube_map_texture_arrays {
+                            return Err("Cube map texture arrays not supported")?;
+                        }
+
+                        (MTLTextureType::CubeArray, texture_def.array_length / 6)
+                    }
+                } else if texture_def.array_length > 1 {
+                    if !device_context.metal_features().supports_array_of_textures {
+                        return Err("Texture arrays not supported")?;
+                    }
+
+                    (MTLTextureType::D2Array, texture_def.array_length)
+                } else if texture_def.sample_count != RafxSampleCount::SampleCount1 {
+                    (MTLTextureType::D2Multisample, texture_def.array_length)
+                } else {
+                    (MTLTextureType::D2, texture_def.array_length)
+                }
+            }
+            RafxTextureDimensions::Dim3D => {
+                (MTLTextureType::D3, texture_def.array_length)
+            }
+            _ => unreachable!()
+        };
+
         let image = if let Some(existing_image) = existing_image {
             existing_image
         } else {
-            unimplemented!();
+            let descriptor = metal_rs::TextureDescriptor::new();
+            descriptor.set_pixel_format(texture_def.format.into());
+            descriptor.set_width(texture_def.extents.width as _);
+            descriptor.set_height(texture_def.extents.height as _);
+            descriptor.set_depth(texture_def.extents.depth as _);
+            descriptor.set_mipmap_level_count(texture_def.mip_count as _);
+            descriptor.set_storage_mode(RafxMemoryUsage::GpuOnly.storage_mode());
+            descriptor.set_cpu_cache_mode(RafxMemoryUsage::GpuOnly.cpu_cache_mode());
+            descriptor.set_resource_options(RafxMemoryUsage::GpuOnly.resource_options());
+            descriptor.set_texture_type(mtl_texture_type);
+            descriptor.set_array_length(mtl_array_length as _);
+
+            let mut mtl_usage = MTLTextureUsage::empty();
+
+            if texture_def.resource_type.intersects(RafxResourceType::TEXTURE) {
+                mtl_usage |= MTLTextureUsage::ShaderRead;
+            }
+
+            if texture_def.resource_type.intersects(RafxResourceType::RENDER_TARGET_DEPTH_STENCIL | RafxResourceType::RENDER_TARGET_COLOR) {
+                mtl_usage |= MTLTextureUsage::RenderTarget;
+            }
+
+            if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
+                mtl_usage |= MTLTextureUsage::PixelFormatView;
+                mtl_usage |= MTLTextureUsage::ShaderWrite;
+            }
+
+            let texture = device_context.device().new_texture(descriptor.as_ref());
+            RafxRawImageMetal::Owned(texture)
         };
 
-        // if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
-        //     for _ in 0..texture_def.mip_count {
-        //         raw_image.metal_texture().unwrap().new_texture_view_from_slice(
-        //             format,
-        //             texture_type,
-        //             mips,
-        //             range
-        //         )
-        //     }
-        // }
+        let mut mip_level_uav_views = vec![];
+        if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
+            let uav_texture_type = match mtl_texture_type {
+                MTLTextureType::Cube => MTLTextureType::D2Array,
+                MTLTextureType::CubeArray => MTLTextureType::D2Array,
+                _ => mtl_texture_type
+            };
+
+            let slices = metal_rs::NSRange::new(0, mtl_array_length as _);
+            for mip_level in 0..texture_def.mip_count {
+                let levels = metal_rs::NSRange::new(mip_level as _, 1);
+                mip_level_uav_views.push(image.metal_texture().new_texture_view_from_slice(
+                    texture_def.format.into(),
+                    uav_texture_type,
+                    levels,
+                    slices
+                ));
+            }
+        }
 
         Ok(RafxTextureMetal {
             texture_def: texture_def.clone(),
             device_context: device_context.clone(),
-            image
+            image,
+            mip_level_uav_views
         })
     }
 }
