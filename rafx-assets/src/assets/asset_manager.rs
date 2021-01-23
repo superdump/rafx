@@ -612,7 +612,7 @@ impl AssetManager {
         if let Some(reflection_data) = &shader_module.reflection_data {
             for entry_point in reflection_data {
                 let old = reflection_data_lookup.insert(
-                    entry_point.rafx_reflection.entry_point_name.clone(),
+                    entry_point.rafx_api_reflection.entry_point_name.clone(),
                     entry_point.clone(),
                 );
                 assert!(old.is_none());
@@ -681,7 +681,7 @@ impl AssetManager {
         let shader = self.resources().get_or_create_shader(
             &[RafxShaderStageDef {
                 shader_module: shader_module.shader_module.get_raw().shader_module.clone(),
-                reflection: reflection_data.rafx_reflection.clone()
+                reflection: reflection_data.rafx_api_reflection.clone()
             }],
             &[shader_module.shader_module.clone()],
         )?;

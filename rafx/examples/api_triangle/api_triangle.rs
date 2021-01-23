@@ -168,33 +168,27 @@ fn run() -> RafxResult<()> {
         };
 
         let vert_shader_stage_def = RafxShaderStageDef {
-            shader_stage: RafxShaderStageFlags::VERTEX,
-            entry_point: "main".to_string(),
             shader_module: vert_shader_module,
-            resources: vec![
-                // Example binding
-                color_shader_resource.clone(),
-            ],
-            compute_threads_per_group: None,
-            metal_info: Some(RafxShaderStageMetalInfo {
-                entry_point_override: Some("main0".to_string()),
-                ..Default::default()
-            })
+            reflection: RafxShaderStageReflection {
+                entry_point_name: "main".to_string(),
+                shader_stage: RafxShaderStageFlags::VERTEX,
+                compute_threads_per_group: None,
+                resources: vec![
+                    color_shader_resource.clone()
+                ]
+            },
         };
 
         let frag_shader_stage_def = RafxShaderStageDef {
-            shader_stage: RafxShaderStageFlags::FRAGMENT,
-            entry_point: "main".to_string(),
             shader_module: frag_shader_module,
-            resources: vec![
-                // Example binding
-                color_shader_resource,
-            ],
-            compute_threads_per_group: None,
-            metal_info: Some(RafxShaderStageMetalInfo {
-                entry_point_override: Some("main0".to_string()),
-                ..Default::default()
-            })
+            reflection: RafxShaderStageReflection {
+                entry_point_name: "main".to_string(),
+                shader_stage: RafxShaderStageFlags::FRAGMENT,
+                compute_threads_per_group: None,
+                resources: vec![
+                    color_shader_resource
+                ]
+            },
         };
 
         //

@@ -1,9 +1,8 @@
 use crate::assets::shader::ShaderAssetData;
-use crate::CookedShader;
 use atelier_assets::core::AssetUuid;
 use atelier_assets::importer::{ImportOp, ImportedAsset, Importer, ImporterValue};
 use rafx_api::{RafxShaderPackage, RafxShaderPackageVulkan};
-use rafx_resources::{ShaderModuleHash, ShaderModuleResourceDef};
+use rafx_resources::{ShaderModuleHash, ShaderModuleResourceDef, CookedShader};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use type_uuid::*;

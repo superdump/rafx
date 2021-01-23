@@ -334,10 +334,13 @@ impl RafxDescriptorSetArrayMetal {
                 // Modify the update data
                 let mut next_index = begin_index;
                 for (buffer_index, buffer) in buffers.iter().enumerate() {
+                    let offset = update.elements.buffer_offset_sizes.map(|x| x[buffer_index].offset).unwrap_or(0);
+                    //println!("arg buffer index: {} offset {} buffer {:?}", next_index, offset, buffer.metal_buffer().unwrap().metal_buffer());
+
                     argument_buffer.encoder.set_buffer(
                         next_index as _,
                         buffer.metal_buffer().unwrap().metal_buffer(),
-                        update.elements.buffer_offset_sizes.map(|x| x[buffer_index].offset).unwrap_or(0)
+                        offset
                     );
                     next_index += 1;
                 }

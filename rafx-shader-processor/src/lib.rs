@@ -126,7 +126,7 @@ pub fn run(args: &ShaderProcessorArgs) -> Result<(), Box<dyn Error>> {
                     .as_ref()
                     .map(|x| x.join(metal_src_name));
 
-                let cooked_shader_name = format!("{}.shader", file_name);
+                let cooked_shader_name = format!("{}.cookedshaderstage", file_name);
                 let cooked_shader_path = args
                     .cooked_shaders_path
                     .as_ref()
@@ -273,7 +273,7 @@ fn process_glsl_shader(
             .as_ref()
             .unwrap()
             .iter()
-            .find(|x| x.rafx_reflection.entry_point_name == entry_point_name)
+            .find(|x| x.rafx_api_reflection.entry_point_name == entry_point_name)
             .ok_or_else(|| {
                 format!(
                     "Could not find entry point {} in compiled shader file",
@@ -327,27 +327,32 @@ fn process_glsl_shader(
         unoptimized_compile_spirv_result.as_binary_u8().to_vec()
     };
 
-    // Don't worry about the return value
-    log::trace!("{:?}: cook shader", glsl_file);
-    let cooked_shader = if cooked_shader_file.is_some() {
-        Some(cook::cook_shader(
-            reflected_data.as_ref().unwrap(),
-            &output_spv,
-        )?)
-    } else {
-        None
-    };
-
-    let entry_points = ast.get_entry_points()?;
     log::trace!("{:?}: create msl", glsl_file);
     let mut msl_ast =
         spirv_cross::spirv::Ast::<spirv_cross::msl::Target>::parse(&spirv_cross_module)?;
     let mut spirv_cross_msl_options = spirv_cross::msl::CompilerOptions::default();
     spirv_cross_msl_options.version = spirv_cross::msl::Version::V2_0;
     spirv_cross_msl_options.enable_argument_buffers = true;
+
+    //TODO: Set this up
+    //spirv_cross_msl_options.resource_binding_overrides.
+    //spirv_cross_msl_options.vertex_attribute_overrides
+    //spirv_cross_msl_options.const_samplers
+
     msl_ast.set_compiler_options(&spirv_cross_msl_options)?;
     let metal_src = msl_ast.compile()?;
-    //println!("{}", metal_src);
+
+    // Don't worry about the return value
+    log::trace!("{:?}: cook shader", glsl_file);
+    let cooked_shader = if cooked_shader_file.is_some() {
+        Some(cook::cook_shader(
+            reflected_data.as_ref().unwrap(),
+            &output_spv,
+            metal_src.clone()
+        )?)
+    } else {
+        None
+    };
 
     //
     // Write out the spv and rust files if desired

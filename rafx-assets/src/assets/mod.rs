@@ -5,8 +5,6 @@ pub use self::image::ImageAssetData;
 pub use self::image::ImageImporter;
 
 mod shader;
-pub use shader::reflect;
-pub use shader::CookedShader;
 pub use shader::ShaderAsset;
 pub use shader::ShaderAssetData;
 pub use shader::ShaderImporterCooked;

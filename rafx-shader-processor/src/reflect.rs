@@ -1,4 +1,4 @@
-use rafx_resources::resources::reflect::{
+use rafx_resources::cooked_shader::{
     ReflectedDescriptorSetLayout, ReflectedDescriptorSetLayoutBinding, ReflectedEntryPoint,
     ReflectedVertexInput,
 };
@@ -484,7 +484,7 @@ where
         reflected_entry_points.push(ReflectedEntryPoint {
             descriptor_set_layouts,
             vertex_inputs: dsc_vertex_inputs,
-            rafx_reflection,
+            rafx_api_reflection: rafx_reflection,
         });
     }
 
