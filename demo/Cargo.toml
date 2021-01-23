@@ -66,6 +66,8 @@ default = [
     #"profile-with-tracy",
     #"profile-with-superluminal"
 ]
+rafx-vulkan = ["rafx/rafx-vulkan"]
+rafx-metal = ["rafx/rafx-metal"]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 static-vulkan = ["rafx/static-vulkan"]
