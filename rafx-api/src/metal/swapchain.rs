@@ -15,6 +15,10 @@ pub struct RafxSwapchainMetal {
     next_swapchain_image_index: u32,
 }
 
+// for metal_rs::CAMetalDrawable
+unsafe impl Send for RafxSwapchainMetal {}
+unsafe impl Sync for RafxSwapchainMetal {}
+
 impl Drop for RafxSwapchainMetal {
     fn drop(&mut self) {
         self.swap_drawable(None);

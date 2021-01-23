@@ -1,4 +1,4 @@
-use rafx_assets::assets::reflect::{
+use rafx_resources::resources::reflect::{
     ReflectedDescriptorSetLayout, ReflectedDescriptorSetLayoutBinding, ReflectedEntryPoint,
     ReflectedVertexInput,
 };

@@ -38,6 +38,10 @@ pub struct RafxDeviceContextMetalInner {
     pub(crate) all_contexts: Mutex<fnv::FnvHashMap<u64, backtrace::Backtrace>>,
 }
 
+// For metal_rs::Device
+unsafe impl Send for RafxDeviceContextMetalInner {}
+unsafe impl Sync for RafxDeviceContextMetalInner {}
+
 impl Drop for RafxDeviceContextMetalInner {
     fn drop(&mut self) {
         if !self.destroyed.swap(true, Ordering::AcqRel) {

@@ -8,6 +8,10 @@ pub struct RafxShaderModuleMetalInner {
     library: metal_rs::Library,
 }
 
+// for metal_rs::Library
+unsafe impl Send for RafxShaderModuleMetalInner {}
+unsafe impl Sync for RafxShaderModuleMetalInner {}
+
 #[derive(Clone, Debug)]
 pub struct RafxShaderModuleMetal {
     inner: Arc<RafxShaderModuleMetalInner>

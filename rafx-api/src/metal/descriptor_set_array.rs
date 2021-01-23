@@ -8,6 +8,10 @@ pub struct RafxDescriptorSetHandleMetal {
     offset: u32,
 }
 
+// for metal_rs::MTLBuffer
+unsafe impl Send for RafxDescriptorSetHandleMetal {}
+unsafe impl Sync for RafxDescriptorSetHandleMetal {}
+
 impl RafxDescriptorSetHandleMetal {
     pub fn metal_buffer(&self) -> &metal_rs::BufferRef {
         use foreign_types_shared::ForeignTypeRef;
@@ -26,6 +30,10 @@ pub struct ArgumentBufferData {
     encoder: metal_rs::ArgumentEncoder,
     stride: u32,
 }
+
+// for metal_rs::ArgumentEncoder
+unsafe impl Send for ArgumentBufferData {}
+unsafe impl Sync for ArgumentBufferData {}
 
 pub struct RafxDescriptorSetArrayMetal {
     root_signature: RafxRootSignature,

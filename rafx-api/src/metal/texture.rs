@@ -10,6 +10,10 @@ pub enum RafxRawImageMetal {
     //Null,
 }
 
+// for metal_rs::Texture
+unsafe impl Send for RafxRawImageMetal {}
+unsafe impl Sync for RafxRawImageMetal {}
+
 impl RafxRawImageMetal {
     pub fn metal_texture(&self) -> &metal_rs::TextureRef {
         match self {
@@ -29,6 +33,10 @@ pub struct RafxTextureMetal {
     image: RafxRawImageMetal,
     mip_level_uav_views: Vec<metal_rs::Texture>
 }
+
+// for metal_rs::Texture
+unsafe impl Send for RafxTextureMetal {}
+unsafe impl Sync for RafxTextureMetal {}
 
 impl RafxTextureMetal {
     pub fn texture_def(&self) -> &RafxTextureDef {

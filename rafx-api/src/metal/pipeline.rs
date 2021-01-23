@@ -1,11 +1,25 @@
 use crate::{RafxGraphicsPipelineDef, RafxRootSignature, RafxPipelineType, RafxComputePipelineDef, RafxResult, RafxShaderStageFlags};
 use crate::metal::RafxDeviceContextMetal;
 
+fn metal_entry_point_name(name: &str) -> &str {
+    // "main" is not an allowed entry point name. spirv_cross adds a 0 to the end of any
+    // unallowed entry point names so do that here too
+    if name == "main" {
+        "main0"
+    } else {
+        name
+    }
+}
+
 #[derive(Debug)]
 enum MetalPipelineState {
     Graphics(metal_rs::RenderPipelineState),
     Compute(metal_rs::ComputePipelineState),
 }
+
+// for metal_rs::RenderPipelineState
+unsafe impl Send for MetalPipelineState {}
+unsafe impl Sync for MetalPipelineState {}
 
 #[derive(Debug)]
 pub(crate) struct PipelineComputeEncoderInfo {
@@ -24,6 +38,10 @@ pub(crate) struct PipelineRenderEncoderInfo {
     pub(crate) mtl_depth_stencil_state: Option<metal_rs::DepthStencilState>,
     pub(crate) mtl_primitive_type: metal_rs::MTLPrimitiveType,
 }
+
+// for metal_rs::DepthStencilState
+unsafe impl Send for PipelineRenderEncoderInfo {}
+unsafe impl Sync for PipelineRenderEncoderInfo {}
 
 #[derive(Debug)]
 pub struct RafxPipelineMetal {
@@ -69,13 +87,8 @@ impl RafxPipelineMetal {
         let mut fragment_function = None;
 
         for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
-            if stage.shader_stage.intersects(RafxShaderStageFlags::VERTEX) {
-                let entry_point = stage
-                    .metal_info
-                    .as_ref()
-                    .map(|x| x.entry_point_override.as_ref())
-                    .flatten()
-                    .unwrap_or(&stage.entry_point);
+            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::VERTEX) {
+                let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
 
                 assert!(vertex_function.is_none());
                 vertex_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
@@ -84,13 +97,8 @@ impl RafxPipelineMetal {
                 )?);
             }
 
-            if stage.shader_stage.intersects(RafxShaderStageFlags::FRAGMENT) {
-                let entry_point = stage
-                    .metal_info
-                    .as_ref()
-                    .map(|x| x.entry_point_override.as_ref())
-                    .flatten()
-                    .unwrap_or(&stage.entry_point);
+            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::FRAGMENT) {
+                let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
 
                 assert!(fragment_function.is_none());
                 fragment_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
@@ -193,13 +201,8 @@ impl RafxPipelineMetal {
         let mut compute_threads_per_group = None;
 
         for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
-            if stage.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
-                let entry_point = stage
-                    .metal_info
-                    .as_ref()
-                    .map(|x| x.entry_point_override.as_ref())
-                    .flatten()
-                    .unwrap_or(&stage.entry_point);
+            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+                let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
 
                 assert!(compute_function.is_none());
                 compute_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
@@ -207,7 +210,7 @@ impl RafxPipelineMetal {
                     None
                 )?);
 
-                compute_threads_per_group = stage.compute_threads_per_group;
+                compute_threads_per_group = stage.reflection.compute_threads_per_group;
             }
         }
 

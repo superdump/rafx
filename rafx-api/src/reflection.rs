@@ -230,44 +230,44 @@ impl RafxPipelineReflection {
     pub fn from_stages(stages: &[RafxShaderStageDef]) -> RafxResult<RafxPipelineReflection> {
         let mut unmerged_resources = Vec::default();
         for stage in stages {
-            assert!(!stage.shader_stage.is_empty());
-            for resource in &stage.resources {
+            assert!(!stage.reflection.shader_stage.is_empty());
+            for resource in &stage.reflection.resources {
                 // The provided resource MAY (but does not need to) have the shader stage flag set.
                 // (Leaving it default empty is fine). It will automatically be set here.
-                if !(resource.used_in_shader_stages - stage.shader_stage).is_empty() {
+                if !(resource.used_in_shader_stages - stage.reflection.shader_stage).is_empty() {
                     let message = format!(
                         "A resource in shader stage {:?} has other stages {:?} set",
-                        stage.shader_stage,
-                        resource.used_in_shader_stages - stage.shader_stage
+                        stage.reflection.shader_stage,
+                        resource.used_in_shader_stages - stage.reflection.shader_stage
                     );
                     log::error!("{}", message);
                     Err(message)?;
                 }
 
                 let mut resource = resource.clone();
-                resource.used_in_shader_stages |= stage.shader_stage;
+                resource.used_in_shader_stages |= stage.reflection.shader_stage;
                 unmerged_resources.push(resource);
             }
         }
 
         let mut compute_threads_per_group = None;
         for stage in stages {
-            if stage.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
-                compute_threads_per_group = stage.compute_threads_per_group;
+            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+                compute_threads_per_group = stage.reflection.compute_threads_per_group;
             }
         }
 
         log::trace!("Create RafxPipelineReflection from stages");
         let mut all_shader_stages = RafxShaderStageFlags::empty();
         for stage in stages {
-            if all_shader_stages.intersects(stage.shader_stage) {
+            if all_shader_stages.intersects(stage.reflection.shader_stage) {
                 Err(format!(
                     "Duplicate shader stage ({}) found when creating RafxPipelineReflection",
-                    (all_shader_stages & stage.shader_stage).bits()
+                    (all_shader_stages & stage.reflection.shader_stage).bits()
                 ))?;
             }
 
-            all_shader_stages |= stage.shader_stage;
+            all_shader_stages |= stage.reflection.shader_stage;
         }
 
         let mut merged_resources =

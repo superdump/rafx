@@ -8,6 +8,10 @@ pub struct RafxBufferMetal {
     buffer: metal_rs::Buffer,
 }
 
+// for metal_rs::Buffer
+unsafe impl Send for RafxBufferMetal {}
+unsafe impl Sync for RafxBufferMetal {}
+
 impl RafxBufferMetal {
     pub fn buffer_def(&self) -> &RafxBufferDef {
         &self.buffer_def

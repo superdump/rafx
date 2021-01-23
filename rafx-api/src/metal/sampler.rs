@@ -8,6 +8,10 @@ pub struct RafxSamplerMetalInner {
     sampler: metal_rs::SamplerState,
 }
 
+// for metal_rs::SamplerState
+unsafe impl Send for RafxSamplerMetalInner {}
+unsafe impl Sync for RafxSamplerMetalInner {}
+
 #[derive(Debug, Clone)]
 pub struct RafxSamplerMetal {
     inner: Arc<RafxSamplerMetalInner>,

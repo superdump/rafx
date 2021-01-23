@@ -16,6 +16,10 @@ pub struct RafxQueueMetalInner {
     fence: metal_rs::Fence,
 }
 
+// for metal_rs::CommandQueue
+unsafe impl Send for RafxQueueMetalInner {}
+unsafe impl Sync for RafxQueueMetalInner {}
+
 #[derive(Clone, Debug)]
 pub struct RafxQueueMetal {
     inner: Arc<RafxQueueMetalInner>

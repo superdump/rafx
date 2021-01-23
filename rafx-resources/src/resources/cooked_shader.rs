@@ -1,5 +1,5 @@
 use rafx_api::{RafxSamplerDef, RafxShaderResource, RafxShaderStageReflection};
-use rafx_resources::DescriptorSetLayoutBinding;
+use crate::DescriptorSetLayoutBinding;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -49,4 +49,17 @@ pub struct ReflectedEntryPoint {
 
     // Additional reflection data used by the framework level for vertex inputs
     pub vertex_inputs: Vec<ReflectedVertexInput>,
+}
+
+// An import format that will get turned into ShaderAssetData
+#[derive(Serialize, Deserialize)]
+pub struct CookedShader {
+    #[serde(with = "serde_bytes")]
+    pub spv: Vec<u8>,
+    //TODO: We ideally package binary but this is only possible with apple shader tools installed,
+    // which is only available on win/mac. So we'll want a fallback path so that it's not impossible
+    // to produce a cooked shader on machines without the tools. (Also the tools don't provide an
+    // API so will need to figure out how to compile the shader programmatically.)
+    pub metal_source: String,
+    pub entry_points: Vec<ReflectedEntryPoint>,
 }

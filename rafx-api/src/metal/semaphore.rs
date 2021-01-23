@@ -12,6 +12,10 @@ pub struct RafxSemaphoreMetal {
     metal_event: metal_rs::Event,
 }
 
+// for metal_rs::Event
+unsafe impl Send for RafxSemaphoreMetal {}
+unsafe impl Sync for RafxSemaphoreMetal {}
+
 impl RafxSemaphoreMetal {
     pub fn new(device_context: &RafxDeviceContextMetal) -> RafxResult<RafxSemaphoreMetal> {
         //TODO: Need to add support for new_event() in metal crate

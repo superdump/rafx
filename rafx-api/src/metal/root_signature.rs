@@ -66,6 +66,10 @@ pub(crate) struct RafxRootSignatureMetalInner {
     pub(crate) argument_descriptors: [Vec<metal_rs::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
 }
 
+// for metal_rs::ArgumentDescriptor
+unsafe impl Send for RafxRootSignatureMetalInner {}
+unsafe impl Sync for RafxRootSignatureMetalInner {}
+
 #[derive(Clone, Debug)]
 pub struct RafxRootSignatureMetal {
     pub(crate) inner: Arc<RafxRootSignatureMetalInner>

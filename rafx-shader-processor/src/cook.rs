@@ -1,4 +1,4 @@
-use rafx_assets::assets::reflect::ReflectedEntryPoint;
+use rafx_resources::resources::reflect::ReflectedEntryPoint;
 use rafx_assets::CookedShader;
 
 pub(crate) fn cook_shader(
