@@ -79,12 +79,12 @@ impl RafxTextureMetal {
 
                     (MTLTextureType::D1Array, texture_def.array_length)
                 } else {
-                    (MTLTextureType::D1, texture_def.array_length)
+                    (MTLTextureType::D1, 1)
                 }
             }
             RafxTextureDimensions::Dim2D => {
-                if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_CUBE) {
-                    if texture_def.array_length == 6 {
+                if texture_def.resource_type.contains(RafxResourceType::TEXTURE_CUBE) {
+                    if texture_def.array_length <= 6 {
                         (MTLTextureType::Cube, 1)
                     } else {
                         if !device_context.metal_features().supports_cube_map_texture_arrays {
@@ -100,13 +100,13 @@ impl RafxTextureMetal {
 
                     (MTLTextureType::D2Array, texture_def.array_length)
                 } else if texture_def.sample_count != RafxSampleCount::SampleCount1 {
-                    (MTLTextureType::D2Multisample, texture_def.array_length)
+                    (MTLTextureType::D2Multisample, 1)
                 } else {
-                    (MTLTextureType::D2, texture_def.array_length)
+                    (MTLTextureType::D2, 1)
                 }
             }
             RafxTextureDimensions::Dim3D => {
-                (MTLTextureType::D3, texture_def.array_length)
+                (MTLTextureType::D3, texture_def.array_length.max(1))
             }
             _ => unreachable!()
         };
@@ -125,6 +125,7 @@ impl RafxTextureMetal {
             descriptor.set_resource_options(RafxMemoryUsage::GpuOnly.resource_options());
             descriptor.set_texture_type(mtl_texture_type);
             descriptor.set_array_length(mtl_array_length as _);
+            descriptor.set_sample_count(texture_def.sample_count.into());
 
             let mut mtl_usage = MTLTextureUsage::empty();
 
@@ -140,6 +141,8 @@ impl RafxTextureMetal {
                 mtl_usage |= MTLTextureUsage::PixelFormatView;
                 mtl_usage |= MTLTextureUsage::ShaderWrite;
             }
+
+            descriptor.set_usage(mtl_usage);
 
             let texture = device_context.device().new_texture(descriptor.as_ref());
             RafxRawImageMetal::Owned(texture)

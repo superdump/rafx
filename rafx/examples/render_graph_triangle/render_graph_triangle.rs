@@ -7,7 +7,7 @@ use rafx::graph::{
     SwapchainSurfaceInfo,
 };
 use rafx::nodes::SubmitNode;
-use rafx::resources::{DescriptorSetLayout, DescriptorSetLayoutBinding, FixedFunctionState, MaterialPassVertexInput, ShaderModuleHash, ShaderModuleResourceDef, VertexDataLayout, CookedShader, ReflectedShader};
+use rafx::resources::{DescriptorSetLayout, DescriptorSetLayoutBinding, FixedFunctionState, MaterialPassVertexInput, ShaderModuleHash, ShaderModuleResourceDef, VertexDataLayout, CookedShaderPackage, ReflectedShader};
 use std::sync::Arc;
 
 const WINDOW_WIDTH: u32 = 900;
@@ -106,7 +106,7 @@ fn run() -> RafxResult<()> {
         let cooked_shaders_base_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("examples/render_graph_triangle/cooked_shaders");
 
-        let cooked_vertex_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.vert.cookedshaderstage")?;
+        let cooked_vertex_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.vert.cookedshaderpackage")?;
         let vertex_shader_reflection = cooked_vertex_shader_stage.find_entry_point("main").unwrap().clone();
         let vertex_shader_module_resource_def = Arc::new(ShaderModuleResourceDef {
             shader_module_hash: cooked_vertex_shader_stage.hash,
@@ -116,7 +116,7 @@ fn run() -> RafxResult<()> {
             .resources()
             .get_or_create_shader_module(&vertex_shader_module_resource_def)?;
 
-        let cooked_fragment_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.frag.cookedshaderstage")?;
+        let cooked_fragment_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.frag.cookedshaderpackage")?;
         let fragment_shader_reflection = cooked_fragment_shader_stage.find_entry_point("main").unwrap().clone();
         let fragment_shader_module_resource_def = Arc::new(ShaderModuleResourceDef {
             shader_module_hash: cooked_fragment_shader_stage.hash,
@@ -273,7 +273,7 @@ fn run() -> RafxResult<()> {
                 0,
                 Some(RafxColorClearValue([0.0, 0.0, 0.0, 0.0])),
                 RenderGraphImageConstraint {
-                    samples: Some(RafxSampleCount::SampleCount1),
+                    samples: Some(RafxSampleCount::SampleCount4),
                     format: Some(swapchain_helper.format()),
                     ..Default::default()
                 },
@@ -593,11 +593,11 @@ fn create_api(_window: &dyn HasRawWindowHandle) -> RafxResult<RafxApi> {
 fn load_cooked_shader_stage(
     base_path: &Path,
     shader_file: &str,
-) -> RafxResult<CookedShader> {
+) -> RafxResult<CookedShaderPackage> {
     let cooked_shader_path = base_path.join(shader_file);
     let bytes = std::fs::read(cooked_shader_path)?;
 
-    let cooked_shader = bincode::deserialize::<CookedShader>(&bytes)
+    let cooked_shader = bincode::deserialize::<CookedShaderPackage>(&bytes)
         .map_err(|x| format!("Failed to deserialize cooked shader: {:?}", x))?;
 
     Ok(cooked_shader)

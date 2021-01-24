@@ -32,13 +32,6 @@ impl DescriptorBindingBufferSet {
         //This is the only one we support right now
         assert!(buffer_info.descriptor_type == RafxResourceType::UNIFORM_BUFFER);
 
-        let buffer_size = buffer_info.per_descriptor_stride * MAX_DESCRIPTOR_SETS_PER_POOL;
-        if buffer_size > 16000 {
-            //TODO: To get around this, reduce MAX_DESCRIPTOR_SETS_PER_POOL or if you don't care about
-            // metal, remove the warning.
-            Err("TEMPORARY: Metal backend does not work with descriptor set buffers if size is too large.")?;
-        }
-
         let buffer = device_context.create_buffer(&RafxBufferDef {
             size: (buffer_info.per_descriptor_stride * MAX_DESCRIPTOR_SETS_PER_POOL) as u64,
             memory_usage: RafxMemoryUsage::CpuToGpu,

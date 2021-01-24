@@ -43,7 +43,7 @@ pub use descriptor_set_allocator_manager::DescriptorSetAllocatorProvider;
 pub use descriptor_set_allocator_manager::DescriptorSetAllocatorRef;
 use rafx_api::RafxResourceType;
 
-const MAX_DESCRIPTOR_SETS_PER_POOL: u32 = 32;
+const MAX_DESCRIPTOR_SETS_PER_POOL: u32 = 64;
 const MAX_FRAMES_IN_FLIGHT: usize = crate::MAX_FRAMES_IN_FLIGHT;
 const MAX_FRAMES_IN_FLIGHT_PLUS_1: usize = MAX_FRAMES_IN_FLIGHT + 1;
 

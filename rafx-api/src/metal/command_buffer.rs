@@ -1,5 +1,5 @@
 use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType, RafxIndexType};
-use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal, RafxRootSignatureMetalInner};
+use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal, RafxRootSignatureMetalInner, ArgumentBufferData};
 use std::sync::atomic::{AtomicPtr, AtomicU8, AtomicBool, AtomicU64, AtomicU32};
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
@@ -139,6 +139,12 @@ impl RafxCommandBufferMetal {
                 if color_target.load_op == RafxLoadOp::Clear {
                     color_descriptor.set_clear_color(color_target.clear_value.into());
                 }
+
+                if let Some(resolve_target) = color_target.resolve_target {
+                    color_descriptor.set_resolve_texture(Some(resolve_target.texture().metal_texture().unwrap().metal_texture()));
+                    color_descriptor.set_resolve_level(color_target.resolve_mip_slice.unwrap_or(0) as _);
+                    color_descriptor.set_resolve_slice(color_target.array_slice.unwrap_or(0) as _);
+                }
             }
 
             if let Some(depth_target) = depth_target {
@@ -155,6 +161,10 @@ impl RafxCommandBufferMetal {
                 depth_descriptor.set_slice(depth_target.array_slice.unwrap_or(0) as _);
                 depth_descriptor.set_load_action(depth_target.depth_load_op.into());
                 depth_descriptor.set_store_action(depth_target.depth_store_op.into());
+
+                if depth_target.depth_load_op == RafxLoadOp::Clear {
+                    depth_descriptor.set_clear_depth(depth_target.clear_value.depth as f64);
+                }
 
                 let has_stencil = texture.texture_def().format.has_stencil();
                 if has_stencil {
@@ -411,7 +421,9 @@ impl RafxCommandBufferMetal {
             descriptor_set_array.root_signature().metal_root_signature().unwrap(),
             descriptor_set_array.set_index(),
             buffer,
-            offset
+            offset,
+            index,
+            descriptor_set_array.argument_buffer_data().unwrap()
         )
     }
 
@@ -423,25 +435,30 @@ impl RafxCommandBufferMetal {
     ) -> RafxResult<()> {
         let buffer = descriptor_set_handle.metal_buffer();
         let offset = descriptor_set_handle.offset();
-        self.do_bind_descriptor_set(root_signature, set_index, buffer, offset)
+        let array_index = descriptor_set_handle.array_index();
+        self.do_bind_descriptor_set(root_signature, set_index, buffer, offset, array_index, descriptor_set_handle.argument_buffer_data())
     }
 
     fn do_bind_descriptor_set(
         &self,
         root_signature: &RafxRootSignatureMetal,
         set_index: u32,
-        buffer: &metal_rs::BufferRef,
-        offset:u32,
+        argument_buffer: &metal_rs::BufferRef,
+        argument_buffer_offset: u32,
+        array_index: u32,
+        argument_buffer_data: &ArgumentBufferData
     ) -> RafxResult<()> {
         match root_signature.pipeline_type() {
             RafxPipelineType::Graphics => {
                 let render_encoder = self.metal_render_encoder().ok_or("Must bind render targets before binding graphics descriptor sets")?;
-                render_encoder.set_vertex_buffer(set_index as _, Some(buffer), offset as _);
-                render_encoder.set_fragment_buffer(set_index as _, Some(buffer), offset as _);
+                render_encoder.set_vertex_buffer(set_index as _, Some(argument_buffer), argument_buffer_offset as _);
+                render_encoder.set_fragment_buffer(set_index as _, Some(argument_buffer), argument_buffer_offset as _);
+                argument_buffer_data.make_resources_resident_render_encoder(array_index, render_encoder);
             }
             RafxPipelineType::Compute => {
                 let compute_encoder = self.metal_compute_encoder().ok_or("Must bind compute pipeline before binding compute descriptor sets")?;
-                compute_encoder.set_buffer(set_index as _, Some(buffer), offset as _);
+                compute_encoder.set_buffer(set_index as _, Some(argument_buffer), argument_buffer_offset as _);
+                argument_buffer_data.make_resources_resident_compute_encoder(array_index, compute_encoder);
             }
         }
 

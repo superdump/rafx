@@ -158,6 +158,7 @@ impl ManagedDescriptorSetPool {
             &self.descriptor_set_layout,
             descriptor_set_handle,
         );
+
         Ok(descriptor_set_arc)
     }
 

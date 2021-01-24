@@ -89,7 +89,6 @@ impl RafxPipelineMetal {
         for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
             if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::VERTEX) {
                 let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
-
                 assert!(vertex_function.is_none());
                 vertex_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
                     entry_point,
@@ -99,7 +98,6 @@ impl RafxPipelineMetal {
 
             if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::FRAGMENT) {
                 let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
-
                 assert!(fragment_function.is_none());
                 fragment_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
                     entry_point,
@@ -109,10 +107,9 @@ impl RafxPipelineMetal {
         }
 
         let vertex_function = vertex_function.ok_or("Could not find vertex function")?;
-        let fragment_function = fragment_function.ok_or("Could not find fragment function")?;
 
         pipeline.set_vertex_function(Some(vertex_function.as_ref()));
-        pipeline.set_fragment_function(Some(fragment_function.as_ref()));
+        pipeline.set_fragment_function(fragment_function.as_ref().map(|x| x.as_ref()));
         pipeline.set_sample_count(pipeline_def.sample_count.into());
 
         let mut vertex_descriptor = metal_rs::VertexDescriptor::new();

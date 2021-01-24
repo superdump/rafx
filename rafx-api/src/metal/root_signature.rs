@@ -46,6 +46,8 @@ pub(crate) struct DescriptorSetLayoutInfo {
 
     // --- metal-specific ---
     pub(crate) immutable_samplers: Vec<ImmutableSampler>,
+    // All argument buffer IDs must be within 0..argument_buffer_id_range
+    pub(crate) argument_buffer_id_range: u32,
     // pub(crate) sampler_count: u32,
     // pub(crate) texture_count: u32,
     // pub(crate) buffer_count: u32,
@@ -64,6 +66,7 @@ pub(crate) struct RafxRootSignatureMetalInner {
     //TODO: Can potentially remove, they are held in DescriptorInfo too
     //immutable_samplers: Vec<RafxSampler>,
     pub(crate) argument_descriptors: [Vec<metal_rs::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
+    pub(crate) argument_buffer_resource_usages: [Arc<Vec<MTLResourceUsage>>; MAX_DESCRIPTOR_SET_LAYOUTS],
 }
 
 // for metal_rs::ArgumentDescriptor
@@ -136,13 +139,19 @@ impl RafxRootSignatureMetal {
             DescriptorSetLayoutInfo::default(),
         ];
 
+        let mut resource_usages = [
+            vec![],
+            vec![],
+            vec![],
+            vec![]
+        ];
+
         let mut next_argument_buffer_id = [0, 0, 0, 0];
 
         let mut descriptors = Vec::with_capacity(merged_resources.len());
         let mut name_to_descriptor_index = FnvHashMap::default();
 
         for resource in &merged_resources {
-
             resource.validate()?;
 
             // Not currently supported
@@ -179,7 +188,7 @@ impl RafxRootSignatureMetal {
             let descriptor_index = RafxDescriptorIndex(descriptors.len() as u32);
 
             let argument_buffer_id = next_argument_buffer_id[resource.set_index as usize];
-            next_argument_buffer_id[resource.set_index as usize] += resource.element_count;
+            next_argument_buffer_id[resource.set_index as usize] += resource.element_count_normalized();
 
             //let update_data_offset_in_set = Some(layout.update_data_count_per_set);
 
@@ -196,7 +205,7 @@ impl RafxRootSignatureMetal {
                     samplers,
                     argument_buffer_id: argument_buffer_id as _
                 });
-            } else {
+            }; { //TEMP: Let immutable samplers register normally until I add config to make spirv_cross put them in the MSL
                 // Add it to the descriptor list
                 descriptors.push(DescriptorInfo {
                     name: resource.name.clone(),
@@ -220,22 +229,24 @@ impl RafxRootSignatureMetal {
                 layout
                     .binding_to_descriptor_index
                     .insert(resource.binding, descriptor_index);
+                layout.argument_buffer_id_range = next_argument_buffer_id[resource.set_index as usize];
 
-                // if resource.resource_type.intersects(RafxResourceType::SAMPLER) {
-                //     layout.sampler_count += 1;
-                // } else if resource.resource_type.intersects(RafxResourceType::TEXTURE | RafxResourceType::TEXTURE_READ_WRITE) {
-                //     layout.texture_count += 1;
-                // } else {
-                //     layout.buffer_count += 1;
-                // }
+                // Build out the MTLResourceUsage usages - it's used when we bind descriptor sets
+                let mut layout_resource_usages = &mut resource_usages[resource.set_index as usize];
+                layout_resource_usages.resize(layout.argument_buffer_id_range as usize, MTLResourceUsage::empty());
+                let usage = super::util::resource_type_mtl_resource_usage(resource.resource_type);
+                for i in argument_buffer_id..layout.argument_buffer_id_range {
+                    layout_resource_usages[i as usize] = usage;
+                }
+
+                debug_assert_ne!(layout.argument_buffer_id_range, 0);
             }
-
-            //layout.update_data_count_per_set += resource.element_count_normalized();
         }
 
         let mut argument_descriptors = [
             vec![], vec![], vec![], vec![]
         ];
+
         for i in 0..MAX_DESCRIPTOR_SET_LAYOUTS {
             for &resource_index in &layouts[i].descriptors {
                 let descriptor = &descriptors[resource_index.0 as usize];
@@ -253,12 +264,20 @@ impl RafxRootSignatureMetal {
             }
         }
 
+        let argument_buffer_resource_usages = [
+            Arc::new(std::mem::take(&mut resource_usages[0])),
+            Arc::new(std::mem::take(&mut resource_usages[1])),
+            Arc::new(std::mem::take(&mut resource_usages[2])),
+            Arc::new(std::mem::take(&mut resource_usages[3])),
+        ];
+
         let inner = RafxRootSignatureMetalInner {
             device_context: device_context.clone(),
             pipeline_type,
             layouts,
             descriptors,
             name_to_descriptor_index,
+            argument_buffer_resource_usages,
             argument_descriptors
         };
 

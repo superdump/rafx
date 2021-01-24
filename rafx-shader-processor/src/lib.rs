@@ -126,7 +126,7 @@ pub fn run(args: &ShaderProcessorArgs) -> Result<(), Box<dyn Error>> {
                     .as_ref()
                     .map(|x| x.join(metal_src_name));
 
-                let cooked_shader_name = format!("{}.cookedshaderstage", file_name);
+                let cooked_shader_name = format!("{}.cookedshaderpackage", file_name);
                 let cooked_shader_path = args
                     .cooked_shaders_path
                     .as_ref()

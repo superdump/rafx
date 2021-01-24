@@ -400,17 +400,10 @@ pub struct RafxShaderModuleDef<'a> {
     pub vk: Option<RafxShaderModuleDefVulkan<'a>>,
 }
 
-// #[derive(Hash)]
-// #[cfg(any(feature = "rafx-vulkan"))]
-// pub enum RafxShaderModuleDef<'a> {
-//     #[cfg(feature = "rafx-vulkan")]
-//     Vk(RafxShaderModuleDefVulkan<'a>),
-// }
-
 // RafxShaderModuleDef will have an unused lifetime if no features are enabled
 #[derive(Hash)]
 #[cfg(not(any(feature = "rafx-vulkan", feature = "rafx-metal")))]
-pub enum RafxShaderModuleDef {}
+pub struct RafxShaderModuleDef {}
 
 #[derive(Clone, Debug)]
 pub struct RafxShaderStageDef {

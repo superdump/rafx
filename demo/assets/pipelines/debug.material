@@ -6,12 +6,12 @@
             shaders: [
                 (
                     stage: Vertex,
-                    shader_module: "../shaders/debug.vert.shader",
+                    shader_module: "../shaders/debug.vert.cookedshaderpackage",
                     entry_name: "main" 
                 ),
                 (
                     stage: Fragment,
-                    shader_module: "../shaders/debug.frag.shader",
+                    shader_module: "../shaders/debug.frag.cookedshaderpackage",
                     entry_name: "main"
                 ),
             ],

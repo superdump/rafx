@@ -192,6 +192,8 @@ pub use ash;
 pub use vk_mem;
 #[cfg(feature = "rafx-metal")]
 pub use metal_rs;
+#[cfg(feature = "rafx-metal")]
+pub use foreign_types_shared;
 
 pub use raw_window_handle;
 
@@ -252,6 +254,8 @@ pub use vulkan::RafxApiDefVulkan;
 //
 #[cfg(feature = "rafx-metal")]
 pub mod metal;
+#[cfg(feature = "rafx-metal")]
+pub use metal::RafxApiDefMetal;
 
 pub mod extra;
 mod types;

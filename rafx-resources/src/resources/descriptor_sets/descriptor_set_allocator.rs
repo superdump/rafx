@@ -97,8 +97,10 @@ impl DescriptorSetAllocator {
         write_set: DescriptorSetWriteSet,
     ) -> RafxResult<DescriptorSetArc> {
         // Get or create the pool for the layout
+
         let hash = descriptor_set_layout.get_hash().into();
         let device_context = self.device_context.clone();
+
         let pool = self.pools.entry(hash).or_insert_with(|| {
             ManagedDescriptorSetPool::new(&device_context, descriptor_set_layout.clone())
         });

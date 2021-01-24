@@ -12,7 +12,7 @@ use rafx_api::{
 use rafx_nodes::{RenderPhase, RenderPhaseIndex};
 pub use rafx_resources::DescriptorSetLayoutResource;
 pub use rafx_resources::GraphicsPipelineResource;
-use rafx_resources::{DescriptorSetArc, DescriptorSetLayout, FixedFunctionState, ResourceArc, ShaderModuleMeta, SlotNameLookup, ShaderStage};
+use rafx_resources::{DescriptorSetArc, DescriptorSetLayout, FixedFunctionState, ResourceArc, ShaderModuleMeta, SlotNameLookup, SlotLocation};
 use rafx_resources::{DescriptorSetWriteSet, MaterialPassResource, SamplerResource};
 use rafx_resources::{MaterialPassVertexInput, ShaderModuleResource};
 use std::hash::Hash;

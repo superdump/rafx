@@ -1,5 +1,4 @@
-use super::SlotNameLookup;
-use rafx_resources::DynDescriptorSet;
+use rafx_resources::{DynDescriptorSet, SlotNameLookup};
 use rafx_resources::ImageViewResource;
 use rafx_resources::ResourceArc;
 use rafx_resources::{DescriptorSetAllocator, RafxResult};

@@ -1,5 +1,5 @@
 use rafx_resources::{ReflectedEntryPoint, ShaderModuleHash};
-use rafx_resources::CookedShader;
+use rafx_resources::CookedShaderPackage;
 use rafx_api::{RafxShaderPackage, RafxShaderPackageVulkan, RafxShaderPackageMetal};
 
 pub(crate) fn cook_shader(
@@ -17,7 +17,7 @@ pub(crate) fn cook_shader(
         metal: Some(RafxShaderPackageMetal::Src(metal_source))
     };
 
-    let cooked_shader = CookedShader {
+    let cooked_shader = CookedShaderPackage {
         entry_points: reflected_data.to_vec(),
         hash: ShaderModuleHash::new(&shader_package),
         shader_package,

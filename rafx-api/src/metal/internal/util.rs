@@ -22,7 +22,7 @@ pub(crate) fn resource_type_mtl_data_type(
     }
 }
 
-pub(crate) fn resource_type_mlt_resource_usage(
+pub(crate) fn resource_type_mtl_resource_usage(
     resource_type: RafxResourceType
 ) -> MTLResourceUsage {
     let mut usage = MTLResourceUsage::empty();
@@ -57,7 +57,7 @@ pub(crate) fn resource_type_mlt_resource_usage(
 pub(crate) fn resource_type_mtl_argument_access(
     resource_type: RafxResourceType,
 ) -> MTLArgumentAccess {
-    let usage = resource_type_mlt_resource_usage(resource_type);
+    let usage = resource_type_mtl_resource_usage(resource_type);
     if usage.intersects(MTLResourceUsage::Write) {
         MTLArgumentAccess::ReadWrite
     } else {

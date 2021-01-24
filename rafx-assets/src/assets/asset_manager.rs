@@ -7,16 +7,11 @@ use crate::assets::{
 use crate::assets::{GraphicsPipelineAssetData, MaterialAssetData, MaterialInstanceAssetData};
 use crate::{
     AssetLookup, AssetLookupSet, BufferAssetData, ComputePipelineAsset, ComputePipelineAssetData,
-    GenericLoader, LoadQueues, MaterialInstanceSlotAssignment, SamplerAssetData, SlotNameLookup,
+    GenericLoader, LoadQueues, MaterialInstanceSlotAssignment, SamplerAssetData,
     UploadQueueConfig,
 };
 use atelier_assets::loader::handle::Handle;
-use rafx_resources::{
-    ComputePipelineResource, DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider,
-    DescriptorSetAllocatorRef, DescriptorSetLayout, DescriptorSetLayoutResource,
-    DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource,
-    ResourceArc, ShaderModuleMeta,
-};
+use rafx_resources::{ComputePipelineResource, DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef, DescriptorSetLayout, DescriptorSetLayoutResource, DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource, ResourceArc, ShaderModuleMeta, SlotNameLookup};
 
 use super::asset_lookup::LoadedAssetMetrics;
 use super::load_queue::LoadQueueSet;

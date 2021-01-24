@@ -64,13 +64,13 @@ pub struct ReflectedEntryPoint {
 
 // An import format that will get turned into ShaderAssetData
 #[derive(Serialize, Deserialize)]
-pub struct CookedShader {
+pub struct CookedShaderPackage {
     pub hash: ShaderModuleHash,
     pub shader_package: RafxShaderPackage,
     pub entry_points: Vec<ReflectedEntryPoint>,
 }
 
-impl CookedShader {
+impl CookedShaderPackage {
     pub fn find_entry_point(&self, entry_point_name: &str) -> Option<&ReflectedEntryPoint> {
         self.entry_points.iter().find(|x| x.rafx_api_reflection.entry_point_name == entry_point_name)
     }
