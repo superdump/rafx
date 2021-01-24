@@ -12,31 +12,6 @@ use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex, RenderView,
 };
 
-// This is almost copy-pasted from glam. I wanted to avoid pulling in the entire library for a
-// single function
-pub fn orthographic_rh_gl(
-    left: f32,
-    right: f32,
-    bottom: f32,
-    top: f32,
-    near: f32,
-    far: f32,
-) -> [[f32; 4]; 4] {
-    let a = 2.0 / (right - left);
-    let b = 2.0 / (top - bottom);
-    let c = -2.0 / (far - near);
-    let tx = -(right + left) / (right - left);
-    let ty = -(top + bottom) / (top - bottom);
-    let tz = -(far + near) / (far - near);
-
-    [
-        [a, 0.0, 0.0, 0.0],
-        [0.0, b, 0.0, 0.0],
-        [0.0, 0.0, c, 0.0],
-        [tx, ty, tz, 1.0],
-    ]
-}
-
 pub struct ImGuiExtractJobImpl {}
 
 impl ImGuiExtractJobImpl {
@@ -69,14 +44,22 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
         let swapchain_info = extract_context
             .render_resources
             .fetch::<SwapchainSurfaceInfo>();
-        let view_proj = orthographic_rh_gl(
+
+        let top = 0.0;
+        let bottom = swapchain_info.extents.height as f32 / framebuffer_scale[1];
+
+        let mut view_proj = glam::Mat4::orthographic_rh(
             0.0,
             swapchain_info.extents.width as f32 / framebuffer_scale[0],
-            0.0,
-            swapchain_info.extents.height as f32 / framebuffer_scale[1],
+            bottom,
+            top,
             -100.0,
             100.0,
         );
+
+        if !extract_context.asset_manager.device_context().device_info().normalized_coordinates_y_is_up {
+            view_proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * view_proj;
+        }
 
         let imgui_material = &extract_context
             .render_resources
@@ -88,7 +71,7 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
             .unwrap();
 
         let font_atlas = &extract_context.render_resources.fetch::<ImguiFontAtlas>().0;
-        let view_ubo = ImGuiUniformBufferObject { mvp: view_proj };
+        let view_ubo = ImGuiUniformBufferObject { mvp: view_proj.to_cols_array_2d() };
 
         Box::new(ImGuiPrepareJobImpl::new(
             ExtractedImGuiData { imgui_draw_data },

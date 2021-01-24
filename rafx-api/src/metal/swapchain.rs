@@ -71,7 +71,7 @@ impl RafxSwapchainMetal {
         layer.set_device(device_context.device());
         //TODO: Don't hardcode pixel format
         // https://developer.apple.com/documentation/quartzcore/cametallayer/1478155-pixelformat
-        layer.set_pixel_format(metal_rs::MTLPixelFormat::BGRA8Unorm);
+        layer.set_pixel_format(metal_rs::MTLPixelFormat::BGRA8Unorm_sRGB);
         layer.set_presents_with_transaction(false);
         layer.set_display_sync_enabled(swapchain_def.enable_vsync);
 
@@ -86,7 +86,7 @@ impl RafxSwapchainMetal {
             drawable: Default::default(),
             swapchain_def,
             next_swapchain_image_index: 0,
-            format: RafxFormat::B8G8R8A8_UNORM
+            format: RafxFormat::B8G8R8A8_SRGB
         })
     }
 

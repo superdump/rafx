@@ -63,7 +63,8 @@ impl RafxDeviceContextMetalInner {
             min_storage_buffer_offset_alignment: 64,
             upload_buffer_texture_alignment: 16,
             upload_buffer_texture_row_alignment: 1,
-            supports_clamp_to_border_color: true //TODO: Check for iOS support
+            supports_clamp_to_border_color: true, //TODO: Check for iOS support
+            normalized_coordinates_y_is_up: true,
         };
 
         #[cfg(debug_assertions)]

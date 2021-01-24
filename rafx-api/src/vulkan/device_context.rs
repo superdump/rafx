@@ -172,6 +172,7 @@ impl RafxDeviceContextVulkanInner {
             upload_buffer_texture_row_alignment: limits.optimal_buffer_copy_row_pitch_alignment
                 as u32,
             supports_clamp_to_border_color: true,
+            normalized_coordinates_y_is_up: false,
         };
 
         let resource_cache = RafxDeviceVulkanResourceCache::default();
