@@ -45,7 +45,8 @@ pub(crate) struct DescriptorSetLayoutInfo {
     pub(crate) binding_to_descriptor_index: FnvHashMap<u32, RafxDescriptorIndex>,
 
     // --- metal-specific ---
-    pub(crate) immutable_samplers: Vec<ImmutableSampler>,
+    // Now embedded by spirv_cross in the shader
+    //pub(crate) immutable_samplers: Vec<ImmutableSampler>,
     // All argument buffer IDs must be within 0..argument_buffer_id_range
     pub(crate) argument_buffer_id_range: u32,
     // pub(crate) sampler_count: u32,
@@ -118,6 +119,9 @@ impl RafxRootSignatureMetal {
         root_signature_def: &RafxRootSignatureDef
     ) -> RafxResult<Self> {
         log::trace!("Create RafxRootSignatureMetal");
+
+        // If we update this constant, update the arrays in this function
+        assert_eq!(MAX_DESCRIPTOR_SET_LAYOUTS, 4);
 
         // let mut immutable_samplers = vec![];
         // for sampler_list in root_signature_def.immutable_samplers {
@@ -193,19 +197,20 @@ impl RafxRootSignatureMetal {
             //let update_data_offset_in_set = Some(layout.update_data_count_per_set);
 
             if let Some(immutable_sampler_index) = immutable_sampler {
-                let samplers = root_signature_def
-                    .immutable_samplers[immutable_sampler_index]
-                    .samplers
-                    .iter()
-                    .map(|x| x.metal_sampler().unwrap().clone())
-                    .collect();
-
-                layout.immutable_samplers.push(ImmutableSampler {
-                    //binding: resource.binding,
-                    samplers,
-                    argument_buffer_id: argument_buffer_id as _
-                });
-            }; { //TEMP: Let immutable samplers register normally until I add config to make spirv_cross put them in the MSL
+                // This is now embedded by spirv_cross in the shader
+                // let samplers = root_signature_def
+                //     .immutable_samplers[immutable_sampler_index]
+                //     .samplers
+                //     .iter()
+                //     .map(|x| x.metal_sampler().unwrap().clone())
+                //     .collect();
+                //
+                // layout.immutable_samplers.push(ImmutableSampler {
+                //     //binding: resource.binding,
+                //     samplers,
+                //     argument_buffer_id: argument_buffer_id as _
+                // });
+            } else {
                 // Add it to the descriptor list
                 descriptors.push(DescriptorInfo {
                     name: resource.name.clone(),

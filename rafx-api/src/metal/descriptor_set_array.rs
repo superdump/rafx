@@ -144,8 +144,8 @@ impl RafxDescriptorSetArrayMetal {
         let layout = &root_signature.inner.layouts[layout_index];
 
         let argument_descriptors = &root_signature.inner.argument_descriptors[layout_index];
-        let immutable_samplers = &layout.immutable_samplers;
-        let argument_buffer_data = if !argument_descriptors.is_empty() || !immutable_samplers.is_empty() {
+        //let immutable_samplers = &layout.immutable_samplers;
+        let argument_buffer_data = if !argument_descriptors.is_empty() /*|| !immutable_samplers.is_empty()*/ {
             let array = metal_rs::Array::from_owned_slice(&argument_descriptors);
             let encoder = device_context.device().new_argument_encoder(array);
 
@@ -164,15 +164,15 @@ impl RafxDescriptorSetArrayMetal {
                 ..Default::default()
             })?;
 
-            // Bind static samplers
-            for immutable_sampler in immutable_samplers {
-                for array_index in 0..descriptor_set_array_def.array_length {
-                    encoder.set_argument_buffer(buffer.metal_buffer(), (array_index as u32 * stride) as _);
-
-                    let samplers : Vec<_> = immutable_sampler.samplers.iter().map(|x| x.metal_sampler()).collect();
-                    encoder.set_sampler_states(immutable_sampler.argument_buffer_id, &samplers);
-                }
-            }
+            // Bind static samplers - spirv_cross embeds it within the shader now
+            // for immutable_sampler in immutable_samplers {
+            //     for array_index in 0..descriptor_set_array_def.array_length {
+            //         encoder.set_argument_buffer(buffer.metal_buffer(), (array_index as u32 * stride) as _);
+            //
+            //         let samplers : Vec<_> = immutable_sampler.samplers.iter().map(|x| x.metal_sampler()).collect();
+            //         encoder.set_sampler_states(immutable_sampler.argument_buffer_id, &samplers);
+            //     }
+            // }
 
             let resource_count = descriptor_set_array_def.array_length * layout.argument_buffer_id_range as usize;
 

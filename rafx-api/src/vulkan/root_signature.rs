@@ -154,6 +154,9 @@ impl RafxRootSignatureVulkan {
     ) -> RafxResult<Self> {
         log::trace!("Create RafxRootSignatureVulkan");
 
+        // If we update this constant, update the arrays in this function
+        assert_eq!(MAX_DESCRIPTOR_SET_LAYOUTS, 4);
+
         let mut push_constants = vec![];
         let mut descriptors = vec![];
         let mut vk_push_constant_ranges = vec![];

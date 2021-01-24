@@ -127,20 +127,18 @@ struct MaterialDataUbo
 
 struct spvDescriptorSetBuffer0
 {
-    sampler smp [[id(0)]];
-    constant PerViewData* per_view_data [[id(1)]];
-    array<depthcube<float>, 16> shadow_map_images_cube [[id(2)]];
-    sampler smp_depth [[id(18)]];
-    array<depth2d<float>, 32> shadow_map_images [[id(19)]];
+    constant PerViewData* per_view_data [[id(0)]];
+    array<depth2d<float>, 32> shadow_map_images [[id(3)]];
+    array<depthcube<float>, 16> shadow_map_images_cube [[id(35)]];
 };
 
 struct spvDescriptorSetBuffer1
 {
-    texture2d<float> normal_texture [[id(0)]];
-    constant MaterialDataUbo* per_material_data [[id(1)]];
-    texture2d<float> base_color_texture [[id(2)]];
-    texture2d<float> emissive_texture [[id(3)]];
-    texture2d<float> metallic_roughness_texture [[id(4)]];
+    constant MaterialDataUbo* per_material_data [[id(0)]];
+    texture2d<float> base_color_texture [[id(1)]];
+    texture2d<float> metallic_roughness_texture [[id(2)]];
+    texture2d<float> normal_texture [[id(3)]];
+    texture2d<float> emissive_texture [[id(5)]];
 };
 
 struct spvDescriptorSetBuffer2
@@ -471,23 +469,25 @@ float4 pbr_path(thread const float3& surface_to_eye_vs, thread const float4& bas
 
 fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant spvDescriptorSetBuffer1& spvDescriptorSet1 [[buffer(1)]], constant spvDescriptorSetBuffer2& spvDescriptorSet2 [[buffer(2)]])
 {
+    constexpr sampler smp(filter::linear, mip_filter::linear, address::repeat, compare_func::never, max_anisotropy(16));
+    constexpr sampler smp_depth(filter::linear, mip_filter::linear, address::clamp_to_border, compare_func::greater, border_color::transparent_black, max_anisotropy(16));
     main0_out out = {};
     float4 base_color = (*spvDescriptorSet1.per_material_data).data.base_color_factor;
     if ((*spvDescriptorSet1.per_material_data).data.has_base_color_texture != 0u)
     {
-        base_color *= spvDescriptorSet1.base_color_texture.sample(spvDescriptorSet0.smp, in.in_uv);
+        base_color *= spvDescriptorSet1.base_color_texture.sample(smp, in.in_uv);
     }
     float4 emissive_color = float4((*spvDescriptorSet1.per_material_data).data.emissive_factor[0], (*spvDescriptorSet1.per_material_data).data.emissive_factor[1], (*spvDescriptorSet1.per_material_data).data.emissive_factor[2], 1.0);
     if ((*spvDescriptorSet1.per_material_data).data.has_emissive_texture != 0u)
     {
-        emissive_color *= spvDescriptorSet1.emissive_texture.sample(spvDescriptorSet0.smp, in.in_uv);
+        emissive_color *= spvDescriptorSet1.emissive_texture.sample(smp, in.in_uv);
         base_color = float4(1.0, 1.0, 0.0, 1.0);
     }
     float metalness = (*spvDescriptorSet1.per_material_data).data.metallic_factor;
     float roughness = (*spvDescriptorSet1.per_material_data).data.roughness_factor;
     if ((*spvDescriptorSet1.per_material_data).data.has_metallic_roughness_texture != 0u)
     {
-        float4 sampled = spvDescriptorSet1.metallic_roughness_texture.sample(spvDescriptorSet0.smp, in.in_uv);
+        float4 sampled = spvDescriptorSet1.metallic_roughness_texture.sample(smp, in.in_uv);
         metalness *= sampled.x;
         roughness *= sampled.y;
     }
@@ -498,7 +498,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuff
         float3x3 tbn = float3x3(float3(in.in_tangent_vs), float3(in.in_binormal_vs), float3(in.in_normal_vs));
         float3x3 param = tbn;
         float2 param_1 = in.in_uv;
-        normal_vs = normal_map(param, param_1, spvDescriptorSet1.normal_texture, spvDescriptorSet0.smp).xyz;
+        normal_vs = normal_map(param, param_1, spvDescriptorSet1.normal_texture, smp).xyz;
     }
     else
     {
@@ -512,7 +512,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuff
     float param_5 = metalness;
     float param_6 = roughness;
     float3 param_7 = normal_vs;
-    out.out_color = pbr_path(param_2, param_3, param_4, param_5, param_6, param_7, (*spvDescriptorSet0.per_view_data), in.in_position_ws, in.in_position_vs, in.in_normal_vs, spvDescriptorSet0.shadow_map_images_cube, spvDescriptorSet0.smp_depth, (*spvDescriptorSet2.per_object_data), spvDescriptorSet0.shadow_map_images);
+    out.out_color = pbr_path(param_2, param_3, param_4, param_5, param_6, param_7, (*spvDescriptorSet0.per_view_data), in.in_position_ws, in.in_position_vs, in.in_normal_vs, spvDescriptorSet0.shadow_map_images_cube, smp_depth, (*spvDescriptorSet2.per_object_data), spvDescriptorSet0.shadow_map_images);
     return out;
 }
 

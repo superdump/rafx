@@ -262,7 +262,7 @@ fn process_glsl_shader(
     let mut ast = spirv_cross::spirv::Ast::<spirv_cross::glsl::Target>::parse(&spirv_cross_module)?;
     ast.set_compiler_options(&spirv_cross_glsl_options)?;
 
-    let reflected_data = if rs_file.is_some() || cooked_shader_file.is_some() {
+    let reflected_data = if rs_file.is_some() || cooked_shader_file.is_some() || metal_generated_src_file.is_some() {
         Some(reflect::reflect_data(&ast, &parsed_declarations)?)
     } else {
         None
@@ -272,6 +272,7 @@ fn process_glsl_shader(
         let reflected_entry_point = reflected_data
             .as_ref()
             .unwrap()
+            .reflection
             .iter()
             .find(|x| x.rafx_api_reflection.entry_point_name == entry_point_name)
             .ok_or_else(|| {
@@ -327,28 +328,35 @@ fn process_glsl_shader(
         unoptimized_compile_spirv_result.as_binary_u8().to_vec()
     };
 
-    log::trace!("{:?}: create msl", glsl_file);
-    let mut msl_ast =
-        spirv_cross::spirv::Ast::<spirv_cross::msl::Target>::parse(&spirv_cross_module)?;
-    let mut spirv_cross_msl_options = spirv_cross::msl::CompilerOptions::default();
-    spirv_cross_msl_options.version = spirv_cross::msl::Version::V2_0;
-    spirv_cross_msl_options.enable_argument_buffers = true;
+    let metal_src = if metal_generated_src_file.is_some() || cooked_shader_file.is_some() {
+        log::trace!("{:?}: create msl", glsl_file);
+        let mut msl_ast =
+            spirv_cross::spirv::Ast::<spirv_cross::msl::Target>::parse(&spirv_cross_module)?;
+        let mut spirv_cross_msl_options = spirv_cross::msl::CompilerOptions::default();
+        spirv_cross_msl_options.version = spirv_cross::msl::Version::V2_0;
+        spirv_cross_msl_options.enable_argument_buffers = true;
 
-    //TODO: Set this up
-    //spirv_cross_msl_options.resource_binding_overrides.
-    //spirv_cross_msl_options.vertex_attribute_overrides
-    //spirv_cross_msl_options.const_samplers
+        //TODO: Set this up
+        spirv_cross_msl_options.resource_binding_overrides = reflected_data.as_ref().unwrap().msl_argument_buffer_assignments.clone();
+        //spirv_cross_msl_options.vertex_attribute_overrides
+        spirv_cross_msl_options.const_samplers = reflected_data.as_ref().unwrap().msl_const_samplers.clone();
 
-    msl_ast.set_compiler_options(&spirv_cross_msl_options)?;
-    let metal_src = msl_ast.compile()?;
+        msl_ast.set_compiler_options(&spirv_cross_msl_options)?;
+        let metal_src = msl_ast.compile()?;
+
+        Some(metal_src)
+    } else {
+        None
+    };
+
 
     // Don't worry about the return value
     log::trace!("{:?}: cook shader", glsl_file);
     let cooked_shader = if cooked_shader_file.is_some() {
         Some(cook::cook_shader(
-            reflected_data.as_ref().unwrap(),
+            &reflected_data.as_ref().unwrap().reflection,
             &output_spv,
-            metal_src.clone()
+            metal_src.as_ref().unwrap().clone()
         )?)
     } else {
         None
@@ -366,7 +374,7 @@ fn process_glsl_shader(
     }
 
     if let Some(metal_generated_src_file) = &metal_generated_src_file {
-        std::fs::write(metal_generated_src_file, metal_src)?;
+        std::fs::write(metal_generated_src_file, metal_src.unwrap())?;
     }
 
     if let Some(cooked_shader_file) = &cooked_shader_file {

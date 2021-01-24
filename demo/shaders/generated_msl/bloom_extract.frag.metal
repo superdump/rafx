@@ -6,7 +6,6 @@ using namespace metal;
 struct spvDescriptorSetBuffer0
 {
     texture2d<float> tex [[id(0)]];
-    sampler smp [[id(1)]];
 };
 
 struct main0_out
@@ -22,8 +21,9 @@ struct main0_in
 
 fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]])
 {
+    constexpr sampler smp(mip_filter::linear, compare_func::never, max_anisotropy(1));
     main0_out out = {};
-    float3 color = spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, in.inUV).xyz;
+    float3 color = spvDescriptorSet0.tex.sample(smp, in.inUV).xyz;
     float brightness = dot(color, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
     if (brightness > 1.0)
     {

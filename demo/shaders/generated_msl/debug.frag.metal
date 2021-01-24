@@ -3,6 +3,11 @@
 
 using namespace metal;
 
+struct PerFrameUbo
+{
+    float4x4 view_proj;
+};
+
 struct main0_out
 {
     float4 out_color [[color(0)]];

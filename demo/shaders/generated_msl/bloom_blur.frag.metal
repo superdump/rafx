@@ -52,7 +52,6 @@ struct Config
 struct spvDescriptorSetBuffer0
 {
     texture2d<float> tex [[id(0)]];
-    sampler smp [[id(1)]];
     constant Config* config [[id(2)]];
 };
 
@@ -70,23 +69,24 @@ struct main0_in
 
 fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]])
 {
+    constexpr sampler smp(mip_filter::linear, compare_func::never, max_anisotropy(1));
     main0_out out = {};
     float2 tex_offset = float2(1.0) / float2(int2(spvDescriptorSet0.tex.get_width(), spvDescriptorSet0.tex.get_height()));
-    float3 result = spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, in.inUV).xyz * _17[0];
+    float3 result = spvDescriptorSet0.tex.sample(smp, in.inUV).xyz * _17[0];
     if ((*spvDescriptorSet0.config).horizontal != 0u)
     {
         for (int i = 1; i < 5; i++)
         {
-            result += (spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, (in.inUV + float2(tex_offset.x * float(i), 0.0))).xyz * _17[i]);
-            result += (spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, (in.inUV - float2(tex_offset.x * float(i), 0.0))).xyz * _17[i]);
+            result += (spvDescriptorSet0.tex.sample(smp, (in.inUV + float2(tex_offset.x * float(i), 0.0))).xyz * _17[i]);
+            result += (spvDescriptorSet0.tex.sample(smp, (in.inUV - float2(tex_offset.x * float(i), 0.0))).xyz * _17[i]);
         }
     }
     else
     {
         for (int i_1 = 1; i_1 < 5; i_1++)
         {
-            result += (spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, (in.inUV + float2(0.0, tex_offset.y * float(i_1)))).xyz * _17[i_1]);
-            result += (spvDescriptorSet0.tex.sample(spvDescriptorSet0.smp, (in.inUV - float2(0.0, tex_offset.y * float(i_1)))).xyz * _17[i_1]);
+            result += (spvDescriptorSet0.tex.sample(smp, (in.inUV + float2(0.0, tex_offset.y * float(i_1)))).xyz * _17[i_1]);
+            result += (spvDescriptorSet0.tex.sample(smp, (in.inUV - float2(0.0, tex_offset.y * float(i_1)))).xyz * _17[i_1]);
         }
     }
     out.out_blur = float4(result, 1.0);
