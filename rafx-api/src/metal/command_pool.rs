@@ -1,5 +1,5 @@
 use crate::metal::{RafxCommandBufferMetal, RafxDeviceContextMetal, RafxQueueMetal};
-use crate::{RafxCommandBufferDef, RafxCommandPoolDef, RafxQueue, RafxQueueType, RafxResult};
+use crate::{RafxCommandBufferDef, RafxCommandPoolDef, RafxQueueType, RafxResult};
 
 pub struct RafxCommandPoolMetal {
     queue: RafxQueueMetal,

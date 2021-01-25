@@ -48,7 +48,7 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
         let top = 0.0;
         let bottom = swapchain_info.extents.height as f32 / framebuffer_scale[1];
 
-        let mut view_proj = glam::Mat4::orthographic_rh(
+        let view_proj = glam::Mat4::orthographic_rh(
             0.0,
             swapchain_info.extents.width as f32 / framebuffer_scale[0],
             bottom,

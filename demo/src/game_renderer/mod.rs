@@ -422,7 +422,6 @@ impl GameRenderer {
         // Determine Camera Location
         //
         let main_view = GameRenderer::calculate_main_view(
-            &device_context,
             &render_view_set,
             window_width,
             window_height,
@@ -735,7 +734,6 @@ impl GameRenderer {
 
     #[profiling::function]
     fn calculate_main_view(
-        device_context: &RafxDeviceContext,
         render_view_set: &RenderViewSet,
         window_width: u32,
         window_height: u32,
@@ -760,8 +758,7 @@ impl GameRenderer {
 
         let aspect_ratio = window_width as f32 / window_height as f32;
 
-        let mut view =
-            glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
+        let view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
 
         let near_plane = 0.01;
         let proj = glam::Mat4::perspective_infinite_reverse_rh(

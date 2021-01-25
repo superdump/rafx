@@ -15,7 +15,6 @@ use atelier_assets::loader::{
     packfile_io::PackfileReader, storage::DefaultIndirectionResolver, Loader, RpcIO,
 };
 use legion::Resources;
-use rafx::api::vulkan::VulkanLinkMethod;
 use rafx::api::{RafxApi, RafxDeviceContext, RafxQueueType, RafxResult};
 use rafx::assets::{AssetManager, ComputePipelineAsset, ComputePipelineAssetData};
 use rafx::assets::{
@@ -114,6 +113,8 @@ pub fn rendering_init(
 
     #[cfg(feature = "rafx-vulkan")]
     let rafx_api = {
+        use rafx::api::vulkan::VulkanLinkMethod;
+
         #[cfg(debug_assertions)]
         let validation_mode = rafx::api::RafxValidationMode::EnabledIfAvailable;
         #[cfg(not(debug_assertions))]

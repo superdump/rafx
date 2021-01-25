@@ -53,7 +53,7 @@ impl RafxShaderModuleMetal {
         device_context: &RafxDeviceContextMetal,
         src: &str,
     ) -> RafxResult<Self> {
-        let mut compile_options = metal_rs::CompileOptions::new();
+        let compile_options = metal_rs::CompileOptions::new();
         compile_options.set_language_version(MTLLanguageVersion::V2_1);
         let library = device_context
             .device()

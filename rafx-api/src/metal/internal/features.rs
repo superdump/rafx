@@ -1,4 +1,3 @@
-use crate::RafxSampleCount;
 use metal_rs::{MTLArgumentBuffersTier, MTLFeatureSet, MTLGPUFamily, MTLPixelFormat};
 
 const GPU_FAMILIES_APPLE: [MTLGPUFamily; 6] = [

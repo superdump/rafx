@@ -1,16 +1,14 @@
 use crate::{
-    RafxBlendFactor, RafxBlendOp, RafxColorClearValue, RafxColorRenderTargetBinding, RafxCompareOp,
-    RafxCullMode, RafxFillMode, RafxFilterType, RafxFrontFace, RafxIndexType, RafxLoadOp,
-    RafxMemoryUsage, RafxMipMapMode, RafxPrimitiveTopology, RafxSampleCount, RafxStencilOp,
-    RafxStoreOp, RafxVertexAttributeRate,
+    RafxBlendFactor, RafxBlendOp, RafxColorClearValue, RafxCompareOp, RafxCullMode, RafxFillMode,
+    RafxFilterType, RafxFrontFace, RafxIndexType, RafxLoadOp, RafxMemoryUsage, RafxMipMapMode,
+    RafxPrimitiveTopology, RafxSampleCount, RafxStencilOp, RafxStoreOp, RafxVertexAttributeRate,
 };
 use cocoa_foundation::foundation::NSUInteger;
 use metal_rs::{
     MTLBlendFactor, MTLBlendOperation, MTLCPUCacheMode, MTLClearColor, MTLCompareFunction,
-    MTLCullMode, MTLDepthClipMode, MTLIndexType, MTLLoadAction, MTLPrimitiveTopologyClass,
-    MTLPrimitiveType, MTLResourceOptions, MTLSamplerMinMagFilter, MTLSamplerMipFilter,
-    MTLStencilOperation, MTLStepFunction, MTLStorageMode, MTLStoreAction, MTLTriangleFillMode,
-    MTLVertexStepFunction, MTLWinding,
+    MTLCullMode, MTLIndexType, MTLLoadAction, MTLPrimitiveTopologyClass, MTLPrimitiveType,
+    MTLResourceOptions, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLStencilOperation,
+    MTLStorageMode, MTLStoreAction, MTLTriangleFillMode, MTLVertexStepFunction, MTLWinding,
 };
 
 pub mod features;

@@ -1,8 +1,7 @@
 use crate::vulkan::RafxDeviceContextVulkan;
 use crate::{
-    RafxDescriptorIndex, RafxImmutableSamplerKey, RafxImmutableSamplers, RafxPipelineType,
-    RafxResourceType, RafxResult, RafxRootSignatureDef, RafxSampler, RafxShaderResource,
-    RafxShaderStageFlags, MAX_DESCRIPTOR_SET_LAYOUTS,
+    RafxDescriptorIndex, RafxPipelineType, RafxResourceType, RafxResult, RafxRootSignatureDef,
+    RafxSampler, MAX_DESCRIPTOR_SET_LAYOUTS,
 };
 use ash::version::DeviceV1_0;
 use ash::vk;

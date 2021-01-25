@@ -3,69 +3,74 @@ use crate::DecodedImageColorSpace;
 use crate::DecodedImageMips;
 use rafx_api::extra::upload::{RafxTransferUpload, RafxUploadError};
 use rafx_api::{
-    RafxBarrierQueueTransition, RafxCmdBlitParams, RafxCmdCopyBufferToTextureParams,
-    RafxCommandBuffer, RafxDeviceContext, RafxExtents3D, RafxFormat, RafxQueue, RafxResourceState,
-    RafxResourceType, RafxResult, RafxSampleCount, RafxTexture, RafxTextureBarrier, RafxTextureDef,
-    RafxTextureDimensions,
+    RafxBarrierQueueTransition, RafxCmdCopyBufferToTextureParams, RafxDeviceContext, RafxExtents3D,
+    RafxFormat, RafxQueue, RafxResourceState, RafxResourceType, RafxResult, RafxSampleCount,
+    RafxTexture, RafxTextureBarrier, RafxTextureDef, RafxTextureDimensions,
 };
 
+// This custom path for metal can be removed after I implement cmd_blit
+#[cfg(feature = "rafx-metal")]
+fn generate_mips_for_image(
+    upload: &mut RafxTransferUpload,
+    texture: &RafxTexture,
+    layer: u32,
+    _mip_level_count: u32,
+) -> RafxResult<()> {
+    upload
+        .transfer_command_buffer()
+        .metal_command_buffer()
+        .unwrap()
+        .end_current_encoders(false)?;
+    let blit_encoder = upload
+        .transfer_command_buffer()
+        .metal_command_buffer()
+        .unwrap()
+        .metal_command_buffer()
+        .unwrap()
+        .new_blit_command_encoder();
+    blit_encoder.generate_mipmaps(texture.metal_texture().unwrap().metal_texture());
+    blit_encoder.end_encoding();
+
+    upload.transfer_command_buffer().cmd_resource_barrier(
+        &[],
+        &[RafxTextureBarrier {
+            texture,
+            src_state: RafxResourceState::COPY_DST,
+            dst_state: RafxResourceState::SHADER_RESOURCE,
+            queue_transition: RafxBarrierQueueTransition::ReleaseTo(
+                upload.dst_queue().queue_type(),
+            ),
+            array_slice: Some(layer as u16),
+            mip_slice: Some(0),
+        }],
+        &[],
+    )?;
+
+    upload.dst_command_buffer().cmd_resource_barrier(
+        &[],
+        &[RafxTextureBarrier {
+            texture,
+            src_state: RafxResourceState::COPY_DST,
+            dst_state: RafxResourceState::SHADER_RESOURCE,
+            queue_transition: RafxBarrierQueueTransition::AcquireFrom(
+                upload.transfer_queue().queue_type(),
+            ),
+            array_slice: Some(layer as u16),
+            mip_slice: Some(0),
+        }],
+        &[],
+    )?;
+
+    return Ok(());
+}
+
+#[cfg(not(feature = "rafx-metal"))]
 fn generate_mips_for_image(
     upload: &mut RafxTransferUpload,
     texture: &RafxTexture,
     layer: u32,
     mip_level_count: u32,
 ) -> RafxResult<()> {
-    // This custom path for metal can be removed after I implement cmd_blit
-    #[cfg(feature = "rafx-metal")]
-    {
-        upload
-            .transfer_command_buffer()
-            .metal_command_buffer()
-            .unwrap()
-            .end_current_encoders(false);
-        let blit_encoder = upload
-            .transfer_command_buffer()
-            .metal_command_buffer()
-            .unwrap()
-            .metal_command_buffer()
-            .unwrap()
-            .new_blit_command_encoder();
-        blit_encoder.generate_mipmaps(texture.metal_texture().unwrap().metal_texture());
-        blit_encoder.end_encoding();
-
-        upload.transfer_command_buffer().cmd_resource_barrier(
-            &[],
-            &[RafxTextureBarrier {
-                texture,
-                src_state: RafxResourceState::COPY_DST,
-                dst_state: RafxResourceState::SHADER_RESOURCE,
-                queue_transition: RafxBarrierQueueTransition::ReleaseTo(
-                    upload.dst_queue().queue_type(),
-                ),
-                array_slice: Some(layer as u16),
-                mip_slice: Some(0),
-            }],
-            &[],
-        )?;
-
-        upload.dst_command_buffer().cmd_resource_barrier(
-            &[],
-            &[RafxTextureBarrier {
-                texture,
-                src_state: RafxResourceState::COPY_DST,
-                dst_state: RafxResourceState::SHADER_RESOURCE,
-                queue_transition: RafxBarrierQueueTransition::AcquireFrom(
-                    upload.transfer_queue().queue_type(),
-                ),
-                array_slice: Some(layer as u16),
-                mip_slice: Some(0),
-            }],
-            &[],
-        )?;
-
-        return Ok(());
-    }
-
     //
     // Transition the first mip range to COPY_SRC, on the graphics queue
     //
@@ -118,8 +123,9 @@ fn generate_mips_for_image(
     )
 }
 
+#[cfg(not(feature = "rafx-metal"))]
 fn do_generate_mips_for_image(
-    command_buffer: &RafxCommandBuffer,
+    command_buffer: &rafx_api::RafxCommandBuffer,
     texture: &RafxTexture,
     layer: u32,
     mip_level_count: u32,
@@ -176,7 +182,7 @@ fn do_generate_mips_for_image(
         command_buffer.cmd_blit(
             texture,
             texture,
-            &RafxCmdBlitParams {
+            &rafx_api::RafxCmdBlitParams {
                 src_mip_level: src_level as u8,
                 dst_mip_level: dst_level as u8,
                 src_extents,

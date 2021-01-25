@@ -4,8 +4,7 @@ use crate::{
 };
 use cocoa_foundation::foundation::NSUInteger;
 use metal_rs::{
-    MTLArgumentAccess, MTLCompareFunction, MTLDataType, MTLRenderPipelineColorAttachmentDescriptor,
-    MTLRenderPipelineColorAttachmentDescriptorArray, MTLResourceUsage, MTLSamplerAddressMode,
+    MTLArgumentAccess, MTLCompareFunction, MTLDataType, MTLResourceUsage, MTLSamplerAddressMode,
     MTLStoreAction, RenderPipelineColorAttachmentDescriptorArrayRef,
 };
 

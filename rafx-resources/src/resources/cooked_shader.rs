@@ -1,11 +1,10 @@
 use crate::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, MaterialPassVertexInput, ShaderModuleHash,
-    ShaderModuleMeta,
 };
 use fnv::{FnvHashMap, FnvHashSet};
 use rafx_api::{
-    RafxResult, RafxSamplerDef, RafxShaderModuleDef, RafxShaderPackage, RafxShaderResource,
-    RafxShaderStageFlags, RafxShaderStageReflection,
+    RafxResult, RafxSamplerDef, RafxShaderPackage, RafxShaderResource, RafxShaderStageFlags,
+    RafxShaderStageReflection,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

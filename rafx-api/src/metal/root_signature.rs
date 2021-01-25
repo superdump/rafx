@@ -1,11 +1,11 @@
 use crate::metal::{RafxDeviceContextMetal, RafxSamplerMetal};
 use crate::{
     RafxDescriptorIndex, RafxPipelineType, RafxResourceType, RafxResult, RafxRootSignatureDef,
-    RafxSampler, MAX_DESCRIPTOR_SET_LAYOUTS,
+    MAX_DESCRIPTOR_SET_LAYOUTS,
 };
 use cocoa_foundation::foundation::NSUInteger;
 use fnv::FnvHashMap;
-use metal_rs::{MTLArgumentAccess, MTLResourceUsage, MTLTextureType};
+use metal_rs::{MTLResourceUsage, MTLTextureType};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -198,7 +198,7 @@ impl RafxRootSignatureMetal {
 
             //let update_data_offset_in_set = Some(layout.update_data_count_per_set);
 
-            if let Some(immutable_sampler_index) = immutable_sampler {
+            if let Some(_immutable_sampler_index) = immutable_sampler {
                 // This is now embedded by spirv_cross in the shader
                 // let samplers = root_signature_def
                 //     .immutable_samplers[immutable_sampler_index]
@@ -240,7 +240,7 @@ impl RafxRootSignatureMetal {
                     next_argument_buffer_id[resource.set_index as usize];
 
                 // Build out the MTLResourceUsage usages - it's used when we bind descriptor sets
-                let mut layout_resource_usages = &mut resource_usages[resource.set_index as usize];
+                let layout_resource_usages = &mut resource_usages[resource.set_index as usize];
                 layout_resource_usages.resize(
                     layout.argument_buffer_id_range as usize,
                     MTLResourceUsage::empty(),
@@ -260,13 +260,13 @@ impl RafxRootSignatureMetal {
             for &resource_index in &layouts[i].descriptors {
                 let descriptor = &descriptors[resource_index.0 as usize];
 
-                let mut argument_descriptor = metal_rs::ArgumentDescriptor::new();
+                let argument_descriptor = metal_rs::ArgumentDescriptor::new();
 
                 let access =
                     super::util::resource_type_mtl_argument_access(descriptor.resource_type);
                 let data_type =
                     super::util::resource_type_mtl_data_type(descriptor.resource_type).unwrap();
-                argument_descriptor.set_access(MTLArgumentAccess::ReadWrite);
+                argument_descriptor.set_access(access);
                 argument_descriptor.set_array_length(descriptor.element_count as _);
                 argument_descriptor.set_data_type(data_type);
                 argument_descriptor.set_index(descriptor.argument_buffer_id as _);

@@ -2,11 +2,10 @@ use crate::{
     RafxBufferDef, RafxComputePipelineDef, RafxDescriptorSetArrayDef, RafxDeviceContext,
     RafxDeviceInfo, RafxFormat, RafxGraphicsPipelineDef, RafxQueueType, RafxRenderTargetDef,
     RafxResourceType, RafxResult, RafxRootSignatureDef, RafxSampleCount, RafxSamplerDef,
-    RafxShaderModule, RafxShaderModuleDef, RafxShaderModuleDefMetal, RafxShaderStageDef,
-    RafxSwapchainDef, RafxTextureDef,
+    RafxShaderModuleDefMetal, RafxShaderStageDef, RafxSwapchainDef, RafxTextureDef,
 };
 use raw_window_handle::HasRawWindowHandle;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 // use crate::metal::{
 //     RafxBufferMetal, RafxDescriptorSetArrayMetal, RafxFenceMetal, RafxPipelineMetal,
@@ -21,7 +20,7 @@ use crate::metal::{
     RafxSemaphoreMetal, RafxShaderMetal, RafxShaderModuleMetal, RafxSwapchainMetal,
     RafxTextureMetal,
 };
-use fnv::FnvHashMap;
+
 #[cfg(debug_assertions)]
 #[cfg(feature = "track-device-contexts")]
 use std::sync::atomic::AtomicU64;
@@ -49,13 +48,8 @@ unsafe impl Sync for RafxDeviceContextMetalInner {}
 
 impl Drop for RafxDeviceContextMetalInner {
     fn drop(&mut self) {
-        if !self.destroyed.swap(true, Ordering::AcqRel) {
-            unsafe {
-                log::trace!("destroying device");
-
-                log::trace!("destroyed device");
-            }
-        }
+        log::trace!("destroying device");
+        self.destroyed.swap(true, Ordering::AcqRel);
     }
 }
 

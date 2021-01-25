@@ -1,8 +1,8 @@
 use crate::metal::{DescriptorSetLayoutInfo, RafxBufferMetal, RafxDeviceContextMetal};
 use crate::{
     RafxBufferDef, RafxDescriptorKey, RafxDescriptorSetArrayDef, RafxDescriptorUpdate,
-    RafxMemoryUsage, RafxPipelineType, RafxQueueType, RafxResourceType, RafxResult,
-    RafxRootSignature, RafxShaderStageFlags, RafxTextureBindType,
+    RafxMemoryUsage, RafxQueueType, RafxResourceType, RafxResult, RafxRootSignature,
+    RafxTextureBindType,
 };
 use foreign_types_shared::ForeignTypeRef;
 use metal_rs::{MTLResource, MTLResourceUsage};
@@ -291,7 +291,7 @@ impl RafxDescriptorSetArrayMetal {
         let mut resource_pointers = argument_buffer.resource_pointers.borrow_mut();
         let first_ptr = update.array_index as usize * layout.argument_buffer_id_range as usize;
         let last_ptr = first_ptr + layout.argument_buffer_id_range as usize;
-        let mut descriptor_resource_pointers = &mut resource_pointers[first_ptr..last_ptr];
+        let descriptor_resource_pointers = &mut resource_pointers[first_ptr..last_ptr];
 
         log::trace!(
             "update descriptor set {:?} (set_index: {:?} binding: {} name: {:?} type: {:?} array_index: {} arg buffer id: {})",

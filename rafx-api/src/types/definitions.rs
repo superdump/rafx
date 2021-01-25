@@ -1,13 +1,11 @@
 use super::*;
-use crate::{
-    RafxRootSignature, RafxSampler, RafxShader, RafxShaderModule, RafxShaderResourceBindingKey,
-};
+use crate::{RafxRootSignature, RafxSampler, RafxShader, RafxShaderModule};
 #[cfg(feature = "rafx-vulkan")]
 use ash::vk;
 use rafx_base::DecimalF32;
 use std::hash::{Hash, Hasher};
 
-use fnv::{FnvHashMap, FnvHasher};
+use fnv::FnvHasher;
 #[cfg(feature = "serde-support")]
 use serde::{Deserialize, Serialize};
 

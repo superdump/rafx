@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 pub struct RafxFenceMetal {
-    device_context: RafxDeviceContextMetal,
+    _device_context: RafxDeviceContextMetal,
     mtl_semaphore: Arc<dispatch::Semaphore>,
     // Set to true when an operation is scheduled to signal this fence
     // Cleared when an operation is scheduled to consume this fence
@@ -16,7 +16,7 @@ impl RafxFenceMetal {
         let mtl_semaphore = dispatch::Semaphore::new(0);
 
         Ok(RafxFenceMetal {
-            device_context: device_context.clone(),
+            _device_context: device_context.clone(),
             mtl_semaphore: Arc::new(mtl_semaphore),
             submitted: AtomicBool::new(false),
         })
@@ -45,7 +45,7 @@ impl RafxFenceMetal {
     ) -> RafxResult<()> {
         for fence in fences {
             if fence.submitted() {
-                fence.wait();
+                fence.wait()?;
             }
         }
 

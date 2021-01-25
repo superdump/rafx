@@ -1,16 +1,15 @@
 use crate::metal::{
     ArgumentBufferData, BarrierFlagsMetal, RafxBufferMetal, RafxCommandPoolMetal,
     RafxDescriptorSetArrayMetal, RafxDescriptorSetHandleMetal, RafxPipelineMetal, RafxQueueMetal,
-    RafxRenderTargetMetal, RafxRootSignatureMetal, RafxRootSignatureMetalInner, RafxTextureMetal,
+    RafxRenderTargetMetal, RafxRootSignatureMetal, RafxTextureMetal,
 };
 use crate::{
     RafxBufferBarrier, RafxCmdBlitParams, RafxCmdCopyBufferToTextureParams,
     RafxColorRenderTargetBinding, RafxCommandBufferDef, RafxDepthRenderTargetBinding,
     RafxExtents3D, RafxIndexBufferBinding, RafxIndexType, RafxLoadOp, RafxPipelineType,
-    RafxQueueType, RafxRenderTargetBarrier, RafxResourceState, RafxResult, RafxStoreOp,
-    RafxTextureBarrier, RafxVertexBufferBinding,
+    RafxRenderTargetBarrier, RafxResourceState, RafxResult, RafxTextureBarrier,
+    RafxVertexBufferBinding,
 };
-use cocoa_foundation::foundation::NSUInteger;
 use fnv::FnvHashSet;
 use metal_rs::{
     MTLBlitCommandEncoder, MTLBlitOption, MTLBuffer, MTLCommandBuffer, MTLComputeCommandEncoder,
@@ -18,7 +17,7 @@ use metal_rs::{
     MTLResourceUsage, MTLScissorRect, MTLSize, MTLViewport,
 };
 use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicU8};
+use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicU8};
 use std::sync::Mutex;
 
 // Mutable state stored in a lock. (Hopefully we can optimize away the lock later)
@@ -406,7 +405,7 @@ impl RafxCommandBufferMetal {
                 }
                 RafxPipelineType::Compute => {
                     if !self.metal_compute_encoder().is_some() {
-                        self.end_current_encoders(barrier_required);
+                        self.end_current_encoders(barrier_required)?;
 
                         let compute_encoder = self
                             .metal_command_buffer()
@@ -738,7 +737,7 @@ impl RafxCommandBufferMetal {
         group_count_y: u32,
         group_count_z: u32,
     ) -> RafxResult<()> {
-        self.wait_for_barriers();
+        self.wait_for_barriers()?;
         let thread_per_group_x = self.compute_threads_per_group_x.load(Ordering::Relaxed);
         let thread_per_group_y = self.compute_threads_per_group_y.load(Ordering::Relaxed);
         let thread_per_group_z = self.compute_threads_per_group_z.load(Ordering::Relaxed);
@@ -804,17 +803,23 @@ impl RafxCommandBufferMetal {
         dst_offset: u64,
         size: u64,
     ) -> RafxResult<()> {
-        let blit_encoder = self.metal_blit_encoder().unwrap_or_else(|| {
-            objc::rc::autoreleasepool(|| {
-                self.end_current_encoders(false);
-                let encoder = self
-                    .metal_command_buffer()
-                    .unwrap()
-                    .new_blit_command_encoder();
-                self.swap_blit_encoder(Some(encoder.to_owned()));
-                self.metal_blit_encoder().unwrap()
-            })
-        });
+        let blit_encoder = self.metal_blit_encoder();
+        let blit_encoder = match blit_encoder {
+            Some(x) => x,
+            None => {
+                let result: RafxResult<&metal_rs::BlitCommandEncoderRef> =
+                    objc::rc::autoreleasepool(|| {
+                        self.end_current_encoders(false)?;
+                        let encoder = self
+                            .metal_command_buffer()
+                            .unwrap()
+                            .new_blit_command_encoder();
+                        self.swap_blit_encoder(Some(encoder.to_owned()));
+                        Ok(self.metal_blit_encoder().unwrap())
+                    });
+                result?
+            }
+        };
 
         blit_encoder.copy_from_buffer(
             src_buffer.metal_buffer(),
@@ -832,17 +837,23 @@ impl RafxCommandBufferMetal {
         dst_texture: &RafxTextureMetal,
         params: &RafxCmdCopyBufferToTextureParams,
     ) -> RafxResult<()> {
-        let blit_encoder = self.metal_blit_encoder().unwrap_or_else(|| {
-            objc::rc::autoreleasepool(|| {
-                self.end_current_encoders(false);
-                let encoder = self
-                    .metal_command_buffer()
-                    .unwrap()
-                    .new_blit_command_encoder();
-                self.swap_blit_encoder(Some(encoder.to_owned()));
-                self.metal_blit_encoder().unwrap()
-            })
-        });
+        let blit_encoder = self.metal_blit_encoder();
+        let blit_encoder = match blit_encoder {
+            Some(x) => x,
+            None => {
+                let result: RafxResult<&metal_rs::BlitCommandEncoderRef> =
+                    objc::rc::autoreleasepool(|| {
+                        self.end_current_encoders(false)?;
+                        let encoder = self
+                            .metal_command_buffer()
+                            .unwrap()
+                            .new_blit_command_encoder();
+                        self.swap_blit_encoder(Some(encoder.to_owned()));
+                        Ok(self.metal_blit_encoder().unwrap())
+                    });
+                result?
+            }
+        };
 
         let texture_def = dst_texture.texture_def();
         let width = 1.max(texture_def.extents.width >> params.mip_level);
@@ -891,9 +902,9 @@ impl RafxCommandBufferMetal {
 
     pub fn cmd_blit(
         &self,
-        src_texture: &RafxTextureMetal,
-        dst_texture: &RafxTextureMetal,
-        params: &RafxCmdBlitParams,
+        _src_texture: &RafxTextureMetal,
+        _dst_texture: &RafxTextureMetal,
+        _params: &RafxCmdBlitParams,
     ) -> RafxResult<()> {
         //TODO: Implementing this requires having a custom shader/pipeline loaded and drawing
         //triangles

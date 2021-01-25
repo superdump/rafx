@@ -124,7 +124,7 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for SpritePrepar
         let aspect_ratio = extents_width as f32 / extents_height as f32;
         let half_width = 400.0;
         let half_height = 400.0 / aspect_ratio;
-        let mut view_proj = glam::Mat4::orthographic_rh_gl(
+        let view_proj = glam::Mat4::orthographic_rh_gl(
             -half_width,
             half_width,
             -half_height,

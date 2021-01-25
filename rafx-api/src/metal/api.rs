@@ -1,9 +1,7 @@
-use crate::{RafxApiDef, RafxResult, RafxValidationMode};
-use metal_rs::{MTLFeatureSet, MTLGPUFamily};
+use crate::{RafxApiDef, RafxResult};
 use raw_window_handle::HasRawWindowHandle;
 use std::sync::Arc;
 
-use crate::metal::internal::features::MetalFeatures;
 use crate::metal::{RafxDeviceContextMetal, RafxDeviceContextMetalInner};
 
 /// Metal-specific configuration
@@ -26,9 +24,9 @@ impl RafxApiMetal {
     }
 
     pub fn new(
-        window: &dyn HasRawWindowHandle,
-        api_def: &RafxApiDef,
-        vk_api_def: &RafxApiDefMetal,
+        _window: &dyn HasRawWindowHandle,
+        _api_def: &RafxApiDef,
+        _metal_api_def: &RafxApiDefMetal,
     ) -> RafxResult<Self> {
         let inner = Arc::new(RafxDeviceContextMetalInner::new()?);
         let device_context = RafxDeviceContextMetal::new(inner)?;

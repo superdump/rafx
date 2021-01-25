@@ -2,10 +2,7 @@ use crate::metal::{
     BarrierFlagsMetal, RafxCommandBufferMetal, RafxCommandPoolMetal, RafxDeviceContextMetal,
     RafxFenceMetal, RafxSemaphoreMetal, RafxSwapchainMetal,
 };
-use crate::{
-    RafxCommandPoolDef, RafxDeviceContext, RafxFence, RafxPresentSuccessResult, RafxQueueType,
-    RafxResult,
-};
+use crate::{RafxCommandPoolDef, RafxPresentSuccessResult, RafxQueueType, RafxResult};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -157,7 +154,7 @@ impl RafxQueueMetal {
                 let command_count = command_buffers.len();
                 let complete_count = Arc::new(AtomicUsize::new(0));
                 let dispatch_semaphore = signal_fence.metal_dispatch_semaphore().clone();
-                let block = block::ConcreteBlock::new(move |command_buffer_ref| {
+                let block = block::ConcreteBlock::new(move |_command_buffer_ref| {
                     // Add 1 because fetch_add returns the value from before the add
                     let complete =
                         complete_count.fetch_add(1, Ordering::Relaxed) + 1 == command_count;
@@ -188,7 +185,7 @@ impl RafxQueueMetal {
             self.submit_semaphore_wait(wait_semaphores);
 
             for command_buffer in command_buffers {
-                command_buffer.end_current_encoders(false);
+                command_buffer.end_current_encoders(false)?;
                 command_buffer.metal_command_buffer().unwrap().commit();
                 command_buffer.swap_command_buffer(None);
             }
@@ -201,7 +198,7 @@ impl RafxQueueMetal {
         &self,
         swapchain: &RafxSwapchainMetal,
         wait_semaphores: &[&RafxSemaphoreMetal],
-        image_index: u32,
+        _image_index: u32,
     ) -> RafxResult<RafxPresentSuccessResult> {
         objc::rc::autoreleasepool(|| {
             self.submit_semaphore_wait(wait_semaphores);

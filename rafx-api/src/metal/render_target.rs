@@ -1,7 +1,7 @@
 use crate::metal::{RafxDeviceContextMetal, RafxRawImageMetal, RafxTextureMetal};
 use crate::{RafxRenderTargetDef, RafxResult, RafxTexture};
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 static RENDER_TARGET_NEXT_ID: AtomicU32 = AtomicU32::new(1);
@@ -49,11 +49,6 @@ impl RafxRenderTargetMetal {
         &self.inner.texture
     }
 
-    // Used internally as part of the hash for creating/reusing framebuffers
-    pub(crate) fn render_target_id(&self) -> u32 {
-        self.inner.render_target_id
-    }
-
     pub fn new(
         device_context: &RafxDeviceContextMetal,
         render_target_def: &RafxRenderTargetDef,
@@ -68,7 +63,7 @@ impl RafxRenderTargetMetal {
     ) -> RafxResult<Self> {
         render_target_def.verify();
 
-        let mut texture_def = render_target_def.to_texture_def();
+        let texture_def = render_target_def.to_texture_def();
 
         let texture =
             RafxTextureMetal::from_existing(device_context, existing_image, &texture_def)?;

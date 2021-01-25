@@ -84,7 +84,7 @@ impl RafxPipelineMetal {
         device_context: &RafxDeviceContextMetal,
         pipeline_def: &RafxGraphicsPipelineDef,
     ) -> RafxResult<Self> {
-        let mut pipeline = metal_rs::RenderPipelineDescriptor::new();
+        let pipeline = metal_rs::RenderPipelineDescriptor::new();
 
         let mut vertex_function = None;
         let mut fragment_function = None;
@@ -131,11 +131,11 @@ impl RafxPipelineMetal {
         pipeline.set_fragment_function(fragment_function.as_ref().map(|x| x.as_ref()));
         pipeline.set_sample_count(pipeline_def.sample_count.into());
 
-        let mut vertex_descriptor = metal_rs::VertexDescriptor::new();
+        let vertex_descriptor = metal_rs::VertexDescriptor::new();
         for attribute in &pipeline_def.vertex_layout.attributes {
             let buffer_index =
                 super::util::vertex_buffer_adjusted_buffer_index(attribute.buffer_index);
-            let mut attribute_descriptor = vertex_descriptor
+            let attribute_descriptor = vertex_descriptor
                 .attributes()
                 .object_at(attribute.location as _)
                 .unwrap();
@@ -146,8 +146,7 @@ impl RafxPipelineMetal {
 
         for (index, binding) in pipeline_def.vertex_layout.buffers.iter().enumerate() {
             let buffer_index = super::util::vertex_buffer_adjusted_buffer_index(index as u32);
-            let mut layout_descriptor =
-                vertex_descriptor.layouts().object_at(buffer_index).unwrap();
+            let layout_descriptor = vertex_descriptor.layouts().object_at(buffer_index).unwrap();
             layout_descriptor.set_stride(binding.stride as _);
             layout_descriptor.set_step_function(binding.rate.into());
             layout_descriptor.set_step_rate(1);

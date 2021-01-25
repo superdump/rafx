@@ -1,6 +1,6 @@
 use crate::vulkan::RafxDeviceContextVulkan;
+use crate::RafxTextureDimensions;
 use crate::{RafxExtents3D, RafxResourceType, RafxResult, RafxTextureDef};
-use crate::{RafxSampleCount, RafxTextureDimensions};
 use ash::version::DeviceV1_0;
 use ash::vk;
 

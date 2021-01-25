@@ -3,7 +3,6 @@ use crate::{
     RafxMemoryUsage, RafxResourceType, RafxResult, RafxSampleCount, RafxTextureDef,
     RafxTextureDimensions,
 };
-use cocoa_foundation::foundation::NSUInteger;
 use metal_rs::{MTLTextureType, MTLTextureUsage};
 
 #[derive(Debug)]

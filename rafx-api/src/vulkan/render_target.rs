@@ -1,7 +1,7 @@
 use crate::vulkan::{RafxDeviceContextVulkan, RafxRawImageVulkan, RafxTextureVulkan};
 use crate::{
     RafxRenderTarget, RafxRenderTargetDef, RafxResourceType, RafxResult, RafxTexture,
-    RafxTextureDef, RafxTextureDimensions,
+    RafxTextureDimensions,
 };
 use ash::version::DeviceV1_0;
 use ash::vk;
@@ -144,7 +144,7 @@ impl RafxRenderTargetVulkan {
     ) -> RafxResult<Self> {
         render_target_def.verify();
 
-        let mut texture_def = render_target_def.to_texture_def();
+        let texture_def = render_target_def.to_texture_def();
 
         //if has_depth {
         //TODO: Check the format is supported with vkGetPhysicalDeviceImageFormatProperties or VkSwapchain::choose_supported_format()
