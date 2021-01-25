@@ -305,6 +305,7 @@ float do_calculate_percent_lit(thread const float3& normal_vs, thread const int&
     float4 shadow_map_pos = per_view_data.shadow_map_2d_data[index].shadow_map_view_proj * in_position_ws;
     float3 projected = shadow_map_pos.xyz / float3(shadow_map_pos.w);
     float2 sample_location_uv = (projected.xy * 0.5) + float2(0.5);
+    sample_location_uv.y = 1.0 - sample_location_uv.y;
     float depth_of_surface = projected.z;
     float3 light_dir_vs = float3x3(per_object_data.model_view[0].xyz, per_object_data.model_view[1].xyz, per_object_data.model_view[2].xyz) * per_view_data.shadow_map_2d_data[index].shadow_map_light_dir;
     float3 surface_to_light_dir_vs = -light_dir_vs;
@@ -316,8 +317,8 @@ float do_calculate_percent_lit(thread const float3& normal_vs, thread const int&
     {
         for (int y = -2; y <= 2; y++)
         {
-            float3 _447 = float3(sample_location_uv + (float2(float(x), float(y)) * texelSize), depth_of_surface + bias0);
-            shadow += shadow_map_images[index].sample_compare(smp_depth, _447.xy, _447.z);
+            float3 _451 = float3(sample_location_uv + (float2(float(x), float(y)) * texelSize), depth_of_surface + bias0);
+            shadow += shadow_map_images[index].sample_compare(smp_depth, _451.xy, _451.z);
         }
     }
     shadow /= 25.0;

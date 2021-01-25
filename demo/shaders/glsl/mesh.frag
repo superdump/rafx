@@ -278,11 +278,13 @@ float do_calculate_percent_lit(vec3 normal_vs, int index, float bias_multiplier)
     //  - [shadowmap view/proj matrix] * [surface position]
     //  - perspective divide
     //  - Convert XY's [-1, 1] range to [0, 1] UV coordinate range so we can sample the shadow map
+    //  - Flip the Y, UV is +y down and NDC is +y up
     //  - Use the Z which represents the depth of the surface from the shadow map's projection's point of view
     //    It is [0, 1] range already so no adjustment needed
     vec4 shadow_map_pos = per_view_data.shadow_map_2d_data[index].shadow_map_view_proj * in_position_ws;
     vec3 projected = shadow_map_pos.xyz / shadow_map_pos.w;
     vec2 sample_location_uv = projected.xy * 0.5 + 0.5;
+    sample_location_uv.y = 1.0 - sample_location_uv.y;
     float depth_of_surface = projected.z;
 
     // Determine the direction of the light so we can apply more bias when light is near orthogonal to the normal

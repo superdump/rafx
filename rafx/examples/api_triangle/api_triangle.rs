@@ -291,8 +291,8 @@ fn run() -> RafxResult<()> {
             #[rustfmt::skip]
             let vertex_data = [
                 0.0f32, 0.5, 1.0, 0.0, 0.0,
-                -0.5 + (seconds.cos() / 2. + 0.5), -0.5, 0.0, 1.0, 0.0,
-                0.5 - (seconds.cos() / 2. + 0.5), -0.5, 0.0, 0.0, 1.0,
+                0.5 - (seconds.cos() / 2. + 0.5), -0.5, 0.0, 1.0, 0.0,
+                -0.5 + (seconds.cos() / 2. + 0.5), -0.5, 0.0, 0.0, 1.0,
             ];
 
             let color = (seconds.cos() + 1.0) / 2.0;

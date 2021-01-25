@@ -651,15 +651,15 @@ impl GameRenderer {
             // render phases?
 
             // Sprites
-            //extract_job_set.add_job(create_sprite_extract_job());
+            extract_job_set.add_job(create_sprite_extract_job());
 
             // Meshes
             extract_job_set.add_job(create_mesh_extract_job());
 
-            // // Debug 3D
-            // extract_job_set.add_job(create_debug3d_extract_job());
-            //
-            // extract_job_set.add_job(create_imgui_extract_job());
+            // Debug 3D
+            extract_job_set.add_job(create_debug3d_extract_job());
+
+            extract_job_set.add_job(create_imgui_extract_job());
 
             extract_job_set
         };
