@@ -215,7 +215,7 @@ impl RafxCommandBufferMetal {
         })
     }
 
-    pub(crate) fn end_current_encoders(&self, force_barrier: bool) -> RafxResult<()> {
+    pub fn end_current_encoders(&self, force_barrier: bool) -> RafxResult<()> {
         let barrier_flags = self.queue.barrier_flags();
 
         if let Some(render_encoder) = self.swap_render_encoder(None) {

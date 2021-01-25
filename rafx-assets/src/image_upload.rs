@@ -15,6 +15,48 @@ fn generate_mips_for_image(
     layer: u32,
     mip_level_count: u32,
 ) -> RafxResult<()> {
+
+    // This custom path for metal can be removed after I implement cmd_blit
+    #[cfg(feature = "rafx-metal")]
+    {
+        upload.transfer_command_buffer().metal_command_buffer().unwrap().end_current_encoders(false);
+        let blit_encoder = upload.transfer_command_buffer().metal_command_buffer().unwrap().metal_command_buffer().unwrap().new_blit_command_encoder();
+        blit_encoder.generate_mipmaps(texture.metal_texture().unwrap().metal_texture());
+        blit_encoder.end_encoding();
+
+        upload.transfer_command_buffer().cmd_resource_barrier(
+            &[],
+            &[RafxTextureBarrier {
+                texture,
+                src_state: RafxResourceState::COPY_DST,
+                dst_state: RafxResourceState::SHADER_RESOURCE,
+                queue_transition: RafxBarrierQueueTransition::ReleaseTo(
+                    upload.dst_queue().queue_type(),
+                ),
+                array_slice: Some(layer as u16),
+                mip_slice: Some(0),
+            }],
+            &[],
+        )?;
+
+        upload.dst_command_buffer().cmd_resource_barrier(
+            &[],
+            &[RafxTextureBarrier {
+                texture,
+                src_state: RafxResourceState::COPY_DST,
+                dst_state: RafxResourceState::SHADER_RESOURCE,
+                queue_transition: RafxBarrierQueueTransition::AcquireFrom(
+                    upload.transfer_queue().queue_type(),
+                ),
+                array_slice: Some(layer as u16),
+                mip_slice: Some(0),
+            }],
+            &[],
+        )?;
+
+        return Ok(())
+    }
+
     //
     // Transition the first mip range to COPY_SRC, on the graphics queue
     //
@@ -197,8 +239,9 @@ pub fn enqueue_load_layered_image_2d(
     let (mip_level_count, generate_mips) = match decoded_images[0].mips {
         DecodedImageMips::None => (1, false),
         DecodedImageMips::Precomputed(_mip_count) => unimplemented!(), //(info.mip_level_count, false),
-        DecodedImageMips::Runtime(mip_count) => (mip_count, true),
+        DecodedImageMips::Runtime(mip_count) => (mip_count, mip_count > 1),
     };
+    //let (mip_level_count, generate_mips) = (1, false);
 
     // Push all images into the staging buffer
     let mut layer_offsets = Vec::default();
