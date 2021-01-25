@@ -9,7 +9,6 @@ use rafx_api::{
     RafxSamplerDef, RafxShaderResource, RafxShaderStageFlags, RafxShaderStageReflection,
     MAX_DESCRIPTOR_SET_LAYOUTS,
 };
-use rafx_resources::graph::SwapchainSurfaceInfo;
 use spirv_cross::msl::{ResourceBinding, ResourceBindingLocation, SamplerData, SamplerLocation};
 use spirv_cross::spirv::{ExecutionModel, Type};
 use std::collections::BTreeMap;
@@ -825,7 +824,6 @@ where
 fn map_shader_stage_flags(
     shader_stage: spirv_cross::spirv::ExecutionModel
 ) -> RafxResult<RafxShaderStageFlags> {
-    use spirv_cross::spirv::ExecutionModel;
     Ok(match shader_stage {
         ExecutionModel::Vertex => RafxShaderStageFlags::VERTEX,
         ExecutionModel::TessellationControl => RafxShaderStageFlags::TESSELLATION_CONTROL,

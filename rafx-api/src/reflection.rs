@@ -4,37 +4,6 @@ use fnv::FnvHashMap;
 #[cfg(feature = "serde-support")]
 use serde::{Deserialize, Serialize};
 
-// #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-// #[cfg_attr(feature = "serde-support", derive(Serialize, Deserialize))]
-// pub enum RafxShaderResourceTextureDimension {
-//     Dim1D,
-//     Dim2D,
-//     Dim2DMultiSample,
-//     Dim3D,
-//     DimCube,
-//     Dim1DArray,
-//     Dim2DArray,
-//     Dim2DMultiSampleArray,
-//     DimCubeArray,
-// }
-//
-// impl Default for RafxShaderResourceTextureDimension {
-//     fn default() -> Self {
-//         RafxShaderResourceTextureDimension::Dim2D
-//     }
-// }
-
-// Doesn't do anything, so commented out
-// #[derive(Debug, Clone, PartialEq)]
-// #[cfg_attr(feature = "serde-support", derive(Serialize, Deserialize))]
-// pub struct RafxVertexInput {
-//     pub semantic: String,
-//     pub location: u32,
-//     //pub location
-//     //pub location:
-//     //pub size: u32,
-// }
-
 #[derive(PartialEq, Eq, Hash, Default)]
 pub struct RafxShaderResourceBindingKey {
     pub set: u32,
@@ -159,54 +128,9 @@ impl RafxShaderResource {
             ))?;
         }
 
-        // if self.texture_dimensions != other.texture_dimensions {
-        //     Err(format!(
-        //         "Pass is using shaders in different stages with different texture_dimensions {:?} and {:?} (set={} binding={})",
-        //         self.texture_dimensions, other.texture_dimensions,
-        //         self.set_index,
-        //         self.binding
-        //     ))?;
-        // }
-
         Ok(())
     }
 }
-
-// pub struct RafxShaderVariable {
-//     parent_index: u32,
-//     offset: u32,
-//     size: u32,
-//     name: String,
-// }
-//
-// impl RafxShaderVariable {
-//     fn binding_key(&self) -> BindingKey {
-//         BindingKey {
-//             set: self.set,
-//             binding: self.binding,
-//         }
-//     }
-//
-//     fn verify_compatible(&self, other: &Self) -> RafxResult<()> {
-//         if self.parent_index != other.parent_index {
-//             return Err("Shader resource offset does not match").into();
-//         }
-//
-//         if self.offset != other.offset {
-//             return Err("Shader resource offset does not match").into();
-//         }
-//
-//         if self.size != other.size {
-//             return Err("Shader resource size does not match").into();
-//         }
-//
-//         if self.name != other.name {
-//             return Err("Shader resource name does not match").into();
-//         }
-//
-//         Ok(())
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde-support", derive(Serialize, Deserialize))]

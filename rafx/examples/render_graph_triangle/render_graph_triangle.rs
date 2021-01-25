@@ -8,8 +8,7 @@ use rafx::graph::{
 };
 use rafx::nodes::SubmitNode;
 use rafx::resources::{
-    CookedShaderPackage, DescriptorSetLayout, DescriptorSetLayoutBinding, FixedFunctionState,
-    MaterialPassVertexInput, ReflectedShader, ShaderModuleHash, ShaderModuleResourceDef,
+    CookedShaderPackage, FixedFunctionState, ReflectedShader, ShaderModuleResourceDef,
     VertexDataLayout,
 };
 use std::sync::Arc;
@@ -458,7 +457,7 @@ fn run() -> RafxResult<()> {
         }
 
         // Wait for all GPU work to complete before destroying resources it is using
-        graphics_queue.wait_for_queue_idle();
+        graphics_queue.wait_for_queue_idle()?;
     }
 
     // Optional, but calling this verifies that all rafx objects/device contexts have been

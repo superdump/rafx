@@ -11,7 +11,6 @@ mod parse_declarations;
 mod include;
 use include::include_impl;
 use include::IncludeType;
-use shaderc::ShaderKind;
 
 mod codegen;
 
