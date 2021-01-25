@@ -261,14 +261,16 @@ impl RafxCommandBufferVulkan {
         depth_max: f32,
     ) -> RafxResult<()> {
         unsafe {
+            // We invert the viewport by using negative height and setting y = y + height
+            // This is supported in vulkan 1.1 or 1.0 with an extension
             self.device_context.device().cmd_set_viewport(
                 self.vk_command_buffer,
                 0,
                 &[vk::Viewport {
                     x,
-                    y,
+                    y: y + height,
                     width,
-                    height,
+                    height: height * -1.0,
                     min_depth: depth_min,
                     max_depth: depth_max,
                 }],

@@ -133,10 +133,6 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for SpritePrepar
             100.0,
         );
 
-        if prepare_context.device_context.device_info().normalized_coordinates_y_is_up {
-            view_proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * view_proj;
-        }
-
         //
         // Add submit nodes per view
         //

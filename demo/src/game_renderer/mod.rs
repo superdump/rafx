@@ -73,20 +73,20 @@ pub fn perspective_rh(
     )
 }
 
-pub fn matrix_flip_y(proj: glam::Mat4) -> glam::Mat4 {
-    glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj
-}
+// pub fn matrix_flip_y(proj: glam::Mat4) -> glam::Mat4 {
+//     glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj
+// }
 
 // Equivalent to flipping near/far values?
-pub fn matrix_reverse_z(proj: glam::Mat4) -> glam::Mat4 {
-    let reverse_mat = glam::Mat4::from_cols(
-        glam::Vec4::new(1.0, 0.0, 0.0, 0.0),
-        glam::Vec4::new(0.0, 1.0, 0.0, 0.0),
-        glam::Vec4::new(0.0, 0.0, -1.0, 0.0),
-        glam::Vec4::new(0.0, 0.0, 1.0, 1.0),
-    );
-    reverse_mat * proj
-}
+// pub fn matrix_reverse_z(proj: glam::Mat4) -> glam::Mat4 {
+//     let reverse_mat = glam::Mat4::from_cols(
+//         glam::Vec4::new(1.0, 0.0, 0.0, 0.0),
+//         glam::Vec4::new(0.0, 1.0, 0.0, 0.0),
+//         glam::Vec4::new(0.0, 0.0, -1.0, 0.0),
+//         glam::Vec4::new(0.0, 0.0, 1.0, 1.0),
+//     );
+//     reverse_mat * proj
+// }
 
 #[derive(Clone)]
 pub struct ImguiFontAtlas(pub ResourceArc<ImageViewResource>);
@@ -422,6 +422,7 @@ impl GameRenderer {
         // Determine Camera Location
         //
         let main_view = GameRenderer::calculate_main_view(
+            &device_context,
             &render_view_set,
             window_width,
             window_height,
@@ -650,15 +651,15 @@ impl GameRenderer {
             // render phases?
 
             // Sprites
-            extract_job_set.add_job(create_sprite_extract_job());
+            //extract_job_set.add_job(create_sprite_extract_job());
 
             // Meshes
             extract_job_set.add_job(create_mesh_extract_job());
 
-            // Debug 3D
-            extract_job_set.add_job(create_debug3d_extract_job());
-
-            extract_job_set.add_job(create_imgui_extract_job());
+            // // Debug 3D
+            // extract_job_set.add_job(create_debug3d_extract_job());
+            //
+            // extract_job_set.add_job(create_imgui_extract_job());
 
             extract_job_set
         };
@@ -734,6 +735,7 @@ impl GameRenderer {
 
     #[profiling::function]
     fn calculate_main_view(
+        device_context: &RafxDeviceContext,
         render_view_set: &RenderViewSet,
         window_width: u32,
         window_height: u32,
@@ -758,7 +760,7 @@ impl GameRenderer {
 
         let aspect_ratio = window_width as f32 / window_height as f32;
 
-        let view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
+        let mut view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
 
         let near_plane = 0.01;
         let proj = glam::Mat4::perspective_infinite_reverse_rh(
@@ -766,8 +768,6 @@ impl GameRenderer {
             aspect_ratio,
             near_plane,
         );
-        // Flip it on Y
-        let proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * proj;
 
         render_view_set.create_view(
             eye,
@@ -808,7 +808,7 @@ impl GameRenderer {
             let near_plane = 0.25;
             let far_plane = 100.0;
             let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, far_plane, near_plane);
-            let proj = matrix_flip_y(proj);
+            //let proj = matrix_flip_y(proj);
 
             let view = render_view_set.create_view(
                 eye_position,
@@ -841,8 +841,8 @@ impl GameRenderer {
             let proj = glam::Mat4::orthographic_rh(
                 -ortho_projection_size,
                 ortho_projection_size,
-                ortho_projection_size,
                 -ortho_projection_size,
+                ortho_projection_size,
                 far_plane,
                 near_plane,
             );
@@ -893,7 +893,7 @@ impl GameRenderer {
                 let near = 0.25;
                 let far = light.range;
                 let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, far, near);
-                let proj = matrix_flip_y(proj);
+                //let proj = matrix_flip_y(proj);
 
                 render_view_set.create_view(
                     position,

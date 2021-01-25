@@ -1,4 +1,4 @@
-use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType, RafxIndexType};
+use crate::{RafxCommandBufferDef, RafxResult, RafxColorRenderTargetBinding, RafxDepthRenderTargetBinding, RafxVertexBufferBinding, RafxBufferBarrier, RafxTextureBarrier, RafxRenderTargetBarrier, RafxCmdCopyBufferToTextureParams, RafxCmdBlitParams, RafxIndexBufferBinding, RafxResourceState, RafxLoadOp, RafxStoreOp, RafxQueueType, RafxPipelineType, RafxIndexType, RafxExtents3D};
 use crate::metal::{RafxCommandPoolMetal, RafxPipelineMetal, RafxDescriptorSetArrayMetal, RafxRootSignatureMetal, RafxDescriptorSetHandleMetal, RafxBufferMetal, RafxTextureMetal, RafxQueueMetal, BarrierFlagsMetal, RafxRenderTargetMetal, RafxRootSignatureMetalInner, ArgumentBufferData};
 use std::sync::atomic::{AtomicPtr, AtomicU8, AtomicBool, AtomicU64, AtomicU32};
 use std::sync::atomic::Ordering;
@@ -110,6 +110,8 @@ impl RafxCommandBufferMetal {
             Err("No color or depth target supplied to cmd_bind_render_targets")?;
         }
 
+        let mut extents = RafxExtents3D::default();
+
         objc::rc::autoreleasepool(|| {
             let descriptor = metal_rs::RenderPassDescriptor::new();
 
@@ -118,7 +120,7 @@ impl RafxCommandBufferMetal {
                 let texture = color_target.render_target.texture().metal_texture().unwrap();
 
                 // Ensure current_render_targets_width/current_render_targets_depth are set
-                let extents = texture.texture_def().extents;
+                extents = texture.texture_def().extents;
                 self.current_render_targets_width.store(extents.width, Ordering::Relaxed);
                 self.current_render_targets_height.store(extents.height, Ordering::Relaxed);
 
@@ -152,7 +154,7 @@ impl RafxCommandBufferMetal {
                 let texture = depth_target.render_target.texture().metal_texture().unwrap();
 
                 // Ensure current_render_targets_width/current_render_targets_depth are set
-                let extents = depth_target.render_target.texture().texture_def().extents;
+                extents = depth_target.render_target.texture().texture_def().extents;
                 self.current_render_targets_width.store(extents.width, Ordering::Relaxed);
                 self.current_render_targets_height.store(extents.height, Ordering::Relaxed);
 
@@ -195,6 +197,19 @@ impl RafxCommandBufferMetal {
             self.swap_render_encoder(Some(render_encoder.to_owned()));
             self.wait_for_barriers()?;
             // set heaps?
+
+            self.cmd_set_viewport(
+                0.0,
+                0.0,
+                extents.width as f32,
+                extents.height as f32,
+                0.0,
+                1.0,
+            )
+                .unwrap();
+
+            self.cmd_set_scissor(0, 0, extents.width, extents.height)
+                .unwrap();
 
             Ok(())
         })
@@ -325,6 +340,7 @@ impl RafxCommandBufferMetal {
                     let render_encoder_info = pipeline.render_encoder_info.as_ref().unwrap();
                     render_encoder.set_render_pipeline_state(pipeline.metal_render_pipeline().unwrap());
                     render_encoder.set_cull_mode(render_encoder_info.mtl_cull_mode);
+                    render_encoder.set_front_facing_winding(render_encoder_info.mtl_front_facing_winding);
                     render_encoder.set_triangle_fill_mode(render_encoder_info.mtl_triangle_fill_mode);
                     render_encoder.set_depth_bias(render_encoder_info.mtl_depth_bias, render_encoder_info.mtl_depth_bias_slope_scaled, 0.0);
                     render_encoder.set_depth_clip_mode(render_encoder_info.mtl_depth_clip_mode);

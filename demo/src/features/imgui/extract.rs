@@ -57,10 +57,6 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
             100.0,
         );
 
-        if !extract_context.asset_manager.device_context().device_info().normalized_coordinates_y_is_up {
-            view_proj = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0)) * view_proj;
-        }
-
         let imgui_material = &extract_context
             .render_resources
             .fetch::<GameRendererStaticResources>()

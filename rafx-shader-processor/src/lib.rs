@@ -263,7 +263,8 @@ fn process_glsl_shader(
     ast.set_compiler_options(&spirv_cross_glsl_options)?;
 
     let reflected_data = if rs_file.is_some() || cooked_shader_file.is_some() || metal_generated_src_file.is_some() {
-        Some(reflect::reflect_data(&ast, &parsed_declarations)?)
+        let require_semantics = rs_file.is_some() || cooked_shader_file.is_some();
+        Some(reflect::reflect_data(&ast, &parsed_declarations, require_semantics)?)
     } else {
         None
     };

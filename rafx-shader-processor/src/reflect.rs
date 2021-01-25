@@ -664,6 +664,7 @@ pub struct ShaderProcessorRefectionData {
 pub(crate) fn reflect_data<TargetT>(
     ast: &spirv_cross::spirv::Ast<TargetT>,
     declarations: &super::parse_declarations::ParseDeclarationsResult,
+    require_semantics: bool,
 ) -> RafxResult<ShaderProcessorRefectionData>
 where
     TargetT: spirv_cross::spirv::Target,
@@ -743,12 +744,17 @@ where
                     .or_else(|| declarations.bindings.iter().find(|x| x.parsed.instance_name == *name))
                     .ok_or_else(|| format!("A resource named {} in spirv reflection data was not matched up to a resource scanned in source code.", resource.name))?;
 
-                let semantic = &parsed_binding.annotations.semantic.as_ref().map(|x| x.0.clone())
-                    .ok_or_else(|| format!("No semantic annotation for vertex input '{}'. All vertex inputs must have a semantic annotation if generating rust code and/or cooked shaders.", name))?;
+                let semantic = &parsed_binding.annotations.semantic.as_ref().map(|x| x.0.clone());
+
+                let semantic = if require_semantics {
+                    semantic.clone().ok_or_else(|| format!("No semantic annotation for vertex input '{}'. All vertex inputs must have a semantic annotation if generating rust code and/or cooked shaders.", name))?
+                } else {
+                    "".to_string()
+                };
 
                 dsc_vertex_inputs.push(ReflectedVertexInput {
                     name: name.clone(),
-                    semantic: semantic.clone(),
+                    semantic,
                     location,
                 });
             }
