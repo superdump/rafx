@@ -217,7 +217,6 @@ pub struct RafxShaderStageReflection {
     pub resources: Vec<RafxShaderResource>,
     pub compute_threads_per_group: Option<[u32; 3]>,
     pub entry_point_name: String,
-
     // Right now we will infer mappings based on spirv_cross default behavior, but likely will want
     // to allow providing them explicitly. This isn't implemented yet
     //pub binding_arg_buffer_mappings: FnvHashMap<(u32, u32), u32>
@@ -256,7 +255,11 @@ impl RafxPipelineReflection {
 
         let mut compute_threads_per_group = None;
         for stage in stages {
-            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+            if stage
+                .reflection
+                .shader_stage
+                .intersects(RafxShaderStageFlags::COMPUTE)
+            {
                 compute_threads_per_group = stage.reflection.compute_threads_per_group;
             }
         }

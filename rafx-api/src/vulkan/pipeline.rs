@@ -92,7 +92,8 @@ impl RafxPipelineVulkan {
 
         let mut entry_point_names = vec![];
         for stage in pipeline_def.shader.vk_shader().unwrap().stages() {
-            entry_point_names.push(CString::new(stage.reflection.entry_point_name.clone()).unwrap());
+            entry_point_names
+                .push(CString::new(stage.reflection.entry_point_name.clone()).unwrap());
         }
 
         let mut stages = vec![];
@@ -241,11 +242,13 @@ impl RafxPipelineVulkan {
 
         let mut entry_point_names = vec![];
         for stage in vk_shader.stages() {
-            entry_point_names.push(CString::new(stage.reflection.entry_point_name.clone()).unwrap());
+            entry_point_names
+                .push(CString::new(stage.reflection.entry_point_name.clone()).unwrap());
         }
 
         let compute_stage = &vk_shader.stages()[0];
-        let entry_point_name = CString::new(compute_stage.reflection.entry_point_name.clone()).unwrap();
+        let entry_point_name =
+            CString::new(compute_stage.reflection.entry_point_name.clone()).unwrap();
         let stage = vk::PipelineShaderStageCreateInfo::builder()
             .name(&entry_point_name)
             .module(

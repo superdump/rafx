@@ -1,8 +1,14 @@
-use rafx_api::{RafxSamplerDef, RafxShaderResource, RafxShaderStageReflection, RafxShaderPackage, RafxShaderModuleDef, RafxShaderStageFlags, RafxResult};
-use crate::{DescriptorSetLayout, DescriptorSetLayoutBinding, ShaderModuleHash, ShaderModuleMeta, MaterialPassVertexInput};
+use crate::{
+    DescriptorSetLayout, DescriptorSetLayoutBinding, MaterialPassVertexInput, ShaderModuleHash,
+    ShaderModuleMeta,
+};
+use fnv::{FnvHashMap, FnvHashSet};
+use rafx_api::{
+    RafxResult, RafxSamplerDef, RafxShaderModuleDef, RafxShaderPackage, RafxShaderResource,
+    RafxShaderStageFlags, RafxShaderStageReflection,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use fnv::{FnvHashMap, FnvHashSet};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct SlotLocation {
@@ -71,15 +77,20 @@ pub struct CookedShaderPackage {
 }
 
 impl CookedShaderPackage {
-    pub fn find_entry_point(&self, entry_point_name: &str) -> Option<&ReflectedEntryPoint> {
-        self.entry_points.iter().find(|x| x.rafx_api_reflection.entry_point_name == entry_point_name)
+    pub fn find_entry_point(
+        &self,
+        entry_point_name: &str,
+    ) -> Option<&ReflectedEntryPoint> {
+        self.entry_points
+            .iter()
+            .find(|x| x.rafx_api_reflection.entry_point_name == entry_point_name)
     }
 }
 
 pub struct ReflectedShader {
     pub descriptor_set_layout_defs: Vec<DescriptorSetLayout>,
     pub slot_name_lookup: SlotNameLookup,
-    pub vertex_inputs: Option<Arc<Vec<MaterialPassVertexInput>>>
+    pub vertex_inputs: Option<Arc<Vec<MaterialPassVertexInput>>>,
 }
 
 impl ReflectedShader {
@@ -93,7 +104,11 @@ impl ReflectedShader {
         for reflection_data in entry_points {
             log::trace!("  Reflection data:\n{:#?}", reflection_data);
 
-            if reflection_data.rafx_api_reflection.shader_stage.intersects(RafxShaderStageFlags::VERTEX) {
+            if reflection_data
+                .rafx_api_reflection
+                .shader_stage
+                .intersects(RafxShaderStageFlags::VERTEX)
+            {
                 let inputs: Vec<_> = reflection_data
                     .vertex_inputs
                     .iter()
@@ -230,7 +245,7 @@ impl ReflectedShader {
         Ok(ReflectedShader {
             vertex_inputs,
             descriptor_set_layout_defs,
-            slot_name_lookup
+            slot_name_lookup,
         })
     }
 }

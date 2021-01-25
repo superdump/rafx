@@ -5,10 +5,10 @@ use crate::{
 };
 use ash::version::DeviceV1_0;
 use ash::vk;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::hash::{Hash, Hasher};
 
 static RENDER_TARGET_NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -44,7 +44,10 @@ pub struct RafxRenderTargetVulkan {
 }
 
 impl PartialEq for RafxRenderTargetVulkan {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.inner.render_target_id == other.inner.render_target_id
     }
 }
@@ -52,7 +55,10 @@ impl PartialEq for RafxRenderTargetVulkan {
 impl Eq for RafxRenderTargetVulkan {}
 
 impl Hash for RafxRenderTargetVulkan {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.inner.render_target_id.hash(state);
     }
 }
@@ -141,8 +147,8 @@ impl RafxRenderTargetVulkan {
         let mut texture_def = render_target_def.to_texture_def();
 
         //if has_depth {
-            //TODO: Check the format is supported with vkGetPhysicalDeviceImageFormatProperties or VkSwapchain::choose_supported_format()
-            // Either fail or default to something safe
+        //TODO: Check the format is supported with vkGetPhysicalDeviceImageFormatProperties or VkSwapchain::choose_supported_format()
+        // Either fail or default to something safe
         //}
 
         let texture =

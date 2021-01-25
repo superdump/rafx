@@ -191,9 +191,7 @@ where
         Ok(())
     }
 
-    fn destroy(
-        &mut self,
-    ) -> RafxResult<()> {
+    fn destroy(&mut self) -> RafxResult<()> {
         self.handle_dropped_resources();
 
         if self.len() > 0 {

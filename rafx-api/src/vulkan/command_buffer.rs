@@ -141,7 +141,12 @@ impl RafxCommandBufferVulkan {
         let barriers = {
             let mut barriers = Vec::with_capacity(color_targets.len() + 1);
             for color_target in color_targets {
-                if color_target.render_target.vk_render_target().unwrap().take_is_undefined_layout() {
+                if color_target
+                    .render_target
+                    .vk_render_target()
+                    .unwrap()
+                    .take_is_undefined_layout()
+                {
                     log::trace!(
                         "Transition RT {:?} from {:?} to {:?}",
                         color_target,
@@ -157,7 +162,12 @@ impl RafxCommandBufferVulkan {
             }
 
             if let Some(depth_target) = &depth_target {
-                if depth_target.render_target.vk_render_target().unwrap().take_is_undefined_layout() {
+                if depth_target
+                    .render_target
+                    .vk_render_target()
+                    .unwrap()
+                    .take_is_undefined_layout()
+                {
                     log::trace!(
                         "Transition RT {:?} from {:?} to {:?}",
                         depth_target,

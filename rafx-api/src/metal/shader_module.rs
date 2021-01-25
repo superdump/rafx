@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use crate::{RafxShaderModule, RafxShaderModuleDefMetal, RafxResult};
 use crate::metal::RafxDeviceContextMetal;
+use crate::{RafxResult, RafxShaderModule, RafxShaderModuleDefMetal};
 use metal_rs::MTLLanguageVersion;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct RafxShaderModuleMetalInner {
@@ -14,7 +14,7 @@ unsafe impl Sync for RafxShaderModuleMetalInner {}
 
 #[derive(Clone, Debug)]
 pub struct RafxShaderModuleMetal {
-    inner: Arc<RafxShaderModuleMetalInner>
+    inner: Arc<RafxShaderModuleMetalInner>,
 }
 
 impl RafxShaderModuleMetal {
@@ -42,12 +42,10 @@ impl RafxShaderModuleMetal {
     ) -> RafxResult<Self> {
         let library = device_context.device().new_library_with_data(data)?;
 
-        let inner = RafxShaderModuleMetalInner {
-            library
-        };
+        let inner = RafxShaderModuleMetalInner { library };
 
         Ok(RafxShaderModuleMetal {
-            inner: Arc::new(inner)
+            inner: Arc::new(inner),
         })
     }
 
@@ -57,14 +55,14 @@ impl RafxShaderModuleMetal {
     ) -> RafxResult<Self> {
         let mut compile_options = metal_rs::CompileOptions::new();
         compile_options.set_language_version(MTLLanguageVersion::V2_1);
-        let library = device_context.device().new_library_with_source(src, &compile_options)?;
+        let library = device_context
+            .device()
+            .new_library_with_source(src, &compile_options)?;
 
-        let inner = RafxShaderModuleMetalInner {
-            library
-        };
+        let inner = RafxShaderModuleMetalInner { library };
 
         Ok(RafxShaderModuleMetal {
-            inner: Arc::new(inner)
+            inner: Arc::new(inner),
         })
     }
 }

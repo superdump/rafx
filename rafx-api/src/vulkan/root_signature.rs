@@ -1,5 +1,9 @@
 use crate::vulkan::RafxDeviceContextVulkan;
-use crate::{RafxDescriptorIndex, RafxImmutableSamplerKey, RafxImmutableSamplers, RafxPipelineType, RafxResourceType, RafxResult, RafxRootSignatureDef, RafxSampler, RafxShaderResource, RafxShaderStageFlags, MAX_DESCRIPTOR_SET_LAYOUTS};
+use crate::{
+    RafxDescriptorIndex, RafxImmutableSamplerKey, RafxImmutableSamplers, RafxPipelineType,
+    RafxResourceType, RafxResult, RafxRootSignatureDef, RafxSampler, RafxShaderResource,
+    RafxShaderStageFlags, MAX_DESCRIPTOR_SET_LAYOUTS,
+};
 use ash::version::DeviceV1_0;
 use ash::vk;
 use fnv::FnvHashMap;
@@ -357,7 +361,8 @@ impl RafxRootSignatureVulkan {
         //
         // Create descriptor set layouts
         //
-        let mut descriptor_set_layouts = [vk::DescriptorSetLayout::null(); MAX_DESCRIPTOR_SET_LAYOUTS];
+        let mut descriptor_set_layouts =
+            [vk::DescriptorSetLayout::null(); MAX_DESCRIPTOR_SET_LAYOUTS];
         let mut descriptor_set_layout_count = 0;
 
         for layout_index in 0..MAX_DESCRIPTOR_SET_LAYOUTS {

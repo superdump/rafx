@@ -1,10 +1,16 @@
-use crate::metal::{RafxDeviceContextMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxSwapchainMetal, RafxCommandPoolMetal, RafxCommandBufferMetal, BarrierFlagsMetal};
-use crate::{RafxQueueType, RafxDeviceContext, RafxResult, RafxCommandPoolDef, RafxPresentSuccessResult, RafxFence};
-use std::sync::Arc;
-use std::sync::atomic::{Ordering, AtomicU8, AtomicU32};
+use crate::metal::{
+    BarrierFlagsMetal, RafxCommandBufferMetal, RafxCommandPoolMetal, RafxDeviceContextMetal,
+    RafxFenceMetal, RafxSemaphoreMetal, RafxSwapchainMetal,
+};
+use crate::{
+    RafxCommandPoolDef, RafxDeviceContext, RafxFence, RafxPresentSuccessResult, RafxQueueType,
+    RafxResult,
+};
 use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
+use std::sync::Arc;
 
-static NEXT_QUEUE_ID : AtomicU32 = AtomicU32::new(0);
+static NEXT_QUEUE_ID: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug)]
 pub struct RafxQueueMetalInner {
@@ -22,7 +28,7 @@ unsafe impl Sync for RafxQueueMetalInner {}
 
 #[derive(Clone, Debug)]
 pub struct RafxQueueMetal {
-    inner: Arc<RafxQueueMetalInner>
+    inner: Arc<RafxQueueMetalInner>,
 }
 
 impl RafxQueueMetal {
@@ -45,8 +51,13 @@ impl RafxQueueMetal {
         self.inner.fence.as_ref()
     }
 
-    pub fn add_barrier_flags(&self, flags: BarrierFlagsMetal) {
-        self.inner.barrier_flags.fetch_or(flags.bits(), Ordering::Relaxed);
+    pub fn add_barrier_flags(
+        &self,
+        flags: BarrierFlagsMetal,
+    ) {
+        self.inner
+            .barrier_flags
+            .fetch_or(flags.bits(), Ordering::Relaxed);
     }
 
     pub fn clear_barrier_flags(&self) {
@@ -90,22 +101,31 @@ impl RafxQueueMetal {
         };
 
         Ok(RafxQueueMetal {
-            inner: Arc::new(inner)
+            inner: Arc::new(inner),
         })
     }
 
     pub fn wait_for_queue_idle(&self) -> RafxResult<()> {
-        let wait = self.inner.queue.new_command_buffer_with_unretained_references();
+        let wait = self
+            .inner
+            .queue
+            .new_command_buffer_with_unretained_references();
         wait.commit();
         wait.wait_until_completed();
         Ok(())
     }
 
-    fn submit_semaphore_wait(&self, wait_semaphores: &[&RafxSemaphoreMetal]) {
+    fn submit_semaphore_wait(
+        &self,
+        wait_semaphores: &[&RafxSemaphoreMetal],
+    ) {
         let wait_command_buffer_required = wait_semaphores.iter().any(|x| x.signal_available());
 
         if wait_command_buffer_required {
-            let wait_command_buffer = self.inner.queue.new_command_buffer_with_unretained_references();
+            let wait_command_buffer = self
+                .inner
+                .queue
+                .new_command_buffer_with_unretained_references();
             for wait_semaphore in wait_semaphores {
                 if wait_semaphore.signal_available() {
                     wait_command_buffer.encode_wait_for_event(wait_semaphore.metal_event(), 1);
@@ -139,19 +159,29 @@ impl RafxQueueMetal {
                 let dispatch_semaphore = signal_fence.metal_dispatch_semaphore().clone();
                 let block = block::ConcreteBlock::new(move |command_buffer_ref| {
                     // Add 1 because fetch_add returns the value from before the add
-                    let complete = complete_count.fetch_add(1, Ordering::Relaxed) + 1 == command_count;
+                    let complete =
+                        complete_count.fetch_add(1, Ordering::Relaxed) + 1 == command_count;
                     if complete {
                         dispatch_semaphore.signal();
                     }
-                }).copy();
+                })
+                .copy();
 
                 for command_buffer in command_buffers {
-                    command_buffer.metal_command_buffer().unwrap().add_completed_handler(&block);
+                    command_buffer
+                        .metal_command_buffer()
+                        .unwrap()
+                        .add_completed_handler(&block);
                 }
             }
 
             for signal_semaphore in signal_semaphores {
-                command_buffers.last().unwrap().metal_command_buffer().unwrap().encode_signal_event(signal_semaphore.metal_event(), 1);
+                command_buffers
+                    .last()
+                    .unwrap()
+                    .metal_command_buffer()
+                    .unwrap()
+                    .encode_signal_event(signal_semaphore.metal_event(), 1);
                 signal_semaphore.set_signal_available(true);
             }
 

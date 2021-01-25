@@ -3,12 +3,16 @@ use rafx_resources::cooked_shader::{
     ReflectedVertexInput,
 };
 
-use rafx_api::{RafxResourceType, RafxResult, RafxShaderResource, RafxShaderStageFlags, RafxShaderStageReflection, MAX_DESCRIPTOR_SET_LAYOUTS, RafxSamplerDef, RafxMipMapMode, RafxFilterType, RafxAddressMode, RafxCompareOp};
-use spirv_cross::spirv::{Type, ExecutionModel};
-use std::collections::BTreeMap;
-use spirv_cross::msl::{ResourceBindingLocation, ResourceBinding, SamplerLocation, SamplerData};
 use fnv::FnvHashMap;
+use rafx_api::{
+    RafxAddressMode, RafxCompareOp, RafxFilterType, RafxMipMapMode, RafxResourceType, RafxResult,
+    RafxSamplerDef, RafxShaderResource, RafxShaderStageFlags, RafxShaderStageReflection,
+    MAX_DESCRIPTOR_SET_LAYOUTS,
+};
 use rafx_resources::graph::SwapchainSurfaceInfo;
+use spirv_cross::msl::{ResourceBinding, ResourceBindingLocation, SamplerData, SamplerLocation};
+use spirv_cross::spirv::{ExecutionModel, Type};
+use std::collections::BTreeMap;
 
 fn get_descriptor_count_from_type<TargetT>(
     ast: &spirv_cross::spirv::Ast<TargetT>,
@@ -441,7 +445,9 @@ where
 // }
 
 //TODO: Exclude MSL constexpr samplers?
-pub(crate) fn msl_assign_argument_buffer_ids(entry_points: &[ReflectedEntryPoint]) -> RafxResult<BTreeMap::<ResourceBindingLocation, ResourceBinding>> {
+pub(crate) fn msl_assign_argument_buffer_ids(
+    entry_points: &[ReflectedEntryPoint]
+) -> RafxResult<BTreeMap<ResourceBindingLocation, ResourceBinding>> {
     let mut all_resources_lookup = FnvHashMap::<(u32, u32), RafxShaderResource>::default();
     for entry_point in entry_points {
         for resource in &entry_point.rafx_api_reflection.resources {
@@ -469,11 +475,10 @@ pub(crate) fn msl_assign_argument_buffer_ids(entry_points: &[ReflectedEntryPoint
             } else {
                 all_resources_lookup.insert(key, resource.clone());
             }
-
         }
     }
 
-    let mut resources : Vec<_> = all_resources_lookup.values().collect();
+    let mut resources: Vec<_> = all_resources_lookup.values().collect();
     resources.sort_by(|lhs, rhs| lhs.binding.cmp(&rhs.binding));
 
     // If we update this constant, update the arrays in this function
@@ -481,7 +486,8 @@ pub(crate) fn msl_assign_argument_buffer_ids(entry_points: &[ReflectedEntryPoint
 
     let mut next_msl_argument_buffer_id = [0, 0, 0, 0];
 
-    let mut argument_buffer_assignments = BTreeMap::<ResourceBindingLocation, ResourceBinding>::default();
+    let mut argument_buffer_assignments =
+        BTreeMap::<ResourceBindingLocation, ResourceBinding>::default();
 
     for resource in resources {
         let msl_argument_buffer_id = next_msl_argument_buffer_id[resource.set_index as usize];
@@ -490,52 +496,70 @@ pub(crate) fn msl_assign_argument_buffer_ids(entry_points: &[ReflectedEntryPoint
             // We'll overwrite the stage as needed when we insert into the map
             stage: spirv_cross::spirv::ExecutionModel::TessellationEvaluation,
             desc_set: resource.set_index,
-            binding: resource.binding
+            binding: resource.binding,
         };
 
         let new_binding = ResourceBinding {
             buffer_id: msl_argument_buffer_id,
             texture_id: msl_argument_buffer_id,
-            sampler_id: msl_argument_buffer_id
+            sampler_id: msl_argument_buffer_id,
         };
 
-        if resource.used_in_shader_stages.intersects(RafxShaderStageFlags::VERTEX) {
+        if resource
+            .used_in_shader_stages
+            .intersects(RafxShaderStageFlags::VERTEX)
+        {
             let mut location = location.clone();
             location.stage = ExecutionModel::Vertex;
             argument_buffer_assignments.insert(location, new_binding.clone());
         }
 
-        if resource.used_in_shader_stages.intersects(RafxShaderStageFlags::FRAGMENT) {
+        if resource
+            .used_in_shader_stages
+            .intersects(RafxShaderStageFlags::FRAGMENT)
+        {
             let mut location = location.clone();
             location.stage = ExecutionModel::Fragment;
             argument_buffer_assignments.insert(location, new_binding.clone());
         }
 
-        if resource.used_in_shader_stages.intersects(RafxShaderStageFlags::COMPUTE) {
+        if resource
+            .used_in_shader_stages
+            .intersects(RafxShaderStageFlags::COMPUTE)
+        {
             let mut location = location.clone();
             location.stage = ExecutionModel::Kernel;
             argument_buffer_assignments.insert(location, new_binding.clone());
         }
 
-        if resource.used_in_shader_stages.intersects(RafxShaderStageFlags::TESSELLATION_CONTROL) {
+        if resource
+            .used_in_shader_stages
+            .intersects(RafxShaderStageFlags::TESSELLATION_CONTROL)
+        {
             let mut location = location.clone();
             location.stage = ExecutionModel::TessellationControl;
             argument_buffer_assignments.insert(location, new_binding.clone());
         }
 
-        if resource.used_in_shader_stages.intersects(RafxShaderStageFlags::TESSELLATION_EVALUATION) {
+        if resource
+            .used_in_shader_stages
+            .intersects(RafxShaderStageFlags::TESSELLATION_EVALUATION)
+        {
             let mut location = location.clone();
             location.stage = ExecutionModel::TessellationEvaluation;
             argument_buffer_assignments.insert(location, new_binding.clone());
         }
 
-        next_msl_argument_buffer_id[resource.set_index as usize] += resource.element_count_normalized();
+        next_msl_argument_buffer_id[resource.set_index as usize] +=
+            resource.element_count_normalized();
     }
 
     Ok(argument_buffer_assignments)
 }
 
-fn msl_create_sampler_data(sampler_def: &RafxSamplerDef) -> RafxResult<spirv_cross::msl::SamplerData> {
+fn msl_create_sampler_data(
+    sampler_def: &RafxSamplerDef
+) -> RafxResult<spirv_cross::msl::SamplerData> {
     let lod_clamp_min = LodBase16::from(sampler_def.mip_lod_bias);
     let lod_clamp_max = if sampler_def.mip_map_mode == RafxMipMapMode::Linear {
         LodBase16::MAX
@@ -553,7 +577,7 @@ fn msl_create_sampler_data(sampler_def: &RafxSamplerDef) -> RafxResult<spirv_cro
     fn convert_mip_map_mode(mip_map_mode: RafxMipMapMode) -> SamplerMipFilter {
         match mip_map_mode {
             RafxMipMapMode::Nearest => SamplerMipFilter::Nearest,
-            RafxMipMapMode::Linear => SamplerMipFilter::Linear
+            RafxMipMapMode::Linear => SamplerMipFilter::Linear,
         }
     }
 
@@ -606,11 +630,16 @@ fn msl_create_sampler_data(sampler_def: &RafxSamplerDef) -> RafxResult<spirv_cro
         chroma_filter: SamplerFilter::Nearest,
         x_chroma_offset: ChromaLocation::CositedEven,
         y_chroma_offset: ChromaLocation::CositedEven,
-        swizzle: [ComponentSwizzle::Identity, ComponentSwizzle::Identity, ComponentSwizzle::Identity, ComponentSwizzle::Identity],
+        swizzle: [
+            ComponentSwizzle::Identity,
+            ComponentSwizzle::Identity,
+            ComponentSwizzle::Identity,
+            ComponentSwizzle::Identity,
+        ],
         ycbcr_conversion_enable: false,
         ycbcr_model: SamplerYCbCrModelConversion::RgbIdentity,
         ycbcr_range: SamplerYCbCrRange::ItuFull,
-        bpc: 8
+        bpc: 8,
     };
 
     Ok(sampler_data)
@@ -657,8 +686,8 @@ pub(crate) fn msl_const_samplers(
 
 pub struct ShaderProcessorRefectionData {
     pub reflection: Vec<ReflectedEntryPoint>,
-    pub msl_argument_buffer_assignments: BTreeMap::<ResourceBindingLocation, ResourceBinding>,
-    pub msl_const_samplers: BTreeMap<SamplerLocation, SamplerData>
+    pub msl_argument_buffer_assignments: BTreeMap<ResourceBindingLocation, ResourceBinding>,
+    pub msl_const_samplers: BTreeMap<SamplerLocation, SamplerData>,
 }
 
 pub(crate) fn reflect_data<TargetT>(
@@ -744,7 +773,11 @@ where
                     .or_else(|| declarations.bindings.iter().find(|x| x.parsed.instance_name == *name))
                     .ok_or_else(|| format!("A resource named {} in spirv reflection data was not matched up to a resource scanned in source code.", resource.name))?;
 
-                let semantic = &parsed_binding.annotations.semantic.as_ref().map(|x| x.0.clone());
+                let semantic = &parsed_binding
+                    .annotations
+                    .semantic
+                    .as_ref()
+                    .map(|x| x.0.clone());
 
                 let semantic = if require_semantics {
                     semantic.clone().ok_or_else(|| format!("No semantic annotation for vertex input '{}'. All vertex inputs must have a semantic annotation if generating rust code and/or cooked shaders.", name))?
@@ -785,7 +818,7 @@ where
     Ok(ShaderProcessorRefectionData {
         reflection: reflected_entry_points,
         msl_argument_buffer_assignments,
-        msl_const_samplers
+        msl_const_samplers,
     })
 }
 

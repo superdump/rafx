@@ -1,5 +1,5 @@
 use crate::metal::RafxDeviceContextMetal;
-use crate::{RafxResult, RafxFenceStatus};
+use crate::{RafxFenceStatus, RafxResult};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -63,7 +63,10 @@ impl RafxFenceMetal {
         if !self.submitted() {
             Ok(RafxFenceStatus::Unsubmitted)
         } else {
-            let is_ready = self.mtl_semaphore.wait_timeout(std::time::Duration::default()).is_ok();
+            let is_ready = self
+                .mtl_semaphore
+                .wait_timeout(std::time::Duration::default())
+                .is_ok();
             if is_ready {
                 self.set_submitted(false);
             }

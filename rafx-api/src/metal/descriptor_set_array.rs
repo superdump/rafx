@@ -1,9 +1,13 @@
-use crate::{RafxRootSignature, RafxDescriptorUpdate, RafxResult, RafxDescriptorSetArrayDef, RafxPipelineType, RafxShaderStageFlags, RafxBufferDef, RafxResourceType, RafxMemoryUsage, RafxQueueType, RafxDescriptorKey, RafxTextureBindType};
-use crate::metal::{RafxDeviceContextMetal, DescriptorSetLayoutInfo, RafxBufferMetal};
+use crate::metal::{DescriptorSetLayoutInfo, RafxBufferMetal, RafxDeviceContextMetal};
+use crate::{
+    RafxBufferDef, RafxDescriptorKey, RafxDescriptorSetArrayDef, RafxDescriptorUpdate,
+    RafxMemoryUsage, RafxPipelineType, RafxQueueType, RafxResourceType, RafxResult,
+    RafxRootSignature, RafxShaderStageFlags, RafxTextureBindType,
+};
 use foreign_types_shared::ForeignTypeRef;
+use metal_rs::{MTLResource, MTLResourceUsage};
 use rafx_base::trust_cell::TrustCell;
 use std::sync::Arc;
-use metal_rs::{MTLResource, MTLResourceUsage};
 
 #[derive(Clone)]
 pub struct RafxDescriptorSetHandleMetal {
@@ -58,7 +62,11 @@ pub struct ArgumentBufferData {
 }
 
 impl ArgumentBufferData {
-    pub fn make_resources_resident_render_encoder(&self, index: u32, encoder: &metal_rs::RenderCommandEncoderRef) {
+    pub fn make_resources_resident_render_encoder(
+        &self,
+        index: u32,
+        encoder: &metal_rs::RenderCommandEncoderRef,
+    ) {
         let first_ptr = index as usize * self.argument_buffer_id_range as usize;
         let last_ptr = first_ptr + self.argument_buffer_id_range as usize;
 
@@ -72,7 +80,11 @@ impl ArgumentBufferData {
         }
     }
 
-    pub fn make_resources_resident_compute_encoder(&self, index: u32, encoder: &metal_rs::ComputeCommandEncoderRef) {
+    pub fn make_resources_resident_compute_encoder(
+        &self,
+        index: u32,
+        encoder: &metal_rs::ComputeCommandEncoderRef,
+    ) {
         let first_ptr = index as usize * self.argument_buffer_id_range as usize;
         let last_ptr = first_ptr + self.argument_buffer_id_range as usize;
 
@@ -106,9 +118,15 @@ impl RafxDescriptorSetArrayMetal {
         self.set_index
     }
 
-    pub fn metal_argument_buffer_and_offset(&self, index: u32) -> Option<(&metal_rs::BufferRef, u32)> {
+    pub fn metal_argument_buffer_and_offset(
+        &self,
+        index: u32,
+    ) -> Option<(&metal_rs::BufferRef, u32)> {
         if let Some(argument_buffer_data) = &self.argument_buffer_data {
-            Some((argument_buffer_data.buffer.metal_buffer(), index * argument_buffer_data.stride))
+            Some((
+                argument_buffer_data.buffer.metal_buffer(),
+                index * argument_buffer_data.stride,
+            ))
         } else {
             None
         }
@@ -122,12 +140,12 @@ impl RafxDescriptorSetArrayMetal {
         &self,
         array_index: u32,
     ) -> Option<RafxDescriptorSetHandleMetal> {
-        self.argument_buffer_data.as_ref().map(|x| {
-            RafxDescriptorSetHandleMetal {
+        self.argument_buffer_data
+            .as_ref()
+            .map(|x| RafxDescriptorSetHandleMetal {
                 argument_buffer_data: x.clone(),
-                array_index
-            }
-        })
+                array_index,
+            })
     }
 
     pub(crate) fn new(
@@ -145,13 +163,18 @@ impl RafxDescriptorSetArrayMetal {
 
         let argument_descriptors = &root_signature.inner.argument_descriptors[layout_index];
         //let immutable_samplers = &layout.immutable_samplers;
-        let argument_buffer_data = if !argument_descriptors.is_empty() /*|| !immutable_samplers.is_empty()*/ {
+        let argument_buffer_data = if !argument_descriptors.is_empty()
+        /*|| !immutable_samplers.is_empty()*/
+        {
             let array = metal_rs::Array::from_owned_slice(&argument_descriptors);
             let encoder = device_context.device().new_argument_encoder(array);
 
             let required_alignment = 256;
             assert!(required_alignment >= encoder.alignment() as _);
-            let stride = rafx_base::memory::round_size_up_to_alignment_u32(encoder.encoded_length() as _, required_alignment);
+            let stride = rafx_base::memory::round_size_up_to_alignment_u32(
+                encoder.encoded_length() as _,
+                required_alignment,
+            );
             let total_buffer_size = stride * descriptor_set_array_def.array_length as u32;
 
             let buffer = device_context.create_buffer(&RafxBufferDef {
@@ -174,15 +197,20 @@ impl RafxDescriptorSetArrayMetal {
             //     }
             // }
 
-            let resource_count = descriptor_set_array_def.array_length * layout.argument_buffer_id_range as usize;
+            let resource_count =
+                descriptor_set_array_def.array_length * layout.argument_buffer_id_range as usize;
 
             Some(ArgumentBufferData {
                 encoder,
                 buffer,
                 stride,
                 argument_buffer_id_range: layout.argument_buffer_id_range,
-                resource_usages: root_signature.inner.argument_buffer_resource_usages[layout_index].clone(),
-                resource_pointers: TrustCell::new(vec![std::ptr::null_mut::<MTLResource>(); resource_count])
+                resource_usages: root_signature.inner.argument_buffer_resource_usages[layout_index]
+                    .clone(),
+                resource_pointers: TrustCell::new(vec![
+                    std::ptr::null_mut::<MTLResource>();
+                    resource_count
+                ]),
             })
         } else {
             None
@@ -191,7 +219,7 @@ impl RafxDescriptorSetArrayMetal {
         Ok(RafxDescriptorSetArrayMetal {
             root_signature: RafxRootSignature::Metal(root_signature),
             set_index: descriptor_set_array_def.set_index,
-            argument_buffer_data: argument_buffer_data.map(|x| Arc::new(x))
+            argument_buffer_data: argument_buffer_data.map(|x| Arc::new(x)),
         })
     }
 
@@ -258,7 +286,7 @@ impl RafxDescriptorSetArrayMetal {
         let argument_buffer = self.argument_buffer_data.as_ref().unwrap();
         argument_buffer.encoder.set_argument_buffer(
             argument_buffer.buffer.metal_buffer(),
-            (update.array_index * argument_buffer.stride) as _
+            (update.array_index * argument_buffer.stride) as _,
         );
         let mut resource_pointers = argument_buffer.resource_pointers.borrow_mut();
         let first_ptr = update.array_index as usize * layout.argument_buffer_id_range as usize;
@@ -291,12 +319,16 @@ impl RafxDescriptorSetArrayMetal {
 
                 let begin_index =
                     descriptor.argument_buffer_id as usize + update.dst_element_offset as usize;
-                assert!(update.dst_element_offset + samplers.len() as u32 <= descriptor.element_count);
+                assert!(
+                    update.dst_element_offset + samplers.len() as u32 <= descriptor.element_count
+                );
 
                 let mut next_index = begin_index;
                 for sampler in samplers {
                     let metal_sampler = sampler.metal_sampler().unwrap().metal_sampler();
-                    argument_buffer.encoder.set_sampler_state(next_index as _, metal_sampler);
+                    argument_buffer
+                        .encoder
+                        .set_sampler_state(next_index as _, metal_sampler);
                     next_index += 1;
                 }
             }
@@ -313,24 +345,26 @@ impl RafxDescriptorSetArrayMetal {
                 )?;
 
                 // Defaults to UavMipSlice(0) for TEXTURE_READ_WRITE and Srv for TEXTURE
-                let texture_bind_type = if descriptor.resource_type == RafxResourceType::TEXTURE_READ_WRITE {
-                    update
-                        .texture_bind_type
-                        .unwrap_or(RafxTextureBindType::UavMipSlice(0))
-                } else {
-                    update
-                        .texture_bind_type
-                        .unwrap_or(RafxTextureBindType::Srv)
-                };
+                let texture_bind_type =
+                    if descriptor.resource_type == RafxResourceType::TEXTURE_READ_WRITE {
+                        update
+                            .texture_bind_type
+                            .unwrap_or(RafxTextureBindType::UavMipSlice(0))
+                    } else {
+                        update.texture_bind_type.unwrap_or(RafxTextureBindType::Srv)
+                    };
 
                 let begin_index =
                     descriptor.argument_buffer_id as usize + update.dst_element_offset as usize;
-                assert!(update.dst_element_offset + textures.len() as u32 <= descriptor.element_count);
+                assert!(
+                    update.dst_element_offset + textures.len() as u32 <= descriptor.element_count
+                );
 
                 let mut next_index = begin_index;
                 if let RafxTextureBindType::UavMipSlice(slice) = texture_bind_type {
                     for texture in textures {
-                        let uav_views = texture.metal_texture().unwrap().metal_mip_level_uav_views();
+                        let uav_views =
+                            texture.metal_texture().unwrap().metal_mip_level_uav_views();
                         let uav_view = uav_views.get(slice as usize).ok_or_else(|| format!(
                             "Tried to update binding {:?} (set: {:?} binding: {} name: {:?} type: {:?}) but the chosen mip slice {} exceeds the mip count of {} in the image",
                             update.descriptor_key,
@@ -342,8 +376,11 @@ impl RafxDescriptorSetArrayMetal {
                             uav_views.len()
                         ))?;
 
-                        argument_buffer.encoder.set_texture(next_index as _, uav_view);
-                        descriptor_resource_pointers[next_index] = (uav_view as &metal_rs::ResourceRef).as_ptr();
+                        argument_buffer
+                            .encoder
+                            .set_texture(next_index as _, uav_view);
+                        descriptor_resource_pointers[next_index] =
+                            (uav_view as &metal_rs::ResourceRef).as_ptr();
                         next_index += 1;
                     }
                 } else if texture_bind_type == RafxTextureBindType::UavMipChain {
@@ -364,15 +401,23 @@ impl RafxDescriptorSetArrayMetal {
                     }
 
                     for uav_view in uav_views {
-                        argument_buffer.encoder.set_texture(next_index as _, uav_view);
-                        descriptor_resource_pointers[next_index] = (uav_view as &metal_rs::ResourceRef).as_ptr();
+                        argument_buffer
+                            .encoder
+                            .set_texture(next_index as _, uav_view);
+                        descriptor_resource_pointers[next_index] =
+                            (uav_view as &metal_rs::ResourceRef).as_ptr();
                         next_index += 1;
                     }
-                } else if texture_bind_type == RafxTextureBindType::Srv || texture_bind_type == RafxTextureBindType::SrvStencil {
+                } else if texture_bind_type == RafxTextureBindType::Srv
+                    || texture_bind_type == RafxTextureBindType::SrvStencil
+                {
                     for texture in textures {
                         let metal_texture = texture.metal_texture().unwrap().metal_texture();
-                        argument_buffer.encoder.set_texture(next_index as _, metal_texture);
-                        descriptor_resource_pointers[next_index] = (metal_texture as &metal_rs::ResourceRef).as_ptr();
+                        argument_buffer
+                            .encoder
+                            .set_texture(next_index as _, metal_texture);
+                        descriptor_resource_pointers[next_index] =
+                            (metal_texture as &metal_rs::ResourceRef).as_ptr();
                         next_index += 1;
                     }
                 } else {
@@ -403,21 +448,26 @@ impl RafxDescriptorSetArrayMetal {
 
                 let begin_index =
                     descriptor.argument_buffer_id as usize + update.dst_element_offset as usize;
-                assert!(update.dst_element_offset + buffers.len() as u32 <= descriptor.element_count);
+                assert!(
+                    update.dst_element_offset + buffers.len() as u32 <= descriptor.element_count
+                );
 
                 // Modify the update data
                 let mut next_index = begin_index;
                 for (buffer_index, buffer) in buffers.iter().enumerate() {
-                    let offset = update.elements.buffer_offset_sizes.map(|x| x[buffer_index].offset).unwrap_or(0);
+                    let offset = update
+                        .elements
+                        .buffer_offset_sizes
+                        .map(|x| x[buffer_index].offset)
+                        .unwrap_or(0);
                     //println!("arg buffer index: {} offset {} buffer {:?}", next_index, offset, buffer.metal_buffer().unwrap().metal_buffer());
 
                     let metal_buffer = buffer.metal_buffer().unwrap().metal_buffer();
-                    argument_buffer.encoder.set_buffer(
-                        next_index as _,
-                        metal_buffer,
-                        offset
-                    );
-                    descriptor_resource_pointers[next_index] = (metal_buffer as &metal_rs::ResourceRef).as_ptr();
+                    argument_buffer
+                        .encoder
+                        .set_buffer(next_index as _, metal_buffer, offset);
+                    descriptor_resource_pointers[next_index] =
+                        (metal_buffer as &metal_rs::ResourceRef).as_ptr();
 
                     next_index += 1;
                 }

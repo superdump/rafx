@@ -67,7 +67,9 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
             .unwrap();
 
         let font_atlas = &extract_context.render_resources.fetch::<ImguiFontAtlas>().0;
-        let view_ubo = ImGuiUniformBufferObject { mvp: view_proj.to_cols_array_2d() };
+        let view_ubo = ImGuiUniformBufferObject {
+            mvp: view_proj.to_cols_array_2d(),
+        };
 
         Box::new(ImGuiPrepareJobImpl::new(
             ExtractedImGuiData { imgui_draw_data },

@@ -5,11 +5,11 @@ pub use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk;
 
 //use super::VkEntry;
+use crate::vulkan::VkCreateInstanceError::VkError;
 use crate::vulkan::{VkDebugReporter, VkEntry};
 use ash::extensions::ext::DebugReport;
 use raw_window_handle::HasRawWindowHandle;
 use std::sync::Arc;
-use crate::vulkan::VkCreateInstanceError::VkError;
 
 /// Create one of these at startup. It never gets lost/destroyed.
 pub struct VkInstance {
@@ -77,7 +77,7 @@ impl VkInstance {
         let vulkan_version_tuple = (
             vk::version_major(vulkan_version),
             vk::version_minor(vulkan_version),
-            vk::version_patch(vulkan_version)
+            vk::version_patch(vulkan_version),
         );
 
         log::info!("Found Vulkan version: {:?}", vulkan_version_tuple);

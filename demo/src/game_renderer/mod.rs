@@ -760,7 +760,8 @@ impl GameRenderer {
 
         let aspect_ratio = window_width as f32 / window_height as f32;
 
-        let mut view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
+        let mut view =
+            glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
 
         let near_plane = 0.01;
         let proj = glam::Mat4::perspective_infinite_reverse_rh(

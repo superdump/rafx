@@ -1,9 +1,20 @@
-use crate::{RafxMemoryUsage, RafxFilterType, RafxMipMapMode, RafxCompareOp, RafxSampleCount, RafxVertexAttributeRate, RafxPrimitiveTopology, RafxBlendOp, RafxBlendFactor, RafxLoadOp, RafxStoreOp, RafxColorRenderTargetBinding, RafxColorClearValue, RafxCullMode, RafxFillMode, RafxFrontFace, RafxStencilOp, RafxIndexType};
-use metal_rs::{MTLResourceOptions, MTLCPUCacheMode, MTLStorageMode, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLCompareFunction, MTLStepFunction, MTLPrimitiveTopologyClass, MTLBlendOperation, MTLBlendFactor, MTLVertexStepFunction, MTLLoadAction, MTLStoreAction, MTLClearColor, MTLCullMode, MTLTriangleFillMode, MTLDepthClipMode, MTLWinding, MTLPrimitiveType, MTLStencilOperation, MTLIndexType};
+use crate::{
+    RafxBlendFactor, RafxBlendOp, RafxColorClearValue, RafxColorRenderTargetBinding, RafxCompareOp,
+    RafxCullMode, RafxFillMode, RafxFilterType, RafxFrontFace, RafxIndexType, RafxLoadOp,
+    RafxMemoryUsage, RafxMipMapMode, RafxPrimitiveTopology, RafxSampleCount, RafxStencilOp,
+    RafxStoreOp, RafxVertexAttributeRate,
+};
 use cocoa_foundation::foundation::NSUInteger;
+use metal_rs::{
+    MTLBlendFactor, MTLBlendOperation, MTLCPUCacheMode, MTLClearColor, MTLCompareFunction,
+    MTLCullMode, MTLDepthClipMode, MTLIndexType, MTLLoadAction, MTLPrimitiveTopologyClass,
+    MTLPrimitiveType, MTLResourceOptions, MTLSamplerMinMagFilter, MTLSamplerMipFilter,
+    MTLStencilOperation, MTLStepFunction, MTLStorageMode, MTLStoreAction, MTLTriangleFillMode,
+    MTLVertexStepFunction, MTLWinding,
+};
 
-pub mod util;
 pub mod features;
+pub mod util;
 
 bitflags::bitflags! {
     pub struct BarrierFlagsMetal: u8 {
@@ -188,7 +199,6 @@ impl Into<MTLLoadAction> for RafxLoadOp {
     }
 }
 
-
 impl Into<MTLStoreAction> for RafxStoreOp {
     fn into(self) -> MTLStoreAction {
         match self {
@@ -200,7 +210,12 @@ impl Into<MTLStoreAction> for RafxStoreOp {
 
 impl Into<MTLClearColor> for RafxColorClearValue {
     fn into(self) -> MTLClearColor {
-        MTLClearColor::new(self.0[0] as f64, self.0[1] as f64, self.0[2] as f64, self.0[3] as f64)
+        MTLClearColor::new(
+            self.0[0] as f64,
+            self.0[1] as f64,
+            self.0[2] as f64,
+            self.0[3] as f64,
+        )
     }
 }
 
@@ -210,9 +225,16 @@ impl RafxMemoryUsage {
             RafxMemoryUsage::Unknown => MTLResourceOptions::empty(),
             // TODO: This can be shared on iGPU/iOS/M1
             RafxMemoryUsage::GpuOnly => MTLResourceOptions::StorageModePrivate,
-            RafxMemoryUsage::CpuOnly => MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeDefaultCache,
-            RafxMemoryUsage::CpuToGpu => MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-            RafxMemoryUsage::GpuToCpu => MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeDefaultCache,
+            RafxMemoryUsage::CpuOnly => {
+                MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeDefaultCache
+            }
+            RafxMemoryUsage::CpuToGpu => {
+                MTLResourceOptions::StorageModeShared
+                    | MTLResourceOptions::CPUCacheModeWriteCombined
+            }
+            RafxMemoryUsage::GpuToCpu => {
+                MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeDefaultCache
+            }
         }
     }
 
@@ -237,4 +259,3 @@ impl RafxMemoryUsage {
         }
     }
 }
-

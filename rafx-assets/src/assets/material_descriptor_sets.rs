@@ -1,7 +1,7 @@
-use rafx_resources::{DynDescriptorSet, SlotNameLookup};
 use rafx_resources::ImageViewResource;
 use rafx_resources::ResourceArc;
 use rafx_resources::{DescriptorSetAllocator, RafxResult};
+use rafx_resources::{DynDescriptorSet, SlotNameLookup};
 use std::sync::Arc;
 
 pub struct DynPassMaterialInstance {

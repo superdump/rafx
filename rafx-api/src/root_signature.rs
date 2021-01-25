@@ -27,7 +27,6 @@ impl RafxRootSignature {
         }
     }
 
-
     /// Get the underlying vulkan API object. This provides access to any internally created
     /// vulkan objects.
     #[cfg(feature = "rafx-vulkan")]

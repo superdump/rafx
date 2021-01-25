@@ -1,6 +1,6 @@
-use rafx_resources::{ReflectedEntryPoint, ShaderModuleHash};
+use rafx_api::{RafxShaderPackage, RafxShaderPackageMetal, RafxShaderPackageVulkan};
 use rafx_resources::CookedShaderPackage;
-use rafx_api::{RafxShaderPackage, RafxShaderPackageVulkan, RafxShaderPackageMetal};
+use rafx_resources::{ReflectedEntryPoint, ShaderModuleHash};
 
 pub(crate) fn cook_shader(
     reflected_data: &[ReflectedEntryPoint],
@@ -14,7 +14,7 @@ pub(crate) fn cook_shader(
         // which is only available on win/mac. So we'll want a fallback path so that it's not impossible
         // to produce a cooked shader on machines without the tools. (Also the tools don't provide an
         // API so will need to figure out how to compile the shader programmatically.)
-        metal: Some(RafxShaderPackageMetal::Src(metal_source))
+        metal: Some(RafxShaderPackageMetal::Src(metal_source)),
     };
 
     let cooked_shader = CookedShaderPackage {

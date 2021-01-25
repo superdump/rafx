@@ -105,7 +105,7 @@ impl RafxCommandBuffer {
             #[cfg(feature = "rafx-vulkan")]
             RafxCommandBuffer::Vk(inner) => inner.cmd_unbind_render_targets(),
             #[cfg(feature = "rafx-metal")]
-            RafxCommandBuffer::Metal(inner) => inner.cmd_unbind_render_targets()
+            RafxCommandBuffer::Metal(inner) => inner.cmd_unbind_render_targets(),
         }
     }
 
@@ -198,7 +198,9 @@ impl RafxCommandBuffer {
             #[cfg(feature = "rafx-vulkan")]
             RafxCommandBuffer::Vk(inner) => inner.cmd_bind_vertex_buffers(first_binding, bindings),
             #[cfg(feature = "rafx-metal")]
-            RafxCommandBuffer::Metal(inner) => inner.cmd_bind_vertex_buffers(first_binding, bindings),
+            RafxCommandBuffer::Metal(inner) => {
+                inner.cmd_bind_vertex_buffers(first_binding, bindings)
+            }
         }
     }
 
@@ -262,7 +264,7 @@ impl RafxCommandBuffer {
                 root_signature.metal_root_signature().unwrap(),
                 set_index,
                 descriptor_set_handle.metal_descriptor_set_handle().unwrap(),
-            )
+            ),
         }
     }
 
@@ -344,7 +346,7 @@ impl RafxCommandBuffer {
                 instance_count,
                 first_instance,
                 vertex_offset,
-            )
+            ),
         }
     }
 
@@ -386,7 +388,7 @@ impl RafxCommandBuffer {
                 buffer_barriers,
                 texture_barriers,
                 render_target_barriers,
-            )
+            ),
         }
     }
 

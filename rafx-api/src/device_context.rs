@@ -37,7 +37,9 @@ impl RafxDeviceContext {
             #[cfg(feature = "rafx-vulkan")]
             RafxDeviceContext::Vk(inner) => inner.find_supported_format(candidates, resource_type),
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(inner) => inner.find_supported_format(candidates, resource_type),
+            RafxDeviceContext::Metal(inner) => {
+                inner.find_supported_format(candidates, resource_type)
+            }
         }
     }
 
@@ -88,7 +90,7 @@ impl RafxDeviceContext {
             #[cfg(feature = "rafx-metal")]
             RafxDeviceContext::Metal(inner) => {
                 RafxSwapchain::Metal(inner.create_swapchain(raw_window_handle, swapchain_def)?)
-            },
+            }
         })
     }
 
@@ -108,7 +110,7 @@ impl RafxDeviceContext {
             RafxDeviceContext::Metal(inner) => {
                 let fences: Vec<_> = fences.iter().map(|x| x.metal_fence().unwrap()).collect();
                 inner.wait_for_fences(&fences)?
-            },
+            }
         })
     }
 
@@ -121,7 +123,9 @@ impl RafxDeviceContext {
             #[cfg(feature = "rafx-vulkan")]
             RafxDeviceContext::Vk(inner) => RafxSampler::Vk(inner.create_sampler(sampler_def)?),
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(inner) => RafxSampler::Metal(inner.create_sampler(sampler_def)?),
+            RafxDeviceContext::Metal(inner) => {
+                RafxSampler::Metal(inner.create_sampler(sampler_def)?)
+            }
         })
     }
 
@@ -134,7 +138,9 @@ impl RafxDeviceContext {
             #[cfg(feature = "rafx-vulkan")]
             RafxDeviceContext::Vk(inner) => RafxTexture::Vk(inner.create_texture(texture_def)?),
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(inner) => RafxTexture::Metal(inner.create_texture(texture_def)?),
+            RafxDeviceContext::Metal(inner) => {
+                RafxTexture::Metal(inner.create_texture(texture_def)?)
+            }
         })
     }
 
@@ -145,9 +151,13 @@ impl RafxDeviceContext {
     ) -> RafxResult<RafxRenderTarget> {
         Ok(match self {
             #[cfg(feature = "rafx-vulkan")]
-            RafxDeviceContext::Vk(inner) => RafxRenderTarget::Vk(inner.create_render_target(render_target_def)?),
+            RafxDeviceContext::Vk(inner) => {
+                RafxRenderTarget::Vk(inner.create_render_target(render_target_def)?)
+            }
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(inner) => RafxRenderTarget::Metal(inner.create_render_target(render_target_def)?),
+            RafxDeviceContext::Metal(inner) => {
+                RafxRenderTarget::Metal(inner.create_render_target(render_target_def)?)
+            }
         })
     }
 
@@ -174,9 +184,9 @@ impl RafxDeviceContext {
                 RafxShaderModule::Vk(inner.create_shader_module(shader_module_def.vk.unwrap())?)
             }
             #[cfg(feature = "rafx-metal")]
-            RafxDeviceContext::Metal(inner) => {
-                RafxShaderModule::Metal(inner.create_shader_module(shader_module_def.metal.unwrap())?)
-            }
+            RafxDeviceContext::Metal(inner) => RafxShaderModule::Metal(
+                inner.create_shader_module(shader_module_def.metal.unwrap())?,
+            ),
         })
     }
 
@@ -253,11 +263,11 @@ impl RafxDeviceContext {
         Ok(match self {
             #[cfg(feature = "rafx-vulkan")]
             RafxDeviceContext::Vk(inner) => RafxDescriptorSetArray::Vk(
-                inner.create_descriptor_set_array(descriptor_set_array_def)?
+                inner.create_descriptor_set_array(descriptor_set_array_def)?,
             ),
             #[cfg(feature = "rafx-metal")]
             RafxDeviceContext::Metal(inner) => RafxDescriptorSetArray::Metal(
-                inner.create_descriptor_set_array(descriptor_set_array_def)?
+                inner.create_descriptor_set_array(descriptor_set_array_def)?,
             ),
         })
     }

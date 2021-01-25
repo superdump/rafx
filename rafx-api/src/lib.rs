@@ -188,12 +188,12 @@
 //
 #[cfg(feature = "rafx-vulkan")]
 pub use ash;
-#[cfg(feature = "rafx-vulkan")]
-pub use vk_mem;
-#[cfg(feature = "rafx-metal")]
-pub use metal_rs;
 #[cfg(feature = "rafx-metal")]
 pub use foreign_types_shared;
+#[cfg(feature = "rafx-metal")]
+pub use metal_rs;
+#[cfg(feature = "rafx-vulkan")]
+pub use vk_mem;
 
 pub use raw_window_handle;
 
@@ -258,8 +258,8 @@ pub mod metal;
 pub use metal::RafxApiDefMetal;
 
 pub mod extra;
-mod types;
 mod internal_shared;
+mod types;
 
 // Vulkan only guarantees up to 4 are available
 pub const MAX_DESCRIPTOR_SET_LAYOUTS: usize = 4;

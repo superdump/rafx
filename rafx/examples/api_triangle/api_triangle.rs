@@ -173,9 +173,7 @@ fn run() -> RafxResult<()> {
                 entry_point_name: "main".to_string(),
                 shader_stage: RafxShaderStageFlags::VERTEX,
                 compute_threads_per_group: None,
-                resources: vec![
-                    color_shader_resource.clone()
-                ]
+                resources: vec![color_shader_resource.clone()],
             },
         };
 
@@ -185,9 +183,7 @@ fn run() -> RafxResult<()> {
                 entry_point_name: "main".to_string(),
                 shader_stage: RafxShaderStageFlags::FRAGMENT,
                 compute_threads_per_group: None,
-                resources: vec![
-                    color_shader_resource
-                ]
+                resources: vec![color_shader_resource],
             },
         };
 

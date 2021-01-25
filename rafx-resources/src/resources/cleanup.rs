@@ -80,9 +80,7 @@ impl<T> ResourceDropSink<T> {
 
     /// Immediately destroy everything. We assume the device is idle and nothing is in flight.
     /// Calling this function when the device is not idle could result in a deadlock
-    pub fn destroy(
-        &mut self,
-    ) -> RafxResult<()> {
+    pub fn destroy(&mut self) -> RafxResult<()> {
         for resource in self.resources_in_flight.drain(..) {
             std::mem::drop(resource);
         }

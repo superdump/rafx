@@ -7,11 +7,15 @@ use crate::assets::{
 use crate::assets::{GraphicsPipelineAssetData, MaterialAssetData, MaterialInstanceAssetData};
 use crate::{
     AssetLookup, AssetLookupSet, BufferAssetData, ComputePipelineAsset, ComputePipelineAssetData,
-    GenericLoader, LoadQueues, MaterialInstanceSlotAssignment, SamplerAssetData,
-    UploadQueueConfig,
+    GenericLoader, LoadQueues, MaterialInstanceSlotAssignment, SamplerAssetData, UploadQueueConfig,
 };
 use atelier_assets::loader::handle::Handle;
-use rafx_resources::{ComputePipelineResource, DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef, DescriptorSetLayout, DescriptorSetLayoutResource, DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource, ResourceArc, ShaderModuleMeta, SlotNameLookup};
+use rafx_resources::{
+    ComputePipelineResource, DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider,
+    DescriptorSetAllocatorRef, DescriptorSetLayout, DescriptorSetLayoutResource,
+    DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPassResource,
+    ResourceArc, ShaderModuleMeta, SlotNameLookup,
+};
 
 use super::asset_lookup::LoadedAssetMetrics;
 use super::load_queue::LoadQueueSet;
@@ -676,7 +680,7 @@ impl AssetManager {
         let shader = self.resources().get_or_create_shader(
             &[RafxShaderStageDef {
                 shader_module: shader_module.shader_module.get_raw().shader_module.clone(),
-                reflection: reflection_data.rafx_api_reflection.clone()
+                reflection: reflection_data.rafx_api_reflection.clone(),
             }],
             &[shader_module.shader_module.clone()],
         )?;

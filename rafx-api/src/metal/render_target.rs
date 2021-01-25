@@ -1,8 +1,8 @@
-use crate::metal::{RafxTextureMetal, RafxDeviceContextMetal, RafxRawImageMetal};
-use crate::{RafxTexture, RafxRenderTargetDef, RafxResult};
-use std::sync::atomic::{AtomicBool, Ordering, AtomicU32};
-use std::sync::Arc;
+use crate::metal::{RafxDeviceContextMetal, RafxRawImageMetal, RafxTextureMetal};
+use crate::{RafxRenderTargetDef, RafxResult, RafxTexture};
 use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 
 static RENDER_TARGET_NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -21,7 +21,10 @@ pub struct RafxRenderTargetMetal {
 }
 
 impl PartialEq for RafxRenderTargetMetal {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.inner.render_target_id == other.inner.render_target_id
     }
 }
@@ -29,7 +32,10 @@ impl PartialEq for RafxRenderTargetMetal {
 impl Eq for RafxRenderTargetMetal {}
 
 impl Hash for RafxRenderTargetMetal {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.inner.render_target_id.hash(state);
     }
 }

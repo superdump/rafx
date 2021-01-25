@@ -15,12 +15,21 @@ fn generate_mips_for_image(
     layer: u32,
     mip_level_count: u32,
 ) -> RafxResult<()> {
-
     // This custom path for metal can be removed after I implement cmd_blit
     #[cfg(feature = "rafx-metal")]
     {
-        upload.transfer_command_buffer().metal_command_buffer().unwrap().end_current_encoders(false);
-        let blit_encoder = upload.transfer_command_buffer().metal_command_buffer().unwrap().metal_command_buffer().unwrap().new_blit_command_encoder();
+        upload
+            .transfer_command_buffer()
+            .metal_command_buffer()
+            .unwrap()
+            .end_current_encoders(false);
+        let blit_encoder = upload
+            .transfer_command_buffer()
+            .metal_command_buffer()
+            .unwrap()
+            .metal_command_buffer()
+            .unwrap()
+            .new_blit_command_encoder();
         blit_encoder.generate_mipmaps(texture.metal_texture().unwrap().metal_texture());
         blit_encoder.end_encoding();
 
@@ -54,7 +63,7 @@ fn generate_mips_for_image(
             &[],
         )?;
 
-        return Ok(())
+        return Ok(());
     }
 
     //
@@ -241,7 +250,6 @@ pub fn enqueue_load_layered_image_2d(
         DecodedImageMips::Precomputed(_mip_count) => unimplemented!(), //(info.mip_level_count, false),
         DecodedImageMips::Runtime(mip_count) => (mip_count, mip_count > 1),
     };
-    //let (mip_level_count, generate_mips) = (1, false);
 
     // Push all images into the staging buffer
     let mut layer_offsets = Vec::default();

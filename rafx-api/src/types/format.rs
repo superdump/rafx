@@ -1,11 +1,11 @@
 #[cfg(feature = "rafx-vulkan")]
 use ash::vk;
-#[cfg(feature = "serde-support")]
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "rafx-metal")]
 use metal_rs::MTLPixelFormat;
 #[cfg(feature = "rafx-metal")]
 use metal_rs::MTLVertexFormat;
+#[cfg(feature = "serde-support")]
+use serde::{Deserialize, Serialize};
 
 //TODO: Try using Some/None instead of UNDEFINED format
 
@@ -593,7 +593,6 @@ impl From<vk::Format> for RafxFormat {
     }
 }
 
-
 #[cfg(feature = "rafx-metal")]
 impl Into<MTLPixelFormat> for RafxFormat {
     fn into(self) -> MTLPixelFormat {
@@ -783,7 +782,7 @@ impl Into<MTLPixelFormat> for RafxFormat {
             RafxFormat::ASTC_12X10_SRGB_BLOCK => MTLPixelFormat::ASTC_12x10_sRGB,
             RafxFormat::ASTC_12X12_UNORM_BLOCK => MTLPixelFormat::ASTC_12x12_LDR,
             RafxFormat::ASTC_12X12_SRGB_BLOCK => MTLPixelFormat::ASTC_12x12_sRGB,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -841,11 +840,10 @@ impl Into<MTLVertexFormat> for RafxFormat {
             RafxFormat::R32G32B32A32_UINT => MTLVertexFormat::UInt4,
             RafxFormat::R32G32B32A32_SINT => MTLVertexFormat::Int4,
             RafxFormat::R32G32B32A32_SFLOAT => MTLVertexFormat::Float4,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
-
 
 // Returns None for formats unlikely to be used for vertices (like ATSC blocks) or undefined
 impl RafxFormat {

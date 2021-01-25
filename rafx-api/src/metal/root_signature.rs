@@ -1,9 +1,12 @@
 use crate::metal::{RafxDeviceContextMetal, RafxSamplerMetal};
-use crate::{RafxRootSignatureDef, RafxResult, RafxResourceType, RafxSampler, RafxDescriptorIndex, RafxPipelineType, MAX_DESCRIPTOR_SET_LAYOUTS};
-use std::sync::Arc;
-use fnv::FnvHashMap;
-use metal_rs::{MTLResourceUsage, MTLArgumentAccess, MTLTextureType};
+use crate::{
+    RafxDescriptorIndex, RafxPipelineType, RafxResourceType, RafxResult, RafxRootSignatureDef,
+    RafxSampler, MAX_DESCRIPTOR_SET_LAYOUTS,
+};
 use cocoa_foundation::foundation::NSUInteger;
+use fnv::FnvHashMap;
+use metal_rs::{MTLArgumentAccess, MTLResourceUsage, MTLTextureType};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct ImmutableSampler {
@@ -66,8 +69,10 @@ pub(crate) struct RafxRootSignatureMetalInner {
     // Keeps them in scope so they don't drop
     //TODO: Can potentially remove, they are held in DescriptorInfo too
     //immutable_samplers: Vec<RafxSampler>,
-    pub(crate) argument_descriptors: [Vec<metal_rs::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
-    pub(crate) argument_buffer_resource_usages: [Arc<Vec<MTLResourceUsage>>; MAX_DESCRIPTOR_SET_LAYOUTS],
+    pub(crate) argument_descriptors:
+        [Vec<metal_rs::ArgumentDescriptor>; MAX_DESCRIPTOR_SET_LAYOUTS],
+    pub(crate) argument_buffer_resource_usages:
+        [Arc<Vec<MTLResourceUsage>>; MAX_DESCRIPTOR_SET_LAYOUTS],
 }
 
 // for metal_rs::ArgumentDescriptor
@@ -76,7 +81,7 @@ unsafe impl Sync for RafxRootSignatureMetalInner {}
 
 #[derive(Clone, Debug)]
 pub struct RafxRootSignatureMetal {
-    pub(crate) inner: Arc<RafxRootSignatureMetalInner>
+    pub(crate) inner: Arc<RafxRootSignatureMetalInner>,
 }
 
 impl RafxRootSignatureMetal {
@@ -116,7 +121,7 @@ impl RafxRootSignatureMetal {
 
     pub fn new(
         device_context: &RafxDeviceContextMetal,
-        root_signature_def: &RafxRootSignatureDef
+        root_signature_def: &RafxRootSignatureDef,
     ) -> RafxResult<Self> {
         log::trace!("Create RafxRootSignatureMetal");
 
@@ -143,12 +148,7 @@ impl RafxRootSignatureMetal {
             DescriptorSetLayoutInfo::default(),
         ];
 
-        let mut resource_usages = [
-            vec![],
-            vec![],
-            vec![],
-            vec![]
-        ];
+        let mut resource_usages = [vec![], vec![], vec![], vec![]];
 
         let mut next_argument_buffer_id = [0, 0, 0, 0];
 
@@ -173,7 +173,9 @@ impl RafxRootSignatureMetal {
             // Check that if an immutable sampler is set, the array size matches the resource element count
             if let Some(immutable_sampler_index) = immutable_sampler {
                 if resource.element_count_normalized() as usize
-                    != root_signature_def.immutable_samplers[immutable_sampler_index].samplers.len()
+                    != root_signature_def.immutable_samplers[immutable_sampler_index]
+                        .samplers
+                        .len()
                 {
                     Err(format!(
                         "Descriptor (set={:?} binding={:?}) named {:?} specifies {} elements but the count of provided immutable samplers ({}) did not match",
@@ -186,13 +188,13 @@ impl RafxRootSignatureMetal {
                 }
             }
 
-            let layout: &mut DescriptorSetLayoutInfo =
-                &mut layouts[resource.set_index as usize];
+            let layout: &mut DescriptorSetLayoutInfo = &mut layouts[resource.set_index as usize];
 
             let descriptor_index = RafxDescriptorIndex(descriptors.len() as u32);
 
             let argument_buffer_id = next_argument_buffer_id[resource.set_index as usize];
-            next_argument_buffer_id[resource.set_index as usize] += resource.element_count_normalized();
+            next_argument_buffer_id[resource.set_index as usize] +=
+                resource.element_count_normalized();
 
             //let update_data_offset_in_set = Some(layout.update_data_count_per_set);
 
@@ -234,11 +236,15 @@ impl RafxRootSignatureMetal {
                 layout
                     .binding_to_descriptor_index
                     .insert(resource.binding, descriptor_index);
-                layout.argument_buffer_id_range = next_argument_buffer_id[resource.set_index as usize];
+                layout.argument_buffer_id_range =
+                    next_argument_buffer_id[resource.set_index as usize];
 
                 // Build out the MTLResourceUsage usages - it's used when we bind descriptor sets
                 let mut layout_resource_usages = &mut resource_usages[resource.set_index as usize];
-                layout_resource_usages.resize(layout.argument_buffer_id_range as usize, MTLResourceUsage::empty());
+                layout_resource_usages.resize(
+                    layout.argument_buffer_id_range as usize,
+                    MTLResourceUsage::empty(),
+                );
                 let usage = super::util::resource_type_mtl_resource_usage(resource.resource_type);
                 for i in argument_buffer_id..layout.argument_buffer_id_range {
                     layout_resource_usages[i as usize] = usage;
@@ -248,9 +254,7 @@ impl RafxRootSignatureMetal {
             }
         }
 
-        let mut argument_descriptors = [
-            vec![], vec![], vec![], vec![]
-        ];
+        let mut argument_descriptors = [vec![], vec![], vec![], vec![]];
 
         for i in 0..MAX_DESCRIPTOR_SET_LAYOUTS {
             for &resource_index in &layouts[i].descriptors {
@@ -258,8 +262,10 @@ impl RafxRootSignatureMetal {
 
                 let mut argument_descriptor = metal_rs::ArgumentDescriptor::new();
 
-                let access = super::util::resource_type_mtl_argument_access(descriptor.resource_type);
-                let data_type = super::util::resource_type_mtl_data_type(descriptor.resource_type).unwrap();
+                let access =
+                    super::util::resource_type_mtl_argument_access(descriptor.resource_type);
+                let data_type =
+                    super::util::resource_type_mtl_data_type(descriptor.resource_type).unwrap();
                 argument_descriptor.set_access(MTLArgumentAccess::ReadWrite);
                 argument_descriptor.set_array_length(descriptor.element_count as _);
                 argument_descriptor.set_data_type(data_type);
@@ -283,7 +289,7 @@ impl RafxRootSignatureMetal {
             descriptors,
             name_to_descriptor_index,
             argument_buffer_resource_usages,
-            argument_descriptors
+            argument_descriptors,
         };
 
         Ok(RafxRootSignatureMetal {

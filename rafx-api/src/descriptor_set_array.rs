@@ -86,7 +86,9 @@ impl RafxDescriptorSetArray {
             #[cfg(feature = "rafx-vulkan")]
             RafxDescriptorSetArray::Vk(inner) => RafxDescriptorSetHandle::Vk(inner.handle(index)?),
             #[cfg(feature = "rafx-metal")]
-            RafxDescriptorSetArray::Metal(inner) => RafxDescriptorSetHandle::Metal(inner.handle(index)?),
+            RafxDescriptorSetArray::Metal(inner) => {
+                RafxDescriptorSetHandle::Metal(inner.handle(index)?)
+            }
         })
     }
 

@@ -1,8 +1,8 @@
-use crate::{RafxQueueType, RafxQueue, RafxResult, RafxCommandBufferDef, RafxCommandPoolDef};
-use crate::metal::{RafxDeviceContextMetal, RafxQueueMetal, RafxCommandBufferMetal};
+use crate::metal::{RafxCommandBufferMetal, RafxDeviceContextMetal, RafxQueueMetal};
+use crate::{RafxCommandBufferDef, RafxCommandPoolDef, RafxQueue, RafxQueueType, RafxResult};
 
 pub struct RafxCommandPoolMetal {
-    queue: RafxQueueMetal
+    queue: RafxQueueMetal,
 }
 
 impl RafxCommandPoolMetal {
@@ -35,7 +35,7 @@ impl RafxCommandPoolMetal {
         _command_pool_def: &RafxCommandPoolDef,
     ) -> RafxResult<RafxCommandPoolMetal> {
         Ok(RafxCommandPoolMetal {
-            queue: queue.clone()
+            queue: queue.clone(),
         })
     }
 }

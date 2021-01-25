@@ -7,7 +7,11 @@ use rafx::graph::{
     SwapchainSurfaceInfo,
 };
 use rafx::nodes::SubmitNode;
-use rafx::resources::{DescriptorSetLayout, DescriptorSetLayoutBinding, FixedFunctionState, MaterialPassVertexInput, ShaderModuleHash, ShaderModuleResourceDef, VertexDataLayout, CookedShaderPackage, ReflectedShader};
+use rafx::resources::{
+    CookedShaderPackage, DescriptorSetLayout, DescriptorSetLayoutBinding, FixedFunctionState,
+    MaterialPassVertexInput, ReflectedShader, ShaderModuleHash, ShaderModuleResourceDef,
+    VertexDataLayout,
+};
 use std::sync::Arc;
 
 const WINDOW_WIDTH: u32 = 900;
@@ -106,8 +110,12 @@ fn run() -> RafxResult<()> {
         let cooked_shaders_base_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("examples/render_graph_triangle/cooked_shaders");
 
-        let cooked_vertex_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.vert.cookedshaderpackage")?;
-        let vertex_shader_reflection = cooked_vertex_shader_stage.find_entry_point("main").unwrap().clone();
+        let cooked_vertex_shader_stage =
+            load_cooked_shader_stage(&cooked_shaders_base_path, "shader.vert.cookedshaderpackage")?;
+        let vertex_shader_reflection = cooked_vertex_shader_stage
+            .find_entry_point("main")
+            .unwrap()
+            .clone();
         let vertex_shader_module_resource_def = Arc::new(ShaderModuleResourceDef {
             shader_module_hash: cooked_vertex_shader_stage.hash,
             shader_package: cooked_vertex_shader_stage.shader_package,
@@ -116,8 +124,12 @@ fn run() -> RafxResult<()> {
             .resources()
             .get_or_create_shader_module(&vertex_shader_module_resource_def)?;
 
-        let cooked_fragment_shader_stage = load_cooked_shader_stage(&cooked_shaders_base_path, "shader.frag.cookedshaderpackage")?;
-        let fragment_shader_reflection = cooked_fragment_shader_stage.find_entry_point("main").unwrap().clone();
+        let cooked_fragment_shader_stage =
+            load_cooked_shader_stage(&cooked_shaders_base_path, "shader.frag.cookedshaderpackage")?;
+        let fragment_shader_reflection = cooked_fragment_shader_stage
+            .find_entry_point("main")
+            .unwrap()
+            .clone();
         let fragment_shader_module_resource_def = Arc::new(ShaderModuleResourceDef {
             shader_module_hash: cooked_fragment_shader_stage.hash,
             shader_package: cooked_fragment_shader_stage.shader_package,
@@ -162,10 +174,8 @@ fn run() -> RafxResult<()> {
         // additional functionality. It is configured via extra reflection data exported by the
         // rafx shader processor.
         //
-        let shader_reflection = ReflectedShader::new(&[
-            &vertex_shader_reflection,
-            &fragment_shader_reflection
-        ])?;
+        let shader_reflection =
+            ReflectedShader::new(&[&vertex_shader_reflection, &fragment_shader_reflection])?;
 
         let descriptor_set_layout = resource_context
             .resources()

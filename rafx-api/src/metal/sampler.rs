@@ -1,6 +1,6 @@
 use crate::metal::RafxDeviceContextMetal;
+use crate::{RafxResult, RafxSamplerDef};
 use std::sync::Arc;
-use crate::{RafxSamplerDef, RafxResult};
 
 #[derive(Debug)]
 pub struct RafxSamplerMetalInner {
@@ -36,9 +36,18 @@ impl RafxSamplerMetal {
             descriptor.set_max_anisotropy(sampler_def.max_anisotropy as _);
         }
         let device_info = device_context.device_info();
-        descriptor.set_address_mode_s(super::util::address_mode_mtl_sampler_address_mode(sampler_def.address_mode_u, device_info));
-        descriptor.set_address_mode_t(super::util::address_mode_mtl_sampler_address_mode(sampler_def.address_mode_v, device_info));
-        descriptor.set_address_mode_r(super::util::address_mode_mtl_sampler_address_mode(sampler_def.address_mode_w, device_info));
+        descriptor.set_address_mode_s(super::util::address_mode_mtl_sampler_address_mode(
+            sampler_def.address_mode_u,
+            device_info,
+        ));
+        descriptor.set_address_mode_t(super::util::address_mode_mtl_sampler_address_mode(
+            sampler_def.address_mode_v,
+            device_info,
+        ));
+        descriptor.set_address_mode_r(super::util::address_mode_mtl_sampler_address_mode(
+            sampler_def.address_mode_w,
+            device_info,
+        ));
         descriptor.set_compare_function(sampler_def.compare_op.into());
         descriptor.set_support_argument_buffers(true);
         let sampler = device_context.device().new_sampler(&descriptor);
@@ -49,7 +58,7 @@ impl RafxSamplerMetal {
         };
 
         Ok(RafxSamplerMetal {
-            inner: Arc::new(inner)
+            inner: Arc::new(inner),
         })
     }
 }

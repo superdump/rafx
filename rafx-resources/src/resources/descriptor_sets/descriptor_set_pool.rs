@@ -211,9 +211,7 @@ impl ManagedDescriptorSetPool {
         self.descriptor_pool_allocator.update()
     }
 
-    pub fn destroy(
-        &mut self,
-    ) -> RafxResult<()> {
+    pub fn destroy(&mut self) -> RafxResult<()> {
         for chunk in &mut self.chunks {
             chunk.destroy(
                 &mut self.descriptor_pool_allocator,

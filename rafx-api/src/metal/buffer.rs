@@ -1,5 +1,5 @@
 use crate::metal::RafxDeviceContextMetal;
-use crate::{RafxBufferDef, RafxResult, RafxResourceType, RafxMemoryUsage};
+use crate::{RafxBufferDef, RafxMemoryUsage, RafxResourceType, RafxResult};
 
 #[derive(Debug)]
 pub struct RafxBufferMetal {
@@ -78,19 +78,20 @@ impl RafxBufferMetal {
         {
             allocation_size = rafx_base::memory::round_size_up_to_alignment_u64(
                 buffer_def.size,
-                device_context.device_info().min_uniform_buffer_offset_alignment as u64,
+                device_context
+                    .device_info()
+                    .min_uniform_buffer_offset_alignment as u64,
             )
         }
 
-        let buffer = device_context.device().new_buffer(
-            allocation_size,
-            buffer_def.memory_usage.resource_options()
-        );
+        let buffer = device_context
+            .device()
+            .new_buffer(allocation_size, buffer_def.memory_usage.resource_options());
 
         Ok(RafxBufferMetal {
             device_context: device_context.clone(),
             buffer_def: buffer_def.clone(),
-            buffer
+            buffer,
         })
     }
 }

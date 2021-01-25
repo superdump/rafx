@@ -1,7 +1,10 @@
-use crate::{RafxTextureDef, RafxResult, RafxResourceType, RafxMemoryUsage, RafxTextureDimensions, RafxSampleCount};
 use crate::metal::RafxDeviceContextMetal;
+use crate::{
+    RafxMemoryUsage, RafxResourceType, RafxResult, RafxSampleCount, RafxTextureDef,
+    RafxTextureDimensions,
+};
+use cocoa_foundation::foundation::NSUInteger;
 use metal_rs::{MTLTextureType, MTLTextureUsage};
-use cocoa_foundation::foundation::{NSUInteger};
 
 #[derive(Debug)]
 pub enum RafxRawImageMetal {
@@ -31,7 +34,7 @@ pub struct RafxTextureMetal {
     device_context: RafxDeviceContextMetal,
     texture_def: RafxTextureDef,
     image: RafxRawImageMetal,
-    mip_level_uav_views: Vec<metal_rs::Texture>
+    mip_level_uav_views: Vec<metal_rs::Texture>,
 }
 
 // for metal_rs::Texture
@@ -83,11 +86,17 @@ impl RafxTextureMetal {
                 }
             }
             RafxTextureDimensions::Dim2D => {
-                if texture_def.resource_type.contains(RafxResourceType::TEXTURE_CUBE) {
+                if texture_def
+                    .resource_type
+                    .contains(RafxResourceType::TEXTURE_CUBE)
+                {
                     if texture_def.array_length <= 6 {
                         (MTLTextureType::Cube, 1)
                     } else {
-                        if !device_context.metal_features().supports_cube_map_texture_arrays {
+                        if !device_context
+                            .metal_features()
+                            .supports_cube_map_texture_arrays
+                        {
                             return Err("Cube map texture arrays not supported")?;
                         }
 
@@ -105,10 +114,8 @@ impl RafxTextureMetal {
                     (MTLTextureType::D2, 1)
                 }
             }
-            RafxTextureDimensions::Dim3D => {
-                (MTLTextureType::D3, texture_def.array_length.max(1))
-            }
-            _ => unreachable!()
+            RafxTextureDimensions::Dim3D => (MTLTextureType::D3, texture_def.array_length.max(1)),
+            _ => unreachable!(),
         };
 
         let image = if let Some(existing_image) = existing_image {
@@ -129,15 +136,24 @@ impl RafxTextureMetal {
 
             let mut mtl_usage = MTLTextureUsage::empty();
 
-            if texture_def.resource_type.intersects(RafxResourceType::TEXTURE) {
+            if texture_def
+                .resource_type
+                .intersects(RafxResourceType::TEXTURE)
+            {
                 mtl_usage |= MTLTextureUsage::ShaderRead;
             }
 
-            if texture_def.resource_type.intersects(RafxResourceType::RENDER_TARGET_DEPTH_STENCIL | RafxResourceType::RENDER_TARGET_COLOR) {
+            if texture_def.resource_type.intersects(
+                RafxResourceType::RENDER_TARGET_DEPTH_STENCIL
+                    | RafxResourceType::RENDER_TARGET_COLOR,
+            ) {
                 mtl_usage |= MTLTextureUsage::RenderTarget;
             }
 
-            if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
+            if texture_def
+                .resource_type
+                .intersects(RafxResourceType::TEXTURE_READ_WRITE)
+            {
                 mtl_usage |= MTLTextureUsage::PixelFormatView;
                 mtl_usage |= MTLTextureUsage::ShaderWrite;
             }
@@ -149,11 +165,14 @@ impl RafxTextureMetal {
         };
 
         let mut mip_level_uav_views = vec![];
-        if texture_def.resource_type.intersects(RafxResourceType::TEXTURE_READ_WRITE) {
+        if texture_def
+            .resource_type
+            .intersects(RafxResourceType::TEXTURE_READ_WRITE)
+        {
             let uav_texture_type = match mtl_texture_type {
                 MTLTextureType::Cube => MTLTextureType::D2Array,
                 MTLTextureType::CubeArray => MTLTextureType::D2Array,
-                _ => mtl_texture_type
+                _ => mtl_texture_type,
             };
 
             let slices = metal_rs::NSRange::new(0, mtl_array_length as _);
@@ -163,7 +182,7 @@ impl RafxTextureMetal {
                     texture_def.format.into(),
                     uav_texture_type,
                     levels,
-                    slices
+                    slices,
                 ));
             }
         }
@@ -172,7 +191,7 @@ impl RafxTextureMetal {
             texture_def: texture_def.clone(),
             device_context: device_context.clone(),
             image,
-            mip_level_uav_views
+            mip_level_uav_views,
         })
     }
 }

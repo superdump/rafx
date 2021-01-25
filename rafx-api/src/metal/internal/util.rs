@@ -1,6 +1,13 @@
-use metal_rs::{MTLDataType, MTLResourceUsage, MTLArgumentAccess, MTLSamplerAddressMode, MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptorArray, RenderPipelineColorAttachmentDescriptorArrayRef, MTLStoreAction, MTLCompareFunction};
-use crate::{RafxResourceType, RafxAddressMode, RafxDeviceInfo, RafxBlendState, RafxBlendStateTargets, MAX_RENDER_TARGET_ATTACHMENTS, RafxColorRenderTargetBinding, RafxStoreOp, RafxDepthState};
+use crate::{
+    RafxAddressMode, RafxBlendState, RafxBlendStateTargets, RafxColorRenderTargetBinding,
+    RafxDepthState, RafxDeviceInfo, RafxResourceType, RafxStoreOp, MAX_RENDER_TARGET_ATTACHMENTS,
+};
 use cocoa_foundation::foundation::NSUInteger;
+use metal_rs::{
+    MTLArgumentAccess, MTLCompareFunction, MTLDataType, MTLRenderPipelineColorAttachmentDescriptor,
+    MTLRenderPipelineColorAttachmentDescriptorArray, MTLResourceUsage, MTLSamplerAddressMode,
+    MTLStoreAction, RenderPipelineColorAttachmentDescriptorArrayRef,
+};
 
 pub fn vertex_buffer_adjusted_buffer_index(binding: u32) -> NSUInteger {
     // Argument buffers will be 0-4
@@ -8,12 +15,16 @@ pub fn vertex_buffer_adjusted_buffer_index(binding: u32) -> NSUInteger {
     (30 - binding) as _
 }
 
-pub(crate) fn resource_type_mtl_data_type(
-    resource_type: RafxResourceType,
-) -> Option<MTLDataType> {
-    if resource_type.intersects(RafxResourceType::UNIFORM_BUFFER | RafxResourceType::BUFFER | RafxResourceType::BUFFER_READ_WRITE) {
+pub(crate) fn resource_type_mtl_data_type(resource_type: RafxResourceType) -> Option<MTLDataType> {
+    if resource_type.intersects(
+        RafxResourceType::UNIFORM_BUFFER
+            | RafxResourceType::BUFFER
+            | RafxResourceType::BUFFER_READ_WRITE,
+    ) {
         Some(MTLDataType::Pointer)
-    } else if resource_type.intersects(RafxResourceType::TEXTURE | RafxResourceType::TEXTURE_READ_WRITE) {
+    } else if resource_type
+        .intersects(RafxResourceType::TEXTURE | RafxResourceType::TEXTURE_READ_WRITE)
+    {
         Some(MTLDataType::Texture)
     } else if resource_type.intersects(RafxResourceType::SAMPLER) {
         Some(MTLDataType::Sampler)
@@ -47,7 +58,9 @@ pub(crate) fn resource_type_mtl_resource_usage(
         usage |= MTLResourceUsage::Read | MTLResourceUsage::Write;
     }
 
-    if resource_type.intersects(RafxResourceType::TEXEL_BUFFER | RafxResourceType::TEXEL_BUFFER_READ_WRITE) {
+    if resource_type
+        .intersects(RafxResourceType::TEXEL_BUFFER | RafxResourceType::TEXEL_BUFFER_READ_WRITE)
+    {
         usage |= MTLResourceUsage::Sample;
     }
 
@@ -55,7 +68,7 @@ pub(crate) fn resource_type_mtl_resource_usage(
 }
 
 pub(crate) fn resource_type_mtl_argument_access(
-    resource_type: RafxResourceType,
+    resource_type: RafxResourceType
 ) -> MTLArgumentAccess {
     let usage = resource_type_mtl_resource_usage(resource_type);
     if usage.intersects(MTLResourceUsage::Write) {
@@ -73,10 +86,12 @@ pub(crate) fn address_mode_mtl_sampler_address_mode(
         RafxAddressMode::Mirror => MTLSamplerAddressMode::MirrorRepeat,
         RafxAddressMode::Repeat => MTLSamplerAddressMode::Repeat,
         RafxAddressMode::ClampToEdge => MTLSamplerAddressMode::ClampToEdge,
-        RafxAddressMode::ClampToBorder => if device_info.supports_clamp_to_border_color {
-            MTLSamplerAddressMode::ClampToBorderColor
-        } else {
-            MTLSamplerAddressMode::ClampToZero
+        RafxAddressMode::ClampToBorder => {
+            if device_info.supports_clamp_to_border_color {
+                MTLSamplerAddressMode::ClampToBorderColor
+            } else {
+                MTLSamplerAddressMode::ClampToZero
+            }
         }
     }
 }
@@ -120,7 +135,9 @@ pub(crate) fn blend_def_to_attachment(
     }
 }
 
-pub(crate) fn depth_state_to_descriptor(depth_state: &RafxDepthState) -> metal_rs::DepthStencilDescriptor {
+pub(crate) fn depth_state_to_descriptor(
+    depth_state: &RafxDepthState
+) -> metal_rs::DepthStencilDescriptor {
     let descriptor = metal_rs::DepthStencilDescriptor::new();
 
     let depth_compare_function = if depth_state.depth_test_enable {
@@ -161,8 +178,11 @@ pub(crate) fn depth_state_to_descriptor(depth_state: &RafxDepthState) -> metal_r
     descriptor
 }
 
-pub fn color_render_target_binding_mtl_store_op(color_binding: &RafxColorRenderTargetBinding) -> MTLStoreAction {
-    let resolve = color_binding.resolve_target.is_some() && color_binding.resolve_store_op == RafxStoreOp::Store;
+pub fn color_render_target_binding_mtl_store_op(
+    color_binding: &RafxColorRenderTargetBinding
+) -> MTLStoreAction {
+    let resolve = color_binding.resolve_target.is_some()
+        && color_binding.resolve_store_op == RafxStoreOp::Store;
     if color_binding.store_op == RafxStoreOp::Store {
         if resolve {
             MTLStoreAction::StoreAndMultisampleResolve

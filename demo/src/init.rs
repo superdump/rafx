@@ -148,7 +148,6 @@ pub fn rendering_init(
         )
     }?;
 
-
     let device_context = rafx_api.device_context();
 
     let graphics_queue = device_context.create_queue(RafxQueueType::Graphics)?;

@@ -14,13 +14,18 @@ use std::sync::{Arc, Mutex};
 //     RafxSemaphoreMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxSwapchainMetal,
 //     RafxTextureMetal,
 // };
+use crate::metal::features::MetalFeatures;
+use crate::metal::{
+    RafxBufferMetal, RafxDescriptorSetArrayMetal, RafxFenceMetal, RafxPipelineMetal,
+    RafxQueueMetal, RafxRenderTargetMetal, RafxRootSignatureMetal, RafxSamplerMetal,
+    RafxSemaphoreMetal, RafxShaderMetal, RafxShaderModuleMetal, RafxSwapchainMetal,
+    RafxTextureMetal,
+};
 use fnv::FnvHashMap;
 #[cfg(debug_assertions)]
 #[cfg(feature = "track-device-contexts")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::metal::{RafxSwapchainMetal, RafxFenceMetal, RafxSemaphoreMetal, RafxTextureMetal, RafxRenderTargetMetal, RafxQueueMetal, RafxBufferMetal, RafxShaderModuleMetal, RafxShaderMetal, RafxRootSignatureMetal, RafxDescriptorSetArrayMetal, RafxSamplerMetal, RafxPipelineMetal};
-use crate::metal::features::MetalFeatures;
 
 pub struct RafxDeviceContextMetalInner {
     pub(crate) device_info: RafxDeviceInfo,
@@ -262,7 +267,6 @@ impl RafxDeviceContextMetal {
         RafxRootSignatureMetal::new(self, root_signature_def)
     }
 
-
     pub fn create_descriptor_set_array(
         &self,
         descriptor_set_array_def: &RafxDescriptorSetArrayDef,
@@ -293,7 +297,7 @@ impl RafxDeviceContextMetal {
     //
     pub fn create_shader_module(
         &self,
-        data: RafxShaderModuleDefMetal
+        data: RafxShaderModuleDefMetal,
     ) -> RafxResult<RafxShaderModuleMetal> {
         RafxShaderModuleMetal::new(self, data)
     }
@@ -325,7 +329,10 @@ impl RafxDeviceContextMetal {
         }
 
         for &candidate in candidates {
-            let capabilities = self.inner.metal_features.pixel_format_capabilities(candidate.into());
+            let capabilities = self
+                .inner
+                .metal_features
+                .pixel_format_capabilities(candidate.into());
             if capabilities.contains(required_capabilities) {
                 return Some(candidate);
             }
@@ -339,7 +346,11 @@ impl RafxDeviceContextMetal {
         candidates: &[RafxSampleCount],
     ) -> Option<RafxSampleCount> {
         for &candidate in candidates {
-            if self.inner.device.supports_texture_sample_count(candidate.into()) {
+            if self
+                .inner
+                .device
+                .supports_texture_sample_count(candidate.into())
+            {
                 return Some(candidate);
             }
         }

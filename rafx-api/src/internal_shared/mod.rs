@@ -1,4 +1,7 @@
-use crate::{RafxShaderStageFlags, RafxPipelineType, RafxRootSignatureDef, RafxResult, RafxShaderResource, RafxImmutableSamplers, RafxImmutableSamplerKey};
+use crate::{
+    RafxImmutableSamplerKey, RafxImmutableSamplers, RafxPipelineType, RafxResult,
+    RafxRootSignatureDef, RafxShaderResource, RafxShaderStageFlags,
+};
 use fnv::FnvHashMap;
 
 pub(crate) fn find_immutable_sampler_index(
@@ -46,7 +49,8 @@ pub(crate) fn merge_resources<'a>(
         );
         let pipeline_reflection = shader.pipeline_reflection();
 
-        let shader_pipeline_type = if pipeline_reflection.shader_stages
+        let shader_pipeline_type = if pipeline_reflection
+            .shader_stages
             .intersects(RafxShaderStageFlags::COMPUTE)
         {
             RafxPipelineType::Compute

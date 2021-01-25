@@ -176,7 +176,9 @@ impl PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for SpritePrepar
                 .create_descriptor_set(
                     &*layout,
                     shaders::sprite_vert::DescriptorSet0Args {
-                        uniform_buffer: &shaders::sprite_vert::ArgsUniform { mvp: view_proj.to_cols_array_2d() },
+                        uniform_buffer: &shaders::sprite_vert::ArgsUniform {
+                            mvp: view_proj.to_cols_array_2d(),
+                        },
                     },
                 )
                 .unwrap();

@@ -1,5 +1,8 @@
-use crate::{RafxGraphicsPipelineDef, RafxRootSignature, RafxPipelineType, RafxComputePipelineDef, RafxResult, RafxShaderStageFlags};
 use crate::metal::RafxDeviceContextMetal;
+use crate::{
+    RafxComputePipelineDef, RafxGraphicsPipelineDef, RafxPipelineType, RafxResult,
+    RafxRootSignature, RafxShaderStageFlags,
+};
 
 fn metal_entry_point_name(name: &str) -> &str {
     // "main" is not an allowed entry point name. spirv_cross adds a 0 to the end of any
@@ -87,22 +90,38 @@ impl RafxPipelineMetal {
         let mut fragment_function = None;
 
         for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
-            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::VERTEX) {
+            if stage
+                .reflection
+                .shader_stage
+                .intersects(RafxShaderStageFlags::VERTEX)
+            {
                 let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
                 assert!(vertex_function.is_none());
-                vertex_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
-                    entry_point,
-                    None
-                )?);
+                vertex_function = Some(
+                    stage
+                        .shader_module
+                        .metal_shader_module()
+                        .unwrap()
+                        .library()
+                        .get_function(entry_point, None)?,
+                );
             }
 
-            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::FRAGMENT) {
+            if stage
+                .reflection
+                .shader_stage
+                .intersects(RafxShaderStageFlags::FRAGMENT)
+            {
                 let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
                 assert!(fragment_function.is_none());
-                fragment_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
-                    entry_point,
-                    None
-                )?);
+                fragment_function = Some(
+                    stage
+                        .shader_module
+                        .metal_shader_module()
+                        .unwrap()
+                        .library()
+                        .get_function(entry_point, None)?,
+                );
             }
         }
 
@@ -114,8 +133,12 @@ impl RafxPipelineMetal {
 
         let mut vertex_descriptor = metal_rs::VertexDescriptor::new();
         for attribute in &pipeline_def.vertex_layout.attributes {
-            let buffer_index = super::util::vertex_buffer_adjusted_buffer_index(attribute.buffer_index);
-            let mut attribute_descriptor = vertex_descriptor.attributes().object_at(attribute.location as _).unwrap();
+            let buffer_index =
+                super::util::vertex_buffer_adjusted_buffer_index(attribute.buffer_index);
+            let mut attribute_descriptor = vertex_descriptor
+                .attributes()
+                .object_at(attribute.location as _)
+                .unwrap();
             attribute_descriptor.set_buffer_index(buffer_index);
             attribute_descriptor.set_format(attribute.format.into());
             attribute_descriptor.set_offset(attribute.offset as _);
@@ -123,7 +146,8 @@ impl RafxPipelineMetal {
 
         for (index, binding) in pipeline_def.vertex_layout.buffers.iter().enumerate() {
             let buffer_index = super::util::vertex_buffer_adjusted_buffer_index(index as u32);
-            let mut layout_descriptor = vertex_descriptor.layouts().object_at(buffer_index).unwrap();
+            let mut layout_descriptor =
+                vertex_descriptor.layouts().object_at(buffer_index).unwrap();
             layout_descriptor.set_stride(binding.stride as _);
             layout_descriptor.set_step_function(binding.rate.into());
             layout_descriptor.set_step_rate(1);
@@ -133,10 +157,18 @@ impl RafxPipelineMetal {
         pipeline.set_input_primitive_topology(pipeline_def.primitive_topology.into());
 
         //TODO: Pass in number of color attachments?
-        super::util::blend_def_to_attachment(pipeline_def.blend_state, &mut pipeline.color_attachments(), pipeline_def.color_formats.len());
+        super::util::blend_def_to_attachment(
+            pipeline_def.blend_state,
+            &mut pipeline.color_attachments(),
+            pipeline_def.color_formats.len(),
+        );
 
         for (index, &color_format) in pipeline_def.color_formats.iter().enumerate() {
-            pipeline.color_attachments().object_at(index as _).unwrap().set_pixel_format(color_format.into());
+            pipeline
+                .color_attachments()
+                .object_at(index as _)
+                .unwrap()
+                .set_pixel_format(color_format.into());
         }
 
         if let Some(depth_format) = pipeline_def.depth_stencil_format {
@@ -149,13 +181,16 @@ impl RafxPipelineMetal {
             }
         }
 
-        let pipeline = device_context.device().new_render_pipeline_state(pipeline.as_ref())?;
+        let pipeline = device_context
+            .device()
+            .new_render_pipeline_state(pipeline.as_ref())?;
 
         let mtl_cull_mode = pipeline_def.rasterizer_state.cull_mode.into();
         let mtl_triangle_fill_mode = pipeline_def.rasterizer_state.fill_mode.into();
         let mtl_front_facing_winding = pipeline_def.rasterizer_state.front_face.into();
         let mtl_depth_bias = pipeline_def.rasterizer_state.depth_bias as f32;
-        let mtl_depth_bias_slope_scaled = pipeline_def.rasterizer_state.depth_bias_slope_scaled as f32;
+        let mtl_depth_bias_slope_scaled =
+            pipeline_def.rasterizer_state.depth_bias_slope_scaled as f32;
         let mtl_depth_clip_mode = if pipeline_def.rasterizer_state.depth_clamp_enable {
             metal_rs::MTLDepthClipMode::Clamp
         } else {
@@ -163,9 +198,14 @@ impl RafxPipelineMetal {
         };
         let mtl_primitive_type = pipeline_def.primitive_topology.into();
 
-        let depth_stencil_descriptor = super::util::depth_state_to_descriptor(&pipeline_def.depth_state);
+        let depth_stencil_descriptor =
+            super::util::depth_state_to_descriptor(&pipeline_def.depth_state);
         let mtl_depth_stencil_state = if pipeline_def.depth_stencil_format.is_some() {
-            Some(device_context.device().new_depth_stencil_state(depth_stencil_descriptor.as_ref()))
+            Some(
+                device_context
+                    .device()
+                    .new_depth_stencil_state(depth_stencil_descriptor.as_ref()),
+            )
         } else {
             None
         };
@@ -178,7 +218,7 @@ impl RafxPipelineMetal {
             mtl_depth_bias_slope_scaled,
             mtl_depth_clip_mode,
             mtl_depth_stencil_state,
-            mtl_primitive_type
+            mtl_primitive_type,
         };
 
         Ok(RafxPipelineMetal {
@@ -198,14 +238,22 @@ impl RafxPipelineMetal {
         let mut compute_threads_per_group = None;
 
         for stage in pipeline_def.shader.metal_shader().unwrap().stages() {
-            if stage.reflection.shader_stage.intersects(RafxShaderStageFlags::COMPUTE) {
+            if stage
+                .reflection
+                .shader_stage
+                .intersects(RafxShaderStageFlags::COMPUTE)
+            {
                 let entry_point = metal_entry_point_name(&stage.reflection.entry_point_name);
 
                 assert!(compute_function.is_none());
-                compute_function = Some(stage.shader_module.metal_shader_module().unwrap().library().get_function(
-                    entry_point,
-                    None
-                )?);
+                compute_function = Some(
+                    stage
+                        .shader_module
+                        .metal_shader_module()
+                        .unwrap()
+                        .library()
+                        .get_function(entry_point, None)?,
+                );
 
                 compute_threads_per_group = stage.reflection.compute_threads_per_group;
             }
@@ -213,10 +261,12 @@ impl RafxPipelineMetal {
 
         let compute_function = compute_function.ok_or("Could not find compute function")?;
 
-        let pipeline = device_context.device().new_compute_pipeline_state_with_function(compute_function.as_ref())?;
+        let pipeline = device_context
+            .device()
+            .new_compute_pipeline_state_with_function(compute_function.as_ref())?;
 
         let compute_encoder_info = PipelineComputeEncoderInfo {
-            compute_threads_per_group: compute_threads_per_group.unwrap()
+            compute_threads_per_group: compute_threads_per_group.unwrap(),
         };
 
         Ok(RafxPipelineMetal {

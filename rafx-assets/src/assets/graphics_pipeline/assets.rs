@@ -12,13 +12,15 @@ use rafx_api::{
 use rafx_nodes::{RenderPhase, RenderPhaseIndex};
 pub use rafx_resources::DescriptorSetLayoutResource;
 pub use rafx_resources::GraphicsPipelineResource;
-use rafx_resources::{DescriptorSetArc, DescriptorSetLayout, FixedFunctionState, ResourceArc, ShaderModuleMeta, SlotNameLookup, SlotLocation};
+use rafx_resources::{
+    DescriptorSetArc, DescriptorSetLayout, FixedFunctionState, ResourceArc, ShaderModuleMeta,
+    SlotLocation, SlotNameLookup,
+};
 use rafx_resources::{DescriptorSetWriteSet, MaterialPassResource, SamplerResource};
 use rafx_resources::{MaterialPassVertexInput, ShaderModuleResource};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
-
 
 #[derive(TypeUuid, Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 #[uuid = "7f30b29c-7fb9-4b31-a354-7cefbbade2f9"]
@@ -322,7 +324,7 @@ impl MaterialPass {
 
             rafx_shader_stages.push(RafxShaderStageDef {
                 shader_module: shader_asset.shader_module.get_raw().shader_module.clone(),
-                reflection: reflection_data.rafx_api_reflection.clone()
+                reflection: reflection_data.rafx_api_reflection.clone(),
             });
 
             // Check that the compiled shader supports the given stage

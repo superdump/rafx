@@ -1,11 +1,13 @@
 use super::*;
-use crate::{RafxRootSignature, RafxSampler, RafxShader, RafxShaderModule, RafxShaderResourceBindingKey};
+use crate::{
+    RafxRootSignature, RafxSampler, RafxShader, RafxShaderModule, RafxShaderResourceBindingKey,
+};
 #[cfg(feature = "rafx-vulkan")]
 use ash::vk;
 use rafx_base::DecimalF32;
 use std::hash::{Hash, Hasher};
 
-use fnv::{FnvHasher, FnvHashMap};
+use fnv::{FnvHashMap, FnvHasher};
 #[cfg(feature = "serde-support")]
 use serde::{Deserialize, Serialize};
 
@@ -174,9 +176,7 @@ impl RafxTextureDef {
         assert!(self.extents.depth > 0);
         assert!(self.array_length > 0);
         assert!(self.mip_count > 0);
-        assert!(
-            self.mip_count < 2 || self.sample_count == RafxSampleCount::SampleCount1
-        );
+        assert!(self.mip_count < 2 || self.sample_count == RafxSampleCount::SampleCount1);
     }
 }
 
@@ -245,7 +245,6 @@ impl RafxRenderTargetDef {
         assert!(self.array_length > 0);
         assert!(self.mip_count > 0);
 
-
         // we support only one or the other
         assert!(
             !(self.resource_type.contains(
@@ -257,8 +256,8 @@ impl RafxRenderTargetDef {
         assert!(
             !(self.format.has_depth()
                 && self
-                .resource_type
-                .intersects(RafxResourceType::TEXTURE_READ_WRITE)),
+                    .resource_type
+                    .intersects(RafxResourceType::TEXTURE_READ_WRITE)),
             "Cannot use depth stencil as UAV"
         );
     }
@@ -842,7 +841,10 @@ impl RafxBlendStateVkCreateInfo {
 }
 
 impl RafxBlendState {
-    pub fn verify(&self, color_attachment_count: usize) {
+    pub fn verify(
+        &self,
+        color_attachment_count: usize,
+    ) {
         if !self.independent_blend {
             assert_eq!(self.render_target_blend_states.len(), 1, "If RafxBlendState::independent_blend is false, RafxBlendState::render_target_blend_states must be 1");
         } else {

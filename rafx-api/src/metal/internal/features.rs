@@ -1,8 +1,7 @@
-
-use metal_rs::{MTLGPUFamily, MTLFeatureSet, MTLArgumentBuffersTier, MTLPixelFormat};
 use crate::RafxSampleCount;
+use metal_rs::{MTLArgumentBuffersTier, MTLFeatureSet, MTLGPUFamily, MTLPixelFormat};
 
-const GPU_FAMILIES_APPLE : [MTLGPUFamily; 6] = [
+const GPU_FAMILIES_APPLE: [MTLGPUFamily; 6] = [
     MTLGPUFamily::Apple6,
     MTLGPUFamily::Apple5,
     MTLGPUFamily::Apple4,
@@ -11,18 +10,15 @@ const GPU_FAMILIES_APPLE : [MTLGPUFamily; 6] = [
     MTLGPUFamily::Apple1,
 ];
 
-const GPU_FAMILIES_MAC : [MTLGPUFamily; 2] = [
-    MTLGPUFamily::Mac2,
-    MTLGPUFamily::Mac1
-];
+const GPU_FAMILIES_MAC: [MTLGPUFamily; 2] = [MTLGPUFamily::Mac2, MTLGPUFamily::Mac1];
 
-const GPU_FAMILIES_COMMON : [MTLGPUFamily; 3] = [
+const GPU_FAMILIES_COMMON: [MTLGPUFamily; 3] = [
     MTLGPUFamily::Common3,
     MTLGPUFamily::Common2,
     MTLGPUFamily::Common1,
 ];
 
-const FEATURE_SETS_IOS : [MTLFeatureSet; 17] = [
+const FEATURE_SETS_IOS: [MTLFeatureSet; 17] = [
     MTLFeatureSet::iOS_GPUFamily5_v1,
     MTLFeatureSet::iOS_GPUFamily4_v2,
     MTLFeatureSet::iOS_GPUFamily4_v1,
@@ -42,7 +38,7 @@ const FEATURE_SETS_IOS : [MTLFeatureSet; 17] = [
     MTLFeatureSet::iOS_GPUFamily1_v1,
 ];
 
-const FEATURE_SETS_TVOS : [MTLFeatureSet; 6] = [
+const FEATURE_SETS_TVOS: [MTLFeatureSet; 6] = [
     MTLFeatureSet::tvOS_GPUFamily2_v2,
     MTLFeatureSet::tvOS_GPUFamily2_v1,
     MTLFeatureSet::tvOS_GPUFamily1_v4,
@@ -51,15 +47,18 @@ const FEATURE_SETS_TVOS : [MTLFeatureSet; 6] = [
     MTLFeatureSet::tvOS_GPUFamily1_v1,
 ];
 
-const FEATURE_SETS_MACOS : [MTLFeatureSet; 5] = [
+const FEATURE_SETS_MACOS: [MTLFeatureSet; 5] = [
     MTLFeatureSet::macOS_GPUFamily2_v1,
     MTLFeatureSet::macOS_GPUFamily1_v4,
     MTLFeatureSet::macOS_GPUFamily1_v3,
     MTLFeatureSet::macOS_GPUFamily1_v2,
-    MTLFeatureSet::macOS_GPUFamily1_v1
+    MTLFeatureSet::macOS_GPUFamily1_v1,
 ];
 
-fn find_supported_family(device: &metal_rs::DeviceRef, gpu_families: &[MTLGPUFamily]) -> Option<MTLGPUFamily> {
+fn find_supported_family(
+    device: &metal_rs::DeviceRef,
+    gpu_families: &[MTLGPUFamily],
+) -> Option<MTLGPUFamily> {
     for &family in gpu_families {
         if device.supports_family(family) {
             return Some(family);
@@ -69,7 +68,10 @@ fn find_supported_family(device: &metal_rs::DeviceRef, gpu_families: &[MTLGPUFam
     return None;
 }
 
-fn find_supported_feature_set(device: &metal_rs::DeviceRef, feature_sets: &[MTLFeatureSet]) -> Option<MTLFeatureSet> {
+fn find_supported_feature_set(
+    device: &metal_rs::DeviceRef,
+    feature_sets: &[MTLFeatureSet],
+) -> Option<MTLFeatureSet> {
     for &feature_set in feature_sets {
         if device.supports_feature_set(feature_set) {
             return Some(feature_set);
@@ -79,7 +81,10 @@ fn find_supported_feature_set(device: &metal_rs::DeviceRef, feature_sets: &[MTLF
     return None;
 }
 
-fn pixel_format_capabilities(feature_set: MTLFeatureSet, pixel_format: MTLPixelFormat) -> metal_rs::PixelFormatCapabilities {
+fn pixel_format_capabilities(
+    feature_set: MTLFeatureSet,
+    pixel_format: MTLPixelFormat,
+) -> metal_rs::PixelFormatCapabilities {
     use metal_rs::PixelFormatCapabilities;
     match pixel_format {
         MTLPixelFormat::Invalid => PixelFormatCapabilities::empty(),
@@ -256,8 +261,10 @@ impl MetalFeatures {
             supports_argument_buffers = feature_set_ios.supports_argument_buffers();
             supports_array_of_samplers = feature_set_ios.supports_array_of_samplers();
             supports_array_of_textures = feature_set_ios.supports_array_of_textures();
-            supports_base_vertex_instance_drawing = feature_set_ios.supports_base_vertex_instance_drawing();
-            supports_combined_msaa_store_and_resolve_action = feature_set_ios.supports_combined_msaa_store_and_resolve_action();
+            supports_base_vertex_instance_drawing =
+                feature_set_ios.supports_base_vertex_instance_drawing();
+            supports_combined_msaa_store_and_resolve_action =
+                feature_set_ios.supports_combined_msaa_store_and_resolve_action();
             supports_cube_map_texture_arrays = feature_set_ios.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_ios.supports_resource_heaps();
         }
@@ -266,8 +273,10 @@ impl MetalFeatures {
             supports_argument_buffers = feature_set_macos.supports_argument_buffers();
             supports_array_of_samplers = feature_set_macos.supports_array_of_samplers();
             supports_array_of_textures = feature_set_macos.supports_array_of_textures();
-            supports_base_vertex_instance_drawing = feature_set_macos.supports_base_vertex_instance_drawing();
-            supports_combined_msaa_store_and_resolve_action = feature_set_macos.supports_combined_msaa_store_and_resolve_action();
+            supports_base_vertex_instance_drawing =
+                feature_set_macos.supports_base_vertex_instance_drawing();
+            supports_combined_msaa_store_and_resolve_action =
+                feature_set_macos.supports_combined_msaa_store_and_resolve_action();
             supports_cube_map_texture_arrays = feature_set_macos.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_macos.supports_resource_heaps();
         }
@@ -276,8 +285,10 @@ impl MetalFeatures {
             supports_argument_buffers = feature_set_tvos.supports_argument_buffers();
             supports_array_of_samplers = feature_set_tvos.supports_array_of_samplers();
             supports_array_of_textures = feature_set_tvos.supports_array_of_textures();
-            supports_base_vertex_instance_drawing = feature_set_tvos.supports_base_vertex_instance_drawing();
-            supports_combined_msaa_store_and_resolve_action = feature_set_tvos.supports_combined_msaa_store_and_resolve_action();
+            supports_base_vertex_instance_drawing =
+                feature_set_tvos.supports_base_vertex_instance_drawing();
+            supports_combined_msaa_store_and_resolve_action =
+                feature_set_tvos.supports_combined_msaa_store_and_resolve_action();
             supports_cube_map_texture_arrays = feature_set_tvos.supports_cube_map_texture_arrays();
             supports_resource_heaps = feature_set_tvos.supports_resource_heaps();
         }
@@ -303,7 +314,10 @@ impl MetalFeatures {
         }
     }
 
-    pub fn pixel_format_capabilities(&self, pixel_format: MTLPixelFormat) -> metal_rs::PixelFormatCapabilities {
+    pub fn pixel_format_capabilities(
+        &self,
+        pixel_format: MTLPixelFormat,
+    ) -> metal_rs::PixelFormatCapabilities {
         let mut capabilities = metal_rs::PixelFormatCapabilities::empty();
         if let Some(feature_set_ios) = self.feature_set_ios {
             capabilities |= pixel_format_capabilities(feature_set_ios, pixel_format);
