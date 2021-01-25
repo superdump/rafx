@@ -126,9 +126,9 @@ impl RafxTextureMetal {
             descriptor.set_height(texture_def.extents.height as _);
             descriptor.set_depth(texture_def.extents.depth as _);
             descriptor.set_mipmap_level_count(texture_def.mip_count as _);
-            descriptor.set_storage_mode(RafxMemoryUsage::GpuOnly.storage_mode());
-            descriptor.set_cpu_cache_mode(RafxMemoryUsage::GpuOnly.cpu_cache_mode());
-            descriptor.set_resource_options(RafxMemoryUsage::GpuOnly.resource_options());
+            descriptor.set_storage_mode(RafxMemoryUsage::GpuOnly.mtl_storage_mode());
+            descriptor.set_cpu_cache_mode(RafxMemoryUsage::GpuOnly.mtl_cpu_cache_mode());
+            descriptor.set_resource_options(RafxMemoryUsage::GpuOnly.mtl_resource_options());
             descriptor.set_texture_type(mtl_texture_type);
             descriptor.set_array_length(mtl_array_length as _);
             descriptor.set_sample_count(texture_def.sample_count.into());

@@ -84,9 +84,10 @@ impl RafxBufferMetal {
             )
         }
 
-        let buffer = device_context
-            .device()
-            .new_buffer(allocation_size, buffer_def.memory_usage.resource_options());
+        let buffer = device_context.device().new_buffer(
+            allocation_size,
+            buffer_def.memory_usage.mtl_resource_options(),
+        );
 
         Ok(RafxBufferMetal {
             device_context: device_context.clone(),

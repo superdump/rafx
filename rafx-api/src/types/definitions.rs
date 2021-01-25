@@ -1,7 +1,5 @@
 use super::*;
 use crate::{RafxRootSignature, RafxSampler, RafxShader, RafxShaderModule};
-#[cfg(feature = "rafx-vulkan")]
-use ash::vk;
 use rafx_base::DecimalF32;
 use std::hash::{Hash, Hasher};
 
@@ -632,41 +630,6 @@ impl Default for RafxDepthState {
     }
 }
 
-impl RafxDepthState {
-    #[cfg(feature = "rafx-vulkan")]
-    pub fn into_vk_create_info(&self) -> vk::PipelineDepthStencilStateCreateInfo {
-        let front = vk::StencilOpState::builder()
-            .fail_op(self.front_stencil_fail_op.into())
-            .pass_op(self.front_stencil_pass_op.into())
-            .depth_fail_op(self.front_depth_fail_op.into())
-            .compare_op(self.front_stencil_compare_op.into())
-            .compare_mask(self.stencil_read_mask as u32)
-            .write_mask(self.stencil_write_mask as u32)
-            .reference(0);
-
-        let back = vk::StencilOpState::builder()
-            .fail_op(self.back_stencil_fail_op.into())
-            .pass_op(self.back_stencil_pass_op.into())
-            .depth_fail_op(self.back_depth_fail_op.into())
-            .compare_op(self.back_stencil_compare_op.into())
-            .compare_mask(self.stencil_read_mask as u32)
-            .write_mask(self.stencil_write_mask as u32)
-            .reference(0);
-
-        vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(self.depth_test_enable)
-            .depth_write_enable(self.depth_write_enable)
-            .depth_compare_op(self.depth_compare_op.into())
-            .depth_bounds_test_enable(false)
-            .stencil_test_enable(self.stencil_test_enable)
-            .min_depth_bounds(0.0)
-            .max_depth_bounds(1.0)
-            .front(*front)
-            .back(*back)
-            .build()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde-support", derive(Serialize, Deserialize))]
 pub struct RafxRasterizerState {
@@ -711,24 +674,6 @@ impl Default for RafxRasterizerState {
             multisample: false,
             scissor: false,
         }
-    }
-}
-
-impl RafxRasterizerState {
-    #[cfg(feature = "rafx-vulkan")]
-    pub fn into_vk_create_info(&self) -> vk::PipelineRasterizationStateCreateInfo {
-        vk::PipelineRasterizationStateCreateInfo::builder()
-            .depth_clamp_enable(self.depth_clamp_enable)
-            .rasterizer_discard_enable(false)
-            .polygon_mode(self.fill_mode.into())
-            .cull_mode(self.cull_mode.into())
-            .front_face(self.front_face.into())
-            .depth_bias_enable(self.depth_bias != 0)
-            .depth_bias_constant_factor(self.depth_bias as f32)
-            .depth_bias_clamp(0.0)
-            .depth_bias_slope_factor(self.depth_bias_slope_scaled)
-            .line_width(1.0)
-            .build()
     }
 }
 
@@ -783,25 +728,6 @@ impl RafxBlendStateRenderTarget {
             || self.dst_factor != RafxBlendFactor::Zero
             || self.dst_factor_alpha != RafxBlendFactor::Zero
     }
-
-    #[cfg(feature = "rafx-vulkan")]
-    pub fn into_vk_create_info(&self) -> vk::PipelineColorBlendAttachmentState {
-        let blend_enable = self.src_factor != RafxBlendFactor::One
-            || self.src_factor_alpha != RafxBlendFactor::One
-            || self.dst_factor != RafxBlendFactor::Zero
-            || self.dst_factor_alpha != RafxBlendFactor::Zero;
-
-        vk::PipelineColorBlendAttachmentState::builder()
-            .blend_enable(blend_enable)
-            .color_write_mask(self.masks.into())
-            .src_color_blend_factor(self.src_factor.into())
-            .src_alpha_blend_factor(self.src_factor_alpha.into())
-            .dst_color_blend_factor(self.dst_factor.into())
-            .dst_alpha_blend_factor(self.dst_factor_alpha.into())
-            .color_blend_op(self.blend_op.into())
-            .alpha_blend_op(self.blend_op_alpha.into())
-            .build()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -823,21 +749,6 @@ impl Default for RafxBlendState {
     }
 }
 
-//WARNING: This struct has pointers into the attachments vector. Don't mutate or drop the
-// attachments vector
-#[cfg(feature = "rafx-vulkan")]
-pub struct RafxBlendStateVkCreateInfo {
-    _attachments: Vec<vk::PipelineColorBlendAttachmentState>,
-    blend_state: vk::PipelineColorBlendStateCreateInfo,
-}
-
-#[cfg(feature = "rafx-vulkan")]
-impl RafxBlendStateVkCreateInfo {
-    pub fn blend_state(&self) -> &vk::PipelineColorBlendStateCreateInfo {
-        &self.blend_state
-    }
-}
-
 impl RafxBlendState {
     pub fn verify(
         &self,
@@ -847,47 +758,6 @@ impl RafxBlendState {
             assert_eq!(self.render_target_blend_states.len(), 1, "If RafxBlendState::independent_blend is false, RafxBlendState::render_target_blend_states must be 1");
         } else {
             assert_eq!(self.render_target_blend_states.len(), color_attachment_count, "If RafxBlendState::independent_blend is true, RafxBlendState::render_target_blend_states length must match color attachment count");
-        }
-    }
-
-    #[cfg(feature = "rafx-vulkan")]
-    pub fn into_vk_create_info(
-        &self,
-        color_attachment_count: usize,
-    ) -> RafxBlendStateVkCreateInfo {
-        let mut blend_attachments_states = vec![];
-
-        self.verify(color_attachment_count);
-
-        if let Some(first_attachment) = self.render_target_blend_states.first() {
-            for attachment_index in 0..color_attachment_count {
-                let attachment_state = if self
-                    .render_target_mask
-                    .intersects(RafxBlendStateTargets::from_bits(1 << attachment_index).unwrap())
-                {
-                    if self.independent_blend {
-                        self.render_target_blend_states[attachment_index].into_vk_create_info()
-                    } else {
-                        first_attachment.into_vk_create_info()
-                    }
-                } else {
-                    vk::PipelineColorBlendAttachmentState::default()
-                };
-
-                blend_attachments_states.push(attachment_state)
-            }
-        }
-
-        let blend_state_create_info = vk::PipelineColorBlendStateCreateInfo::builder()
-            .logic_op_enable(false)
-            .logic_op(vk::LogicOp::CLEAR)
-            .attachments(&blend_attachments_states)
-            .blend_constants([0.0, 0.0, 0.0, 0.0])
-            .build();
-
-        RafxBlendStateVkCreateInfo {
-            _attachments: blend_attachments_states,
-            blend_state: blend_state_create_info,
         }
     }
 }

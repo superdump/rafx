@@ -3,15 +3,15 @@ use crate::{
     RafxExtents3D, RafxFormat, RafxRenderTarget, RafxRenderTargetDef, RafxResourceType, RafxResult,
     RafxSampleCount, RafxSwapchainDef, RafxSwapchainImage, RafxTextureDimensions,
 };
+use rafx_base::trust_cell::TrustCell;
 use raw_window_handle::HasRawWindowHandle;
-use std::sync::atomic::{AtomicPtr, Ordering};
 
 const SWAPCHAIN_IMAGE_COUNT: u32 = 3;
 
 pub struct RafxSwapchainMetal {
     device_context: RafxDeviceContextMetal,
     layer: metal_rs::MetalLayer,
-    drawable: AtomicPtr<metal_rs::CAMetalDrawable>,
+    drawable: TrustCell<Option<metal_rs::MetalDrawable>>,
     swapchain_def: RafxSwapchainDef,
     format: RafxFormat,
     // Just fake this
@@ -21,12 +21,6 @@ pub struct RafxSwapchainMetal {
 // for metal_rs::CAMetalDrawable
 unsafe impl Send for RafxSwapchainMetal {}
 unsafe impl Sync for RafxSwapchainMetal {}
-
-impl Drop for RafxSwapchainMetal {
-    fn drop(&mut self) {
-        self.swap_drawable(None);
-    }
-}
 
 impl RafxSwapchainMetal {
     pub fn swapchain_def(&self) -> &RafxSwapchainDef {
@@ -43,6 +37,10 @@ impl RafxSwapchainMetal {
 
     pub fn metal_layer(&self) -> &metal_rs::MetalLayerRef {
         self.layer.as_ref()
+    }
+
+    pub(crate) fn take_drawable(&self) -> Option<metal_rs::MetalDrawable> {
+        self.drawable.borrow_mut().take()
     }
 
     pub fn new(
@@ -118,8 +116,9 @@ impl RafxSwapchainMetal {
                 .next_drawable()
                 .ok_or("Timed out while trying to acquire drawable".to_string())?;
 
-            let old = self.swap_drawable(Some(drawable.to_owned()));
-            assert!(old.is_none());
+            let mut old_drawable = self.drawable.borrow_mut();
+            assert!(old_drawable.is_none());
+            *old_drawable = Some(drawable.to_owned());
 
             let raw_image = RafxRawImageMetal::Ref(drawable.texture().to_owned());
 
@@ -154,28 +153,5 @@ impl RafxSwapchainMetal {
                 swapchain_image_index,
             })
         })
-    }
-
-    pub(crate) fn swap_drawable(
-        &self,
-        drawable: Option<metal_rs::MetalDrawable>,
-    ) -> Option<metal_rs::MetalDrawable> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let ptr = if let Some(drawable) = drawable {
-            let ptr = drawable.as_ptr();
-            std::mem::forget(drawable);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.drawable.swap(ptr, Ordering::Relaxed);
-        if !ptr.is_null() {
-            unsafe { Some(metal_rs::MetalDrawable::from_ptr(ptr)) }
-        } else {
-            None
-        }
     }
 }

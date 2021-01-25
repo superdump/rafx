@@ -12,86 +12,129 @@ use crate::{
 };
 use fnv::FnvHashSet;
 use metal_rs::{
-    MTLBlitCommandEncoder, MTLBlitOption, MTLBuffer, MTLCommandBuffer, MTLComputeCommandEncoder,
-    MTLIndexType, MTLOrigin, MTLPrimitiveType, MTLRenderCommandEncoder, MTLRenderStages,
-    MTLResourceUsage, MTLScissorRect, MTLSize, MTLViewport,
+    MTLBlitOption, MTLIndexType, MTLOrigin, MTLPrimitiveType, MTLRenderStages, MTLResourceUsage,
+    MTLScissorRect, MTLSize, MTLViewport,
 };
-use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicU8};
-use std::sync::Mutex;
+use rafx_base::trust_cell::TrustCell;
 
 // Mutable state stored in a lock. (Hopefully we can optimize away the lock later)
 #[derive(Debug)]
 pub struct RafxCommandBufferMetalInner {
     render_targets_to_make_readable: FnvHashSet<RafxRenderTargetMetal>,
+    command_buffer: Option<metal_rs::CommandBuffer>,
+    render_encoder: Option<metal_rs::RenderCommandEncoder>,
+    compute_encoder: Option<metal_rs::ComputeCommandEncoder>,
+    blit_encoder: Option<metal_rs::BlitCommandEncoder>,
+    current_index_buffer: Option<metal_rs::Buffer>,
+    current_index_buffer_offset: u64,
+    current_index_buffer_type: MTLIndexType,
+    current_index_buffer_stride: u32,
+    last_pipeline_type: Option<RafxPipelineType>,
+    primitive_type: MTLPrimitiveType,
+    current_render_targets_width: u32,
+    current_render_targets_height: u32,
+    compute_threads_per_group_x: u32,
+    compute_threads_per_group_y: u32,
+    compute_threads_per_group_z: u32,
 }
+
+unsafe impl Send for RafxCommandBufferMetalInner {}
+unsafe impl Sync for RafxCommandBufferMetalInner {}
 
 #[derive(Debug)]
 pub struct RafxCommandBufferMetal {
     queue: RafxQueueMetal,
-    command_buffer: AtomicPtr<MTLCommandBuffer>,
-    inner: Mutex<RafxCommandBufferMetalInner>,
-    render_encoder: AtomicPtr<MTLRenderCommandEncoder>,
-    compute_encoder: AtomicPtr<MTLComputeCommandEncoder>,
-    blit_encoder: AtomicPtr<MTLBlitCommandEncoder>,
-    current_index_buffer: AtomicPtr<MTLBuffer>,
-    current_index_buffer_offset: AtomicU64,
-    current_index_buffer_type: AtomicU8, // MTLIndexType
-    current_index_buffer_stride: AtomicU32,
-    last_pipeline_type: AtomicU8, // RafxPipelineType
-    primitive_type: AtomicU8,     // MTLPrimitiveType
-    current_render_targets_width: AtomicU32,
-    current_render_targets_height: AtomicU32,
-    compute_threads_per_group_x: AtomicU32,
-    compute_threads_per_group_y: AtomicU32,
-    compute_threads_per_group_z: AtomicU32,
-}
-
-impl Drop for RafxCommandBufferMetal {
-    fn drop(&mut self) {
-        // If these contain valid pointers, put the pointer into the wrapper and drop it
-        let _ = self.swap_command_buffer(None);
-        let _ = self.swap_render_encoder(None);
-        let _ = self.swap_compute_encoder(None);
-        let _ = self.swap_blit_encoder(None);
-    }
+    inner: TrustCell<RafxCommandBufferMetalInner>,
 }
 
 impl RafxCommandBufferMetal {
+    pub fn metal_command_buffer(&self) -> Option<&metal_rs::CommandBufferRef> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+        let ptr = self
+            .inner
+            .borrow()
+            .command_buffer
+            .as_ref()
+            .map(|x| x.as_ptr());
+        ptr.map(|x| unsafe { metal_rs::CommandBufferRef::from_ptr(x) })
+    }
+
+    pub fn metal_render_encoder(&self) -> Option<&metal_rs::RenderCommandEncoderRef> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+        let ptr = self
+            .inner
+            .borrow()
+            .render_encoder
+            .as_ref()
+            .map(|x| x.as_ptr());
+        ptr.map(|x| unsafe { metal_rs::RenderCommandEncoderRef::from_ptr(x) })
+    }
+
+    pub fn metal_compute_encoder(&self) -> Option<&metal_rs::ComputeCommandEncoderRef> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+        let ptr = self
+            .inner
+            .borrow()
+            .compute_encoder
+            .as_ref()
+            .map(|x| x.as_ptr());
+        ptr.map(|x| unsafe { metal_rs::ComputeCommandEncoderRef::from_ptr(x) })
+    }
+
+    pub fn metal_blit_encoder(&self) -> Option<&metal_rs::BlitCommandEncoderRef> {
+        use foreign_types_shared::ForeignType;
+        use foreign_types_shared::ForeignTypeRef;
+        let ptr = self
+            .inner
+            .borrow()
+            .blit_encoder
+            .as_ref()
+            .map(|x| x.as_ptr());
+        ptr.map(|x| unsafe { metal_rs::BlitCommandEncoderRef::from_ptr(x) })
+    }
+
+    pub(crate) fn clear_command_buffer(&self) {
+        self.inner.borrow_mut().command_buffer = None;
+    }
+
     pub fn new(
         command_pool: &RafxCommandPoolMetal,
         _command_buffer_def: &RafxCommandBufferDef,
     ) -> RafxResult<RafxCommandBufferMetal> {
         let inner = RafxCommandBufferMetalInner {
             render_targets_to_make_readable: Default::default(),
+            command_buffer: None,
+            render_encoder: None,
+            compute_encoder: None,
+            blit_encoder: None,
+            last_pipeline_type: None,
+            primitive_type: MTLPrimitiveType::Triangle,
+            current_render_targets_width: 0,
+            current_render_targets_height: 0,
+            compute_threads_per_group_x: 0,
+            compute_threads_per_group_y: 0,
+            compute_threads_per_group_z: 0,
+            current_index_buffer: None,
+            current_index_buffer_offset: 0,
+            current_index_buffer_type: MTLIndexType::UInt16,
+            current_index_buffer_stride: 0,
         };
 
         Ok(RafxCommandBufferMetal {
             queue: command_pool.queue().clone(),
-            command_buffer: Default::default(),
-            render_encoder: Default::default(),
-            compute_encoder: Default::default(),
-            blit_encoder: Default::default(),
-            last_pipeline_type: AtomicU8::new(u8::max_value()),
-            primitive_type: Default::default(),
-            current_render_targets_width: Default::default(),
-            current_render_targets_height: Default::default(),
-            compute_threads_per_group_x: Default::default(),
-            compute_threads_per_group_y: Default::default(),
-            compute_threads_per_group_z: Default::default(),
-            current_index_buffer: Default::default(),
-            current_index_buffer_offset: Default::default(),
-            current_index_buffer_type: Default::default(),
-            current_index_buffer_stride: Default::default(),
-            inner: Mutex::new(inner),
+            inner: TrustCell::new(inner),
         })
     }
 
     pub fn begin(&self) -> RafxResult<()> {
         objc::rc::autoreleasepool(|| {
             let command_buffer = self.queue.metal_queue().new_command_buffer();
-            self.swap_command_buffer(Some(command_buffer.to_owned()));
-            self.last_pipeline_type.store(0, Ordering::Relaxed);
+            let mut inner = self.inner.borrow_mut();
+            inner.command_buffer = Some(command_buffer.to_owned());
+            inner.last_pipeline_type = None;
             Ok(())
         })
     }
@@ -103,7 +146,7 @@ impl RafxCommandBufferMetal {
     pub fn return_to_pool(&self) -> RafxResult<()> {
         // Returning to pool means the command buffer no longer needs to stay valid, so drop the
         // current one
-        self.swap_command_buffer(None);
+        self.inner.borrow_mut().command_buffer = None;
         Ok(())
     }
 
@@ -122,9 +165,10 @@ impl RafxCommandBufferMetal {
 
         let mut extents = RafxExtents3D::default();
 
-        objc::rc::autoreleasepool(|| {
+        let result: RafxResult<()> = objc::rc::autoreleasepool(|| {
             let descriptor = metal_rs::RenderPassDescriptor::new();
 
+            let mut inner = self.inner.borrow_mut();
             for (i, color_target) in color_targets.iter().enumerate() {
                 let color_descriptor = descriptor.color_attachments().object_at(i as _).unwrap();
                 let texture = color_target
@@ -135,10 +179,8 @@ impl RafxCommandBufferMetal {
 
                 // Ensure current_render_targets_width/current_render_targets_depth are set
                 extents = texture.texture_def().extents;
-                self.current_render_targets_width
-                    .store(extents.width, Ordering::Relaxed);
-                self.current_render_targets_height
-                    .store(extents.height, Ordering::Relaxed);
+                inner.current_render_targets_width = extents.width;
+                inner.current_render_targets_height = extents.height;
 
                 color_descriptor.set_texture(Some(texture.metal_texture()));
                 color_descriptor.set_level(color_target.mip_slice.unwrap_or(0) as _);
@@ -183,10 +225,8 @@ impl RafxCommandBufferMetal {
 
                 // Ensure current_render_targets_width/current_render_targets_depth are set
                 extents = depth_target.render_target.texture().texture_def().extents;
-                self.current_render_targets_width
-                    .store(extents.width, Ordering::Relaxed);
-                self.current_render_targets_height
-                    .store(extents.height, Ordering::Relaxed);
+                inner.current_render_targets_width = extents.width;
+                inner.current_render_targets_height = extents.height;
 
                 depth_descriptor.set_texture(Some(texture.metal_texture()));
                 depth_descriptor.set_level(depth_target.mip_slice.unwrap_or(0) as _);
@@ -221,54 +261,61 @@ impl RafxCommandBufferMetal {
             }
 
             // end encoders
-            self.end_current_encoders(false)?;
-            let cmd_buffer = self.metal_command_buffer().unwrap();
+            Self::do_end_current_encoders(&self.queue, &mut *inner, false)?;
+            let cmd_buffer = inner.command_buffer.as_ref().unwrap();
             let render_encoder = cmd_buffer.new_render_command_encoder(descriptor);
-            self.swap_render_encoder(Some(render_encoder.to_owned()));
-            self.wait_for_barriers()?;
+            inner.render_encoder = Some(render_encoder.to_owned());
+            self.wait_for_barriers(&*inner)?;
             // set heaps?
 
-            self.cmd_set_viewport(
-                0.0,
-                0.0,
-                extents.width as f32,
-                extents.height as f32,
-                0.0,
-                1.0,
-            )
-            .unwrap();
-
-            self.cmd_set_scissor(0, 0, extents.width, extents.height)
-                .unwrap();
-
             Ok(())
-        })
+        });
+        result?;
+
+        self.cmd_set_viewport(
+            0.0,
+            0.0,
+            extents.width as f32,
+            extents.height as f32,
+            0.0,
+            1.0,
+        )?;
+
+        self.cmd_set_scissor(0, 0, extents.width, extents.height)
     }
 
     pub fn end_current_encoders(
         &self,
         force_barrier: bool,
     ) -> RafxResult<()> {
-        let barrier_flags = self.queue.barrier_flags();
+        Self::do_end_current_encoders(&self.queue, &mut *self.inner.borrow_mut(), force_barrier)
+    }
 
-        if let Some(render_encoder) = self.swap_render_encoder(None) {
+    pub fn do_end_current_encoders(
+        queue: &RafxQueueMetal,
+        inner: &mut RafxCommandBufferMetalInner,
+        force_barrier: bool,
+    ) -> RafxResult<()> {
+        let barrier_flags = queue.barrier_flags();
+
+        if let Some(render_encoder) = inner.render_encoder.take() {
             if !barrier_flags.is_empty() || force_barrier {
-                render_encoder.update_fence(self.queue.metal_fence(), MTLRenderStages::Fragment);
-                self.queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
+                render_encoder.update_fence(queue.metal_fence(), MTLRenderStages::Fragment);
+                queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
             }
 
             render_encoder.end_encoding();
-        } else if let Some(compute_encoder) = self.swap_compute_encoder(None) {
+        } else if let Some(compute_encoder) = inner.compute_encoder.take() {
             if !barrier_flags.is_empty() || force_barrier {
-                compute_encoder.update_fence(self.queue.metal_fence());
-                self.queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
+                compute_encoder.update_fence(queue.metal_fence());
+                queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
             }
 
             compute_encoder.end_encoding();
-        } else if let Some(blit_encoder) = self.swap_blit_encoder(None) {
+        } else if let Some(blit_encoder) = inner.blit_encoder.take() {
             if !barrier_flags.is_empty() || force_barrier {
-                blit_encoder.update_fence(self.queue.metal_fence());
-                self.queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
+                blit_encoder.update_fence(queue.metal_fence());
+                queue.add_barrier_flags(BarrierFlagsMetal::FENCE);
             }
 
             blit_encoder.end_encoding();
@@ -277,7 +324,10 @@ impl RafxCommandBufferMetal {
         Ok(())
     }
 
-    fn wait_for_barriers(&self) -> RafxResult<()> {
+    fn wait_for_barriers(
+        &self,
+        inner: &RafxCommandBufferMetalInner,
+    ) -> RafxResult<()> {
         let barrier_flags = self.queue.barrier_flags();
         if barrier_flags.is_empty() {
             return Ok(());
@@ -286,11 +336,11 @@ impl RafxCommandBufferMetal {
         //TODO: Add support for memory barriers to metal_rs so this can be more fine-grained
         // (use memoryBarrierWithScope)
 
-        if let Some(render_encoder) = self.metal_render_encoder() {
+        if let Some(render_encoder) = &inner.render_encoder {
             render_encoder.wait_for_fence(self.queue.metal_fence(), MTLRenderStages::Vertex);
-        } else if let Some(compute_encoder) = self.metal_compute_encoder() {
+        } else if let Some(compute_encoder) = &inner.compute_encoder {
             compute_encoder.wait_for_fence(self.queue.metal_fence());
-        } else if let Some(blit_encoder) = self.metal_blit_encoder() {
+        } else if let Some(blit_encoder) = &inner.blit_encoder {
             blit_encoder.wait_for_fence(self.queue.metal_fence());
         }
 
@@ -312,7 +362,10 @@ impl RafxCommandBufferMetal {
         depth_min: f32,
         depth_max: f32,
     ) -> RafxResult<()> {
-        self.metal_render_encoder()
+        self.inner
+            .borrow()
+            .render_encoder
+            .as_ref()
             .unwrap()
             .set_viewport(MTLViewport {
                 originX: x as _,
@@ -333,15 +386,18 @@ impl RafxCommandBufferMetal {
         mut width: u32,
         mut height: u32,
     ) -> RafxResult<()> {
-        let max_x = self.current_render_targets_width.load(Ordering::Relaxed);
-        let max_y = self.current_render_targets_height.load(Ordering::Relaxed);
+        let inner = self.inner.borrow();
+        let max_x = inner.current_render_targets_width;
+        let max_y = inner.current_render_targets_height;
 
         x = x.min(max_x);
         y = y.min(max_y);
         width = width.min(max_x - x);
         height = height.min(max_y - y);
 
-        self.metal_render_encoder()
+        inner
+            .render_encoder
+            .as_ref()
             .unwrap()
             .set_scissor_rect(MTLScissorRect {
                 x: x as _,
@@ -357,7 +413,10 @@ impl RafxCommandBufferMetal {
         &self,
         value: u32,
     ) -> RafxResult<()> {
-        self.metal_render_encoder()
+        self.inner
+            .borrow()
+            .render_encoder
+            .as_ref()
             .unwrap()
             .set_stencil_reference_value(value);
         Ok(())
@@ -368,15 +427,15 @@ impl RafxCommandBufferMetal {
         pipeline: &RafxPipelineMetal,
     ) -> RafxResult<()> {
         objc::rc::autoreleasepool(|| {
-            let last_pipeline_type = self.last_pipeline_type.load(Ordering::Relaxed);
-            self.last_pipeline_type
-                .store(pipeline.pipeline_type() as u8, Ordering::Relaxed);
+            let mut inner = self.inner.borrow_mut();
+            let last_pipeline_type = inner.last_pipeline_type;
+            inner.last_pipeline_type = Some(pipeline.pipeline_type());
 
-            let barrier_required = last_pipeline_type != pipeline.pipeline_type() as u8;
+            let barrier_required = last_pipeline_type != Some(pipeline.pipeline_type());
 
             match pipeline.pipeline_type() {
                 RafxPipelineType::Graphics => {
-                    let render_encoder = self.metal_render_encoder().unwrap();
+                    let render_encoder = inner.render_encoder.as_ref().unwrap();
                     let render_encoder_info = pipeline.render_encoder_info.as_ref().unwrap();
                     render_encoder
                         .set_render_pipeline_state(pipeline.metal_render_pipeline().unwrap());
@@ -397,36 +456,33 @@ impl RafxCommandBufferMetal {
                         render_encoder.set_depth_stencil_state(mtl_depth_stencil_state);
                     }
 
-                    self.primitive_type.store(
-                        mtl_primitive_type_to_u8(render_encoder_info.mtl_primitive_type),
-                        Ordering::Relaxed,
-                    );
-                    self.flush_render_targets_to_make_readable();
+                    inner.primitive_type = render_encoder_info.mtl_primitive_type;
+                    self.flush_render_targets_to_make_readable(&mut *inner);
                 }
                 RafxPipelineType::Compute => {
-                    if !self.metal_compute_encoder().is_some() {
-                        self.end_current_encoders(barrier_required)?;
+                    if !inner.compute_encoder.is_some() {
+                        Self::do_end_current_encoders(&self.queue, &mut *inner, barrier_required)?;
 
-                        let compute_encoder = self
-                            .metal_command_buffer()
+                        let compute_encoder = inner
+                            .command_buffer
+                            .as_ref()
                             .unwrap()
                             .new_compute_command_encoder();
-                        self.swap_compute_encoder(Some(compute_encoder.to_owned()));
+                        inner.compute_encoder = Some(compute_encoder.to_owned());
                     }
 
                     let compute_encoder_info = pipeline.compute_encoder_info.as_ref().unwrap();
                     let compute_threads_per_group = compute_encoder_info.compute_threads_per_group;
-                    self.compute_threads_per_group_x
-                        .store(compute_threads_per_group[0], Ordering::Relaxed);
-                    self.compute_threads_per_group_y
-                        .store(compute_threads_per_group[1], Ordering::Relaxed);
-                    self.compute_threads_per_group_z
-                        .store(compute_threads_per_group[2], Ordering::Relaxed);
+                    inner.compute_threads_per_group_x = compute_threads_per_group[0];
+                    inner.compute_threads_per_group_y = compute_threads_per_group[1];
+                    inner.compute_threads_per_group_z = compute_threads_per_group[2];
 
-                    self.metal_compute_encoder()
+                    inner
+                        .compute_encoder
+                        .as_ref()
                         .unwrap()
                         .set_compute_pipeline_state(pipeline.metal_compute_pipeline().unwrap());
-                    self.flush_render_targets_to_make_readable();
+                    self.flush_render_targets_to_make_readable(&mut *inner);
                 }
             }
 
@@ -434,10 +490,12 @@ impl RafxCommandBufferMetal {
         })
     }
 
-    fn flush_render_targets_to_make_readable(&self) {
-        if let Some(render_encoder) = self.metal_render_encoder() {
-            let mut guard = self.inner.lock().unwrap();
-            for attachment in &guard.render_targets_to_make_readable {
+    fn flush_render_targets_to_make_readable(
+        &self,
+        inner: &mut RafxCommandBufferMetalInner,
+    ) {
+        if let Some(render_encoder) = &inner.render_encoder {
+            for attachment in &inner.render_targets_to_make_readable {
                 render_encoder.use_resource(
                     attachment
                         .texture()
@@ -448,10 +506,9 @@ impl RafxCommandBufferMetal {
                 );
             }
 
-            guard.render_targets_to_make_readable.clear();
-        } else if let Some(compute_encoder) = self.metal_compute_encoder() {
-            let mut guard = self.inner.lock().unwrap();
-            for attachment in &guard.render_targets_to_make_readable {
+            inner.render_targets_to_make_readable.clear();
+        } else if let Some(compute_encoder) = &inner.compute_encoder {
+            for attachment in &inner.render_targets_to_make_readable {
                 compute_encoder.use_resource(
                     attachment
                         .texture()
@@ -462,7 +519,7 @@ impl RafxCommandBufferMetal {
                 );
             }
 
-            guard.render_targets_to_make_readable.clear();
+            inner.render_targets_to_make_readable.clear();
         }
     }
 
@@ -471,7 +528,8 @@ impl RafxCommandBufferMetal {
         first_binding: u32,
         bindings: &[RafxVertexBufferBinding],
     ) -> RafxResult<()> {
-        let render_encoder = self.metal_render_encoder().unwrap();
+        let inner = self.inner.borrow();
+        let render_encoder = inner.render_encoder.as_ref().unwrap();
 
         let mut binding_index = first_binding;
         for binding in bindings {
@@ -491,27 +549,21 @@ impl RafxCommandBufferMetal {
         &self,
         binding: &RafxIndexBufferBinding,
     ) -> RafxResult<()> {
-        self.swap_current_index_buffer(Some(
+        let mut inner = self.inner.borrow_mut();
+        inner.current_index_buffer = Some(
             binding
                 .buffer
                 .metal_buffer()
                 .unwrap()
                 .metal_buffer()
                 .to_owned(),
-        ));
-        self.current_index_buffer_offset
-            .store(binding.offset, Ordering::Relaxed);
-        self.current_index_buffer_type.store(
-            mtl_index_type_to_u8(binding.index_type.into()),
-            Ordering::Relaxed,
         );
-        self.current_index_buffer_stride.store(
-            match binding.index_type {
-                RafxIndexType::Uint32 => std::mem::size_of::<u32>() as _,
-                RafxIndexType::Uint16 => std::mem::size_of::<u16>() as _,
-            },
-            Ordering::Relaxed,
-        );
+        inner.current_index_buffer_offset = binding.offset;
+        inner.current_index_buffer_type = binding.index_type.into();
+        inner.current_index_buffer_stride = match binding.index_type {
+            RafxIndexType::Uint32 => std::mem::size_of::<u32>() as _,
+            RafxIndexType::Uint16 => std::mem::size_of::<u16>() as _,
+        };
         Ok(())
     }
 
@@ -524,6 +576,7 @@ impl RafxCommandBufferMetal {
             .metal_argument_buffer_and_offset(index)
             .unwrap();
         self.do_bind_descriptor_set(
+            &*self.inner.borrow(),
             descriptor_set_array
                 .root_signature()
                 .metal_root_signature()
@@ -546,6 +599,7 @@ impl RafxCommandBufferMetal {
         let offset = descriptor_set_handle.offset();
         let array_index = descriptor_set_handle.array_index();
         self.do_bind_descriptor_set(
+            &*self.inner.borrow(),
             root_signature,
             set_index,
             buffer,
@@ -557,6 +611,7 @@ impl RafxCommandBufferMetal {
 
     fn do_bind_descriptor_set(
         &self,
+        inner: &RafxCommandBufferMetalInner,
         root_signature: &RafxRootSignatureMetal,
         set_index: u32,
         argument_buffer: &metal_rs::BufferRef,
@@ -566,8 +621,9 @@ impl RafxCommandBufferMetal {
     ) -> RafxResult<()> {
         match root_signature.pipeline_type() {
             RafxPipelineType::Graphics => {
-                let render_encoder = self
-                    .metal_render_encoder()
+                let render_encoder = inner
+                    .render_encoder
+                    .as_ref()
                     .ok_or("Must bind render targets before binding graphics descriptor sets")?;
                 render_encoder.set_vertex_buffer(
                     set_index as _,
@@ -583,8 +639,9 @@ impl RafxCommandBufferMetal {
                     .make_resources_resident_render_encoder(array_index, render_encoder);
             }
             RafxPipelineType::Compute => {
-                let compute_encoder = self
-                    .metal_compute_encoder()
+                let compute_encoder = inner
+                    .compute_encoder
+                    .as_ref()
                     .ok_or("Must bind compute pipeline before binding compute descriptor sets")?;
                 compute_encoder.set_buffer(
                     set_index as _,
@@ -604,8 +661,9 @@ impl RafxCommandBufferMetal {
         vertex_count: u32,
         first_vertex: u32,
     ) -> RafxResult<()> {
-        self.metal_render_encoder().unwrap().draw_primitives(
-            self.primitive_type(),
+        let inner = self.inner.borrow();
+        inner.render_encoder.as_ref().unwrap().draw_primitives(
+            inner.primitive_type,
             first_vertex as _,
             vertex_count as _,
         );
@@ -624,20 +682,26 @@ impl RafxCommandBufferMetal {
             assert_eq!(first_instance, 0);
         }
 
+        let inner = self.inner.borrow();
+
         if first_instance == 0 {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_primitives_instanced(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     first_vertex as _,
                     vertex_count as _,
                     instance_count as _,
                 );
         } else {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_primitives_instanced_base_instance(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     first_vertex as _,
                     vertex_count as _,
                     instance_count as _,
@@ -658,25 +722,30 @@ impl RafxCommandBufferMetal {
             assert_eq!(vertex_offset, 0);
         }
 
-        let stride = self.current_index_buffer_stride.load(Ordering::Relaxed);
+        let inner = self.inner.borrow();
+        let stride = inner.current_index_buffer_stride;
         if vertex_offset == 0 {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_indexed_primitives(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     index_count as _,
-                    self.index_type(),
-                    self.metal_current_index_buffer().unwrap(),
+                    inner.current_index_buffer_type,
+                    inner.current_index_buffer.as_ref().unwrap(),
                     (stride * first_index) as _,
                 );
         } else {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_indexed_primitives_instanced_base_instance(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     index_count as _,
-                    self.index_type(),
-                    self.metal_current_index_buffer().unwrap(),
+                    inner.current_index_buffer_type,
+                    inner.current_index_buffer.as_ref().unwrap(),
                     (stride * first_index) as _,
                     1,
                     vertex_offset as _,
@@ -701,26 +770,31 @@ impl RafxCommandBufferMetal {
             assert_eq!(first_instance, 0);
         }
 
-        let stride = self.current_index_buffer_stride.load(Ordering::Relaxed);
+        let inner = self.inner.borrow();
+        let stride = inner.current_index_buffer_stride;
         if vertex_offset == 0 && first_instance == 0 {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_indexed_primitives_instanced(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     index_count as _,
-                    self.index_type(),
-                    self.metal_current_index_buffer().unwrap(),
+                    inner.current_index_buffer_type,
+                    inner.current_index_buffer.as_ref().unwrap(),
                     (stride * first_index) as _,
                     instance_count as _,
                 );
         } else {
-            self.metal_render_encoder()
+            inner
+                .render_encoder
+                .as_ref()
                 .unwrap()
                 .draw_indexed_primitives_instanced_base_instance(
-                    self.primitive_type(),
+                    inner.primitive_type,
                     index_count as _,
-                    self.index_type(),
-                    self.metal_current_index_buffer().unwrap(),
+                    inner.current_index_buffer_type,
+                    inner.current_index_buffer.as_ref().unwrap(),
                     (stride * first_index) as _,
                     instance_count as _,
                     vertex_offset as _,
@@ -737,15 +811,12 @@ impl RafxCommandBufferMetal {
         group_count_y: u32,
         group_count_z: u32,
     ) -> RafxResult<()> {
-        self.wait_for_barriers()?;
-        let thread_per_group_x = self.compute_threads_per_group_x.load(Ordering::Relaxed);
-        let thread_per_group_y = self.compute_threads_per_group_y.load(Ordering::Relaxed);
-        let thread_per_group_z = self.compute_threads_per_group_z.load(Ordering::Relaxed);
-
+        let inner = self.inner.borrow();
+        self.wait_for_barriers(&*inner)?;
         let thread_per_group = MTLSize {
-            width: thread_per_group_x as _,
-            height: thread_per_group_y as _,
-            depth: thread_per_group_z as _,
+            width: inner.compute_threads_per_group_x as _,
+            height: inner.compute_threads_per_group_y as _,
+            depth: inner.compute_threads_per_group_z as _,
         };
 
         let group_count = MTLSize {
@@ -754,7 +825,9 @@ impl RafxCommandBufferMetal {
             depth: group_count_z as _,
         };
 
-        self.metal_compute_encoder()
+        inner
+            .compute_encoder
+            .as_ref()
             .unwrap()
             .dispatch_thread_groups(group_count, thread_per_group);
         Ok(())
@@ -778,14 +851,14 @@ impl RafxCommandBufferMetal {
             self.queue
                 .add_barrier_flags(BarrierFlagsMetal::RENDER_TARGETS);
 
-            let mut guard = self.inner.lock().unwrap();
+            let mut inner = self.inner.borrow_mut();
             for rt in render_target_barriers {
                 if rt.src_state.intersects(RafxResourceState::RENDER_TARGET)
                     && rt.dst_state.intersects(
                         RafxResourceState::UNORDERED_ACCESS | RafxResourceState::SHADER_RESOURCE,
                     )
                 {
-                    guard
+                    inner
                         .render_targets_to_make_readable
                         .insert(rt.render_target.metal_render_target().unwrap().clone());
                 }
@@ -803,19 +876,21 @@ impl RafxCommandBufferMetal {
         dst_offset: u64,
         size: u64,
     ) -> RafxResult<()> {
-        let blit_encoder = self.metal_blit_encoder();
+        let mut inner = self.inner.borrow_mut();
+        let blit_encoder = inner.blit_encoder.as_ref();
         let blit_encoder = match blit_encoder {
             Some(x) => x,
             None => {
                 let result: RafxResult<&metal_rs::BlitCommandEncoderRef> =
                     objc::rc::autoreleasepool(|| {
-                        self.end_current_encoders(false)?;
-                        let encoder = self
-                            .metal_command_buffer()
+                        Self::do_end_current_encoders(&self.queue, &mut *inner, false)?;
+                        let encoder = inner
+                            .command_buffer
+                            .as_ref()
                             .unwrap()
                             .new_blit_command_encoder();
-                        self.swap_blit_encoder(Some(encoder.to_owned()));
-                        Ok(self.metal_blit_encoder().unwrap())
+                        inner.blit_encoder = Some(encoder.to_owned());
+                        Ok(inner.blit_encoder.as_ref().unwrap().as_ref())
                     });
                 result?
             }
@@ -837,19 +912,21 @@ impl RafxCommandBufferMetal {
         dst_texture: &RafxTextureMetal,
         params: &RafxCmdCopyBufferToTextureParams,
     ) -> RafxResult<()> {
-        let blit_encoder = self.metal_blit_encoder();
+        let mut inner = self.inner.borrow_mut();
+        let blit_encoder = inner.blit_encoder.as_ref();
         let blit_encoder = match blit_encoder {
             Some(x) => x,
             None => {
                 let result: RafxResult<&metal_rs::BlitCommandEncoderRef> =
                     objc::rc::autoreleasepool(|| {
-                        self.end_current_encoders(false)?;
-                        let encoder = self
-                            .metal_command_buffer()
+                        Self::do_end_current_encoders(&self.queue, &mut *inner, false)?;
+                        let encoder = inner
+                            .command_buffer
+                            .as_ref()
                             .unwrap()
                             .new_blit_command_encoder();
-                        self.swap_blit_encoder(Some(encoder.to_owned()));
-                        Ok(self.metal_blit_encoder().unwrap())
+                        inner.blit_encoder = Some(encoder.to_owned());
+                        Ok(inner.blit_encoder.as_ref().unwrap().as_ref())
                     });
                 result?
             }
@@ -909,252 +986,5 @@ impl RafxCommandBufferMetal {
         //TODO: Implementing this requires having a custom shader/pipeline loaded and drawing
         //triangles
         unimplemented!();
-    }
-
-    pub(crate) fn swap_command_buffer(
-        &self,
-        command_buffer: Option<metal_rs::CommandBuffer>,
-    ) -> Option<metal_rs::CommandBuffer> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let ptr = if let Some(command_buffer) = command_buffer {
-            let ptr = command_buffer.as_ptr();
-            std::mem::forget(command_buffer);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.command_buffer.swap(ptr, Ordering::Relaxed);
-        if !ptr.is_null() {
-            unsafe { Some(metal_rs::CommandBuffer::from_ptr(ptr)) }
-        } else {
-            None
-        }
-    }
-
-    fn swap_render_encoder(
-        &self,
-        render_encoder: Option<metal_rs::RenderCommandEncoder>,
-    ) -> Option<metal_rs::RenderCommandEncoder> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let _has_render_encoder = render_encoder.is_some();
-        let ptr = if let Some(render_encoder) = render_encoder {
-            let ptr = render_encoder.as_ptr();
-            std::mem::forget(render_encoder);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.render_encoder.swap(ptr, Ordering::Relaxed);
-        let old_encoder = if !ptr.is_null() {
-            unsafe { Some(metal_rs::RenderCommandEncoder::from_ptr(ptr)) }
-        } else {
-            None
-        };
-
-        // Verify only one encoder exists at a time
-        debug_assert!(
-            !_has_render_encoder || self.compute_encoder.load(Ordering::Relaxed).is_null()
-        );
-        debug_assert!(!_has_render_encoder || self.blit_encoder.load(Ordering::Relaxed).is_null());
-        old_encoder
-    }
-
-    fn swap_compute_encoder(
-        &self,
-        compute_encoder: Option<metal_rs::ComputeCommandEncoder>,
-    ) -> Option<metal_rs::ComputeCommandEncoder> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let _has_compute_encoder = compute_encoder.is_some();
-        let ptr = if let Some(compute_encoder) = compute_encoder {
-            let ptr = compute_encoder.as_ptr();
-            std::mem::forget(compute_encoder);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.compute_encoder.swap(ptr, Ordering::Relaxed);
-        let old_encoder = if !ptr.is_null() {
-            unsafe { Some(metal_rs::ComputeCommandEncoder::from_ptr(ptr)) }
-        } else {
-            None
-        };
-
-        // Verify only one encoder exists at a time
-        debug_assert!(
-            !_has_compute_encoder || self.render_encoder.load(Ordering::Relaxed).is_null()
-        );
-        debug_assert!(!_has_compute_encoder || self.blit_encoder.load(Ordering::Relaxed).is_null());
-        old_encoder
-    }
-
-    fn swap_blit_encoder(
-        &self,
-        blit_encoder: Option<metal_rs::BlitCommandEncoder>,
-    ) -> Option<metal_rs::BlitCommandEncoder> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let _has_blit_encoder = blit_encoder.is_some();
-        let ptr = if let Some(blit_encoder) = blit_encoder {
-            let ptr = blit_encoder.as_ptr();
-            std::mem::forget(blit_encoder);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.blit_encoder.swap(ptr, Ordering::Relaxed);
-        let old_encoder = if !ptr.is_null() {
-            unsafe { Some(metal_rs::BlitCommandEncoder::from_ptr(ptr)) }
-        } else {
-            None
-        };
-
-        // Verify only one encoder exists at a time
-        debug_assert!(!_has_blit_encoder || self.render_encoder.load(Ordering::Relaxed).is_null());
-        debug_assert!(!_has_blit_encoder || self.compute_encoder.load(Ordering::Relaxed).is_null());
-        old_encoder
-    }
-
-    fn swap_current_index_buffer(
-        &self,
-        index_buffer: Option<metal_rs::Buffer>,
-    ) -> Option<metal_rs::Buffer> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let ptr = if let Some(index_buffer) = index_buffer {
-            let ptr = index_buffer.as_ptr();
-            std::mem::forget(index_buffer);
-            ptr
-        } else {
-            std::ptr::null_mut() as _
-        };
-
-        let ptr = self.current_index_buffer.swap(ptr, Ordering::Relaxed);
-        let old_encoder = if !ptr.is_null() {
-            unsafe { Some(metal_rs::Buffer::from_ptr(ptr)) }
-        } else {
-            None
-        };
-
-        old_encoder
-    }
-
-    pub fn metal_command_buffer(&self) -> Option<&metal_rs::CommandBufferRef> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let command_buffer = self.command_buffer.load(Ordering::Relaxed);
-        if !command_buffer.is_null() {
-            unsafe { Some(metal_rs::CommandBufferRef::from_ptr(command_buffer)) }
-        } else {
-            None
-        }
-    }
-
-    pub fn metal_render_encoder(&self) -> Option<&metal_rs::RenderCommandEncoderRef> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let render_encoder = self.render_encoder.load(Ordering::Relaxed);
-        if !render_encoder.is_null() {
-            unsafe { Some(metal_rs::RenderCommandEncoderRef::from_ptr(render_encoder)) }
-        } else {
-            None
-        }
-    }
-
-    pub fn metal_compute_encoder(&self) -> Option<&metal_rs::ComputeCommandEncoderRef> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let compute_encoder = self.compute_encoder.load(Ordering::Relaxed);
-        if !compute_encoder.is_null() {
-            unsafe {
-                Some(metal_rs::ComputeCommandEncoderRef::from_ptr(
-                    compute_encoder,
-                ))
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn metal_blit_encoder(&self) -> Option<&metal_rs::BlitCommandEncoderRef> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let blit_encoder = self.blit_encoder.load(Ordering::Relaxed);
-        if !blit_encoder.is_null() {
-            unsafe { Some(metal_rs::BlitCommandEncoderRef::from_ptr(blit_encoder)) }
-        } else {
-            None
-        }
-    }
-
-    pub fn metal_current_index_buffer(&self) -> Option<&metal_rs::BufferRef> {
-        use foreign_types_shared::ForeignType;
-        use foreign_types_shared::ForeignTypeRef;
-
-        let index_buffer = self.current_index_buffer.load(Ordering::Relaxed);
-        if !index_buffer.is_null() {
-            unsafe { Some(metal_rs::BufferRef::from_ptr(index_buffer)) }
-        } else {
-            None
-        }
-    }
-
-    fn primitive_type(&self) -> MTLPrimitiveType {
-        u8_to_mtl_primitive_type(self.primitive_type.load(Ordering::Relaxed))
-    }
-
-    fn index_type(&self) -> MTLIndexType {
-        u8_to_mtl_index_type(self.current_index_buffer_type.load(Ordering::Relaxed))
-    }
-}
-
-fn mtl_primitive_type_to_u8(primitive_type: MTLPrimitiveType) -> u8 {
-    match primitive_type {
-        MTLPrimitiveType::Point => 0,
-        MTLPrimitiveType::Line => 1,
-        MTLPrimitiveType::LineStrip => 2,
-        MTLPrimitiveType::Triangle => 3,
-        MTLPrimitiveType::TriangleStrip => 4,
-    }
-}
-
-fn u8_to_mtl_primitive_type(primitive_type: u8) -> MTLPrimitiveType {
-    match primitive_type {
-        0 => MTLPrimitiveType::Point,
-        1 => MTLPrimitiveType::Line,
-        2 => MTLPrimitiveType::LineStrip,
-        3 => MTLPrimitiveType::Triangle,
-        4 => MTLPrimitiveType::TriangleStrip,
-        _ => unreachable!(),
-    }
-}
-
-fn mtl_index_type_to_u8(index_type: MTLIndexType) -> u8 {
-    match index_type {
-        MTLIndexType::UInt16 => 0,
-        MTLIndexType::UInt32 => 1,
-    }
-}
-
-fn u8_to_mtl_index_type(index_type: u8) -> MTLIndexType {
-    match index_type {
-        0 => MTLIndexType::UInt16,
-        1 => MTLIndexType::UInt32,
-        _ => unreachable!(),
     }
 }

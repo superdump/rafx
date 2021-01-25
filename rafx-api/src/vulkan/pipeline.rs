@@ -168,11 +168,13 @@ impl RafxPipelineVulkan {
             .alpha_to_coverage_enable(false) // pipeline_def.blend_state.alpha_to_coverage_enable?
             .alpha_to_one_enable(false);
 
-        let rasterization_state = pipeline_def.rasterizer_state.into_vk_create_info();
-        let depth_state = pipeline_def.depth_state.into_vk_create_info();
-        let blend_state = pipeline_def
-            .blend_state
-            .into_vk_create_info(pipeline_def.color_formats.len());
+        let rasterization_state =
+            super::util::rasterizer_state_to_create_info(&pipeline_def.rasterizer_state);
+        let depth_state = super::util::depth_state_to_create_info(pipeline_def.depth_state);
+        let blend_state = super::util::blend_state_to_create_info(
+            pipeline_def.blend_state,
+            pipeline_def.color_formats.len(),
+        );
 
         let dynamic_states = [
             vk::DynamicState::VIEWPORT,

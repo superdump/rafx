@@ -187,7 +187,7 @@ impl RafxQueueMetal {
             for command_buffer in command_buffers {
                 command_buffer.end_current_encoders(false)?;
                 command_buffer.metal_command_buffer().unwrap().commit();
-                command_buffer.swap_command_buffer(None);
+                command_buffer.clear_command_buffer();
             }
 
             Ok(())
@@ -204,7 +204,7 @@ impl RafxQueueMetal {
             self.submit_semaphore_wait(wait_semaphores);
 
             let command_buffer = self.inner.queue.new_command_buffer();
-            let drawable = swapchain.swap_drawable(None).unwrap();
+            let drawable = swapchain.take_drawable().unwrap();
             command_buffer.present_drawable(drawable.as_ref());
             // Invalidate swapchain texture in some way?
             command_buffer.commit();
