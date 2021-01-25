@@ -33,7 +33,7 @@ jobs:
           key: ${{ runner.os }}-cargo-check-test-${{ matrix.toolchain }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build
-        run: cargo check
+        run: cargo check --features "rafx-vulkan" --manifest-path demo/Cargo.toml
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: "-C debuginfo=0 -D warnings"
