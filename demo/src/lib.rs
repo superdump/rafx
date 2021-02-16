@@ -42,9 +42,9 @@ pub struct RenderOptions {
 impl Default for RenderOptions {
     fn default() -> Self {
         RenderOptions {
-            enable_msaa: true,
-            enable_hdr: true,
-            enable_bloom: true,
+            enable_msaa: false,
+            enable_hdr: false,
+            enable_bloom: false,
             blur_pass_count: 5,
         }
     }

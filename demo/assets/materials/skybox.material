@@ -1,0 +1,21 @@
+(
+    passes: [
+        (
+            phase: Some("Opaque"),
+            fixed_function_state: (
+            ),
+            shaders: [
+                (
+                    stage: Vertex,
+                    shader_module: "../shaders/skybox.vert.cookedshaderpackage",
+                    entry_name: "main"
+                ),
+                (
+                    stage: Fragment,
+                    shader_module: "../shaders/skybox.frag.cookedshaderpackage",
+                    entry_name: "main"
+                ),
+            ],
+        ),
+    ]
+)

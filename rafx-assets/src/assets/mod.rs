@@ -7,6 +7,7 @@ pub use self::image::ImageAssetData;
 pub use self::image::ImageAssetDataFormat;
 pub use self::image::ImageAssetMipGeneration;
 pub use self::image::ImageImporter;
+pub use self::image::BasisImageImporter;
 
 mod shader;
 pub use shader::ShaderAsset;

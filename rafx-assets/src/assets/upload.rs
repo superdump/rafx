@@ -664,7 +664,7 @@ impl UploadManager {
                 color_space.rgba8(),
                 request.asset.data,
             ),
-            ImageAssetDataFormat::BasisCompressed(_settings) => {
+            ImageAssetDataFormat::BasisCompressed => {
                 let data = request.asset.data;
                 let mut transcoder = basis_universal::Transcoder::new();
                 transcoder.prepare_transcoding(&data).unwrap();

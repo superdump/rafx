@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::io::Read;
 use type_uuid::*;
+use rafx::api::RafxResourceType;
 
 #[derive(Debug)]
 struct GltfImportError {
@@ -568,6 +569,7 @@ fn extract_images_to_import(
             color_space,
             format,
             mip_generation,
+            RafxResourceType::TEXTURE,
             converted_image.as_raw().as_slice(),
         )
         .unwrap();

@@ -1,9 +1,10 @@
 use distill::loader::handle::Handle;
 use distill::loader::storage::LoadStatus;
-use rafx::api::RafxResult;
+use rafx::api::{RafxResult, RafxBufferDef};
 use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::MaterialAsset;
+use rafx::assets::{MaterialAsset, ImageAsset};
 use rafx::assets::{AssetManager, ComputePipelineAsset};
+use rafx::framework::{BufferResource, ResourceArc};
 
 fn wait_for_asset_to_load<T>(
     asset_handle: &distill::loader::handle::Handle<T>,
@@ -77,6 +78,10 @@ pub struct GameRendererStaticResources {
     pub bloom_blur_material: Handle<MaterialAsset>,
     pub bloom_combine_material: Handle<MaterialAsset>,
     pub imgui_material: Handle<MaterialAsset>,
+    pub skybox_material: Handle<MaterialAsset>,
+    pub skybox_texture: Handle<ImageAsset>,
+    pub skybox_vertex_buffer: ResourceArc<BufferResource>,
+    pub skybox_index_buffer: ResourceArc<BufferResource>,
     pub compute_test: Handle<ComputePipelineAsset>,
 }
 
@@ -123,6 +128,14 @@ impl GameRendererStaticResources {
         //
         let imgui_material =
             asset_resource.load_asset_path::<MaterialAsset, _>("materials/imgui.material");
+
+        //
+        // Skybox resources
+        //
+        let skybox_material =
+            asset_resource.load_asset_path::<MaterialAsset, _>("materials/skybox.material");
+        let skybox_texture =
+            asset_resource.load_asset_path::<ImageAsset, _>("textures/skybox.basis");
 
         //
         // Compute pipeline
@@ -173,11 +186,37 @@ impl GameRendererStaticResources {
         )?;
 
         wait_for_asset_to_load(
+            &skybox_material,
+            asset_resource,
+            asset_manager,
+            "skybox material",
+        )?;
+
+        wait_for_asset_to_load(
+            &skybox_texture,
+            asset_resource,
+            asset_manager,
+            "skybox texture",
+        )?;
+
+        wait_for_asset_to_load(
             &compute_test,
             asset_resource,
             asset_manager,
             "compute pipeline",
         )?;
+
+        let skybox_vertex_buffer = asset_manager.device_context().create_buffer(
+            &RafxBufferDef::for_staging_vertex_buffer_data(&crate::features::skybox::SKYBOX_CUBE_VERTEX_BUFFER_DATA)
+        )?;
+        skybox_vertex_buffer.copy_to_host_visible_buffer(&crate::features::skybox::SKYBOX_CUBE_VERTEX_BUFFER_DATA)?;
+        let skybox_vertex_buffer = asset_manager.resource_manager().resources().insert_buffer(skybox_vertex_buffer);
+
+        let skybox_index_buffer = asset_manager.device_context().create_buffer(
+            &RafxBufferDef::for_staging_index_buffer_data(&crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA)
+        )?;
+        skybox_index_buffer.copy_to_host_visible_buffer(&crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA)?;
+        let skybox_index_buffer = asset_manager.resource_manager().resources().insert_buffer(skybox_index_buffer);
 
         Ok(GameRendererStaticResources {
             sprite_material,
@@ -186,6 +225,10 @@ impl GameRendererStaticResources {
             bloom_blur_material,
             bloom_combine_material,
             imgui_material,
+            skybox_material,
+            skybox_texture,
+            skybox_vertex_buffer,
+            skybox_index_buffer,
             compute_test,
         })
     }

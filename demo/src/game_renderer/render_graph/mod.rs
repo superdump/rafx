@@ -5,8 +5,8 @@ use rafx::api::{
     RafxResult, RafxSampleCount,
 };
 use rafx::framework::VertexDataSetLayout;
-use rafx::framework::{ComputePipelineResource, ResourceContext};
-use rafx::framework::{ImageViewResource, MaterialPassResource, ResourceArc};
+use rafx::framework::ResourceContext;
+use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::graph::*;
 use rafx::nodes::{PreparedRenderData, RenderView};
 
@@ -18,6 +18,10 @@ use opaque_pass::OpaquePass;
 
 mod bloom_extract_pass;
 use bloom_extract_pass::BloomExtractPass;
+use crate::game_renderer::GameRendererStaticResources;
+use crate::game_renderer::swapchain_resources::SwapchainResources;
+use distill::loader::handle::AssetHandle;
+use rafx::assets::AssetManager;
 
 mod bloom_blur_pass;
 
@@ -68,15 +72,13 @@ struct RenderGraphContext<'a> {
 pub fn build_render_graph(
     device_context: &RafxDeviceContext,
     resource_context: &ResourceContext,
+    asset_manager: &AssetManager,
     graph_config: &RenderGraphConfig,
-    swapchain_surface_info: &SwapchainSurfaceInfo,
     swapchain_image: ResourceArc<ImageViewResource>,
     main_view: RenderView,
     shadow_map_views: &[ShadowMapRenderView],
-    bloom_extract_material_pass: ResourceArc<MaterialPassResource>,
-    bloom_blur_material_pass: ResourceArc<MaterialPassResource>,
-    bloom_combine_material_pass: ResourceArc<MaterialPassResource>,
-    test_compute_pipeline: &ResourceArc<ComputePipelineResource>,
+    swapchain_resources: &SwapchainResources,
+    static_resources: &GameRendererStaticResources,
 ) -> RafxResult<BuildRenderGraphResult> {
     profiling::scope!("Build Render Graph");
 
@@ -92,10 +94,48 @@ pub fn build_render_graph(
 
     let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context, shadow_map_views);
 
-    let compute_test_pass =
-        compute_test::compute_test_pass(&mut graph_context, test_compute_pipeline);
+    let compute_test_pipeline = asset_manager
+        .loaded_assets()
+        .compute_pipelines
+        .get_committed(static_resources.compute_test.load_handle())
+        .unwrap()
+        .compute_pipeline
+        .clone();
 
-    let opaque_pass = opaque_pass::opaque_pass(&mut graph_context, &shadow_maps);
+    let compute_test_pass =
+        compute_test::compute_test_pass(&mut graph_context, &compute_test_pipeline);
+
+    let bloom_extract_material_pass = asset_manager
+        .get_material_pass_by_index(&static_resources.bloom_extract_material, 0)
+        .unwrap();
+
+    let bloom_blur_material_pass = asset_manager
+        .get_material_pass_by_index(&static_resources.bloom_blur_material, 0)
+        .unwrap();
+
+    let bloom_combine_material_pass = asset_manager
+        .get_material_pass_by_index(&static_resources.bloom_combine_material, 0)
+        .unwrap();
+
+    let skybox_material_pass = asset_manager
+        .get_material_pass_by_index(&static_resources.skybox_material, 0)
+        .unwrap();
+
+    let skybox_texture = asset_manager
+        .get_image_asset(&static_resources.skybox_texture)
+        .unwrap()
+        .image_view
+        .clone();
+
+    let opaque_pass = opaque_pass::opaque_pass(
+        &mut graph_context,
+        skybox_material_pass,
+        skybox_texture,
+        static_resources.skybox_vertex_buffer.clone(),
+        static_resources.skybox_index_buffer.clone(),
+        &shadow_maps
+    );
+
     {
         let _out = graph_context.graph.read_storage_buffer(
             opaque_pass.node,
@@ -161,7 +201,7 @@ pub fn build_render_graph(
         &device_context,
         &resource_context,
         graph,
-        swapchain_surface_info,
+        &swapchain_resources.swapchain_surface_info,
         graph_callbacks,
     )?;
 
