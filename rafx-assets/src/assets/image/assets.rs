@@ -105,7 +105,7 @@ impl std::fmt::Debug for ImageAssetData {
 impl ImageAssetData {
     // Temporary - off by default because encoding textures is very slow
     pub fn default_format_and_mip_generation() -> (ImageAssetDataFormatConfig, ImageAssetMipGeneration) {
-        let compress_textures = true;
+        let compress_textures = false;
         if compress_textures {
             let basis_settings = ImageAssetBasisCompressionSettings::default_uastc();
             let format_config = ImageAssetDataFormatConfig::BasisCompressed(basis_settings);

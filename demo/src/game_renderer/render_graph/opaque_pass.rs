@@ -145,7 +145,7 @@ pub(super) fn opaque_pass(
                 offset: 0
             })?;
 
-            command_buffer.cmd_draw(crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA.len() as u32, 0)?;
+            command_buffer.cmd_draw_indexed(crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA.len() as u32, 0, 0)?;
 
             Ok(())
         });
