@@ -103,7 +103,7 @@ fn run() -> RafxResult<()> {
             vertex_buffer.copy_to_host_visible_buffer(&vertex_data)?;
 
             let uniform_buffer = device_context
-                .create_buffer(&RafxBufferDef::for_staging_uniform_data(&uniform_data))?;
+                .create_buffer(&RafxBufferDef::for_staging_uniform_buffer_data(&uniform_data))?;
             uniform_buffer.copy_to_host_visible_buffer(&uniform_data)?;
 
             command_pools.push(command_pool);

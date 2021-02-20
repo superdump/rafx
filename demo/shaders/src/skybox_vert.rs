@@ -12,13 +12,15 @@ use rafx_framework::{
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct ArgsStd140 {
-    pub mvp: [[f32; 4]; 4], // +0 (size: 64)
-} // 64 bytes
+    pub inverse_projection: [[f32; 4]; 4], // +0 (size: 64)
+    pub inverse_view: [[f32; 4]; 4],       // +64 (size: 64)
+} // 128 bytes
 
 impl Default for ArgsStd140 {
     fn default() -> Self {
         ArgsStd140 {
-            mvp: <[[f32; 4]; 4]>::default(),
+            inverse_projection: <[[f32; 4]; 4]>::default(),
+            inverse_view: <[[f32; 4]; 4]>::default(),
         }
     }
 }
@@ -29,12 +31,11 @@ pub const SMP_DESCRIPTOR_SET_INDEX: usize = 0;
 pub const SMP_DESCRIPTOR_BINDING_INDEX: usize = 0;
 pub const SKYBOX_TEX_DESCRIPTOR_SET_INDEX: usize = 0;
 pub const SKYBOX_TEX_DESCRIPTOR_BINDING_INDEX: usize = 1;
-pub const UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX: usize = 0;
-pub const UNIFORM_BUFFER_DESCRIPTOR_BINDING_INDEX: usize = 2;
+pub const UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX: usize = 1;
+pub const UNIFORM_BUFFER_DESCRIPTOR_BINDING_INDEX: usize = 0;
 
 pub struct DescriptorSet0Args<'a> {
     pub skybox_tex: &'a ResourceArc<ImageViewResource>,
-    pub uniform_buffer: &'a ArgsUniform,
 }
 
 impl<'a> DescriptorSetInitializer<'a> for DescriptorSet0Args<'a> {
@@ -68,10 +69,6 @@ impl DescriptorSet0 {
         args: DescriptorSet0Args,
     ) {
         descriptor_set.set_image(SKYBOX_TEX_DESCRIPTOR_BINDING_INDEX as u32, args.skybox_tex);
-        descriptor_set.set_buffer_data(
-            UNIFORM_BUFFER_DESCRIPTOR_BINDING_INDEX as u32,
-            args.uniform_buffer,
-        );
     }
 
     pub fn set_args(
@@ -79,7 +76,6 @@ impl DescriptorSet0 {
         args: DescriptorSet0Args,
     ) {
         self.set_skybox_tex(args.skybox_tex);
-        self.set_uniform_buffer(args.uniform_buffer);
     }
 
     pub fn set_skybox_tex(
@@ -88,6 +84,61 @@ impl DescriptorSet0 {
     ) {
         self.0
             .set_image(SKYBOX_TEX_DESCRIPTOR_BINDING_INDEX as u32, skybox_tex);
+    }
+
+    pub fn flush(
+        &mut self,
+        descriptor_set_allocator: &mut DescriptorSetAllocator,
+    ) -> RafxResult<()> {
+        self.0.flush(descriptor_set_allocator)
+    }
+}
+
+pub struct DescriptorSet1Args<'a> {
+    pub uniform_buffer: &'a ArgsUniform,
+}
+
+impl<'a> DescriptorSetInitializer<'a> for DescriptorSet1Args<'a> {
+    type Output = DescriptorSet1;
+
+    fn create_dyn_descriptor_set(
+        descriptor_set: DynDescriptorSet,
+        args: Self,
+    ) -> Self::Output {
+        let mut descriptor = DescriptorSet1(descriptor_set);
+        descriptor.set_args(args);
+        descriptor
+    }
+
+    fn create_descriptor_set(
+        descriptor_set_allocator: &mut DescriptorSetAllocator,
+        descriptor_set: DynDescriptorSet,
+        args: Self,
+    ) -> RafxResult<DescriptorSetArc> {
+        let mut descriptor = Self::create_dyn_descriptor_set(descriptor_set, args);
+        descriptor.0.flush(descriptor_set_allocator)?;
+        Ok(descriptor.0.descriptor_set().clone())
+    }
+}
+
+pub struct DescriptorSet1(pub DynDescriptorSet);
+
+impl DescriptorSet1 {
+    pub fn set_args_static(
+        descriptor_set: &mut DynDescriptorSet,
+        args: DescriptorSet1Args,
+    ) {
+        descriptor_set.set_buffer_data(
+            UNIFORM_BUFFER_DESCRIPTOR_BINDING_INDEX as u32,
+            args.uniform_buffer,
+        );
+    }
+
+    pub fn set_args(
+        &mut self,
+        args: DescriptorSet1Args,
+    ) {
+        self.set_uniform_buffer(args.uniform_buffer);
     }
 
     pub fn set_uniform_buffer(
@@ -114,9 +165,12 @@ mod test {
 
     #[test]
     fn test_struct_args_std140() {
-        assert_eq!(std::mem::size_of::<ArgsStd140>(), 64);
+        assert_eq!(std::mem::size_of::<ArgsStd140>(), 128);
         assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
         assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
-        assert_eq!(memoffset::offset_of!(ArgsStd140, mvp), 0);
+        assert_eq!(memoffset::offset_of!(ArgsStd140, inverse_projection), 0);
+        assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
+        assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
+        assert_eq!(memoffset::offset_of!(ArgsStd140, inverse_view), 64);
     }
 }

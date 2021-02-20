@@ -5,12 +5,13 @@ using namespace metal;
 
 struct Args
 {
-    float4x4 mvp;
+    float4x4 inverse_projection;
+    float4x4 inverse_view;
 };
 
-struct spvDescriptorSetBuffer0
+struct spvDescriptorSetBuffer1
 {
-    constant Args* uniform_buffer [[id(2)]];
+    constant Args* uniform_buffer [[id(0)]];
 };
 
 struct main0_out
@@ -19,17 +20,11 @@ struct main0_out
     float4 gl_Position [[position]];
 };
 
-struct main0_in
-{
-    float3 in_pos [[attribute(0)]];
-};
-
-vertex main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]])
+vertex main0_out main0(constant spvDescriptorSetBuffer1& spvDescriptorSet1 [[buffer(1)]], uint gl_VertexIndex [[vertex_id]])
 {
     main0_out out = {};
-    float4 pos = (*spvDescriptorSet0.uniform_buffer).mvp * float4(in.in_pos, 1.0);
-    out.gl_Position = pos.xyww;
-    out.out_texcoord = in.in_pos;
+    out.gl_Position = float4((float((int(gl_VertexIndex) << 1) & 2) * 2.0) - 1.0, (float(int(gl_VertexIndex) & 2) * 2.0) - 1.0, 0.0, 1.0);
+    out.out_texcoord = (((*spvDescriptorSet1.uniform_buffer).inverse_view * (*spvDescriptorSet1.uniform_buffer).inverse_projection) * out.gl_Position).xyz;
     return out;
 }
 

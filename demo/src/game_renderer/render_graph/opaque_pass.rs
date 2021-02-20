@@ -5,8 +5,8 @@ use rafx::graph::*;
 use super::RenderGraphContext;
 use super::ShadowMapImageResources;
 use rafx::api::{RafxColorClearValue, RafxDepthStencilClearValue, RafxVertexBufferBinding, RafxIndexBufferBinding, RafxIndexType};
-use rafx::framework::{MaterialPassResource, ResourceArc, ImageViewResource, BufferResource};
-use crate::features::skybox::SKYBOX_VERTEX_LAYOUT;
+use rafx::framework::{MaterialPassResource, ResourceArc, ImageViewResource, BufferResource, ResourceContext};
+//use crate::features::skybox::SKYBOX_VERTEX_LAYOUT;
 use rafx::nodes::RenderPhase;
 
 pub(super) struct OpaquePass {
@@ -20,8 +20,8 @@ pub(super) fn opaque_pass(
     context: &mut RenderGraphContext,
     skybox_material: ResourceArc<MaterialPassResource>,
     skybox_texture: ResourceArc<ImageViewResource>,
-    skybox_vertex_buffer: ResourceArc<BufferResource>,
-    skybox_index_buffer: ResourceArc<BufferResource>,
+    // skybox_vertex_buffer: ResourceArc<BufferResource>,
+    // skybox_index_buffer: ResourceArc<BufferResource>,
     shadow_map_passes: &[ShadowMapImageResources],
 ) -> OpaquePass {
     let node = context
@@ -79,13 +79,34 @@ pub(super) fn opaque_pass(
         .add_render_phase_dependency::<OpaqueRenderPhase>(node);
 
     let main_view = context.main_view.clone();
+
+    // // Set up a descriptor set pointing at the image so we can sample from it
+    // let mut descriptor_set_allocator = context
+    //     .resource_context
+    //     .create_descriptor_set_allocator();
+
+    // let mvp = (main_view.projection_matrix() * main_view.view_matrix());
+    // println!("mvp: {:?}", mvp.to_cols_array_2d());
+    //
+    // let descriptor_set_layouts = &skybox_material.get_raw().descriptor_set_layouts;
+    // let skybox_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
+    //     &descriptor_set_layouts[shaders::skybox_frag::SKYBOX_TEX_DESCRIPTOR_SET_INDEX],
+    //     shaders::skybox_frag::DescriptorSet0Args {
+    //         uniform_buffer: &shaders::skybox_frag::ArgsUniform {
+    //             mvp: mvp.to_cols_array_2d()
+    //         },
+    //         skybox_tex: &skybox_texture,
+    //     },
+    // ).unwrap();
+    //descriptor_set_allocator.flush_changes();
+
     context
         .graph_callbacks
         .set_renderpass_callback(node, move |args, user_context| {
             let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
-            // user_context
-            //     .prepared_render_data
-            //     .write_view_phase::<OpaqueRenderPhase>(&main_view, &mut write_context)?;
+            user_context
+                .prepared_render_data
+                .write_view_phase::<OpaqueRenderPhase>(&main_view, &mut write_context)?;
 
             //
             // render the skybox last
@@ -100,8 +121,11 @@ pub(super) fn opaque_pass(
                     OpaqueRenderPhase::render_phase_index(),
                     &skybox_material,
                     &args.render_target_meta,
-                    &SKYBOX_VERTEX_LAYOUT,
+                    &super::EMPTY_VERTEX_LAYOUT,
                 )?;
+
+            let mvp = (main_view.projection_matrix() * main_view.view_matrix() * glam::Mat4::from_scale(glam::Vec3::new(1000.0,1000.0,1000.0)));
+            //println!("mvp: {:?}", mvp.to_cols_array_2d());
 
             // Set up a descriptor set pointing at the image so we can sample from it
             let mut descriptor_set_allocator = args
@@ -109,43 +133,49 @@ pub(super) fn opaque_pass(
                 .resource_context()
                 .create_descriptor_set_allocator();
 
-            let mvp = (main_view.projection_matrix() * main_view.view_matrix());
-
             let descriptor_set_layouts = &pipeline.get_raw().descriptor_set_layouts;
-            let skybox_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
+            let skybox_material_dyn_set0 = descriptor_set_allocator.create_descriptor_set(
                 &descriptor_set_layouts[shaders::skybox_frag::SKYBOX_TEX_DESCRIPTOR_SET_INDEX],
                 shaders::skybox_frag::DescriptorSet0Args {
-                    uniform_buffer: &shaders::skybox_frag::ArgsUniform {
-                        mvp: mvp.to_cols_array_2d()
-                    },
                     skybox_tex: &skybox_texture,
                 },
-            )?;
+            ).unwrap();
 
-            // Explicit flush since we're going to use the descriptors immediately
-            descriptor_set_allocator.flush_changes()?;
+            let skybox_material_dyn_set1 = descriptor_set_allocator.create_descriptor_set(
+                &descriptor_set_layouts[shaders::skybox_frag::UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX],
+                shaders::skybox_frag::DescriptorSet1Args {
+                    uniform_buffer: &shaders::skybox_frag::ArgsUniform {
+                        //mvp: mvp.to_cols_array_2d()
+                        inverse_view: main_view.view_matrix().inverse().to_cols_array_2d(),
+                        inverse_projection: main_view.projection_matrix().inverse().to_cols_array_2d(),
+                    },
+                },
+            ).unwrap();
+
+            descriptor_set_allocator.flush_changes();
 
             // Draw calls
             let command_buffer = &args.command_buffer;
             command_buffer.cmd_bind_pipeline(&*pipeline.get_raw().pipeline)?;
-            skybox_material_dyn_set.bind(command_buffer)?;
-            command_buffer.cmd_bind_vertex_buffers(
-                0,
-                &[
-                    RafxVertexBufferBinding {
-                        buffer: &skybox_vertex_buffer.get_raw().buffer,
-                        offset: 0
-                    }
-                ]
-            )?;
+            skybox_material_dyn_set0.bind(command_buffer)?;
+            skybox_material_dyn_set1.bind(command_buffer)?;
+            // command_buffer.cmd_bind_vertex_buffers(
+            //     0,
+            //     &[
+            //         RafxVertexBufferBinding {
+            //             buffer: &skybox_vertex_buffer.get_raw().buffer,
+            //             offset: 0
+            //         }
+            //     ]
+            // )?;
+            //
+            // command_buffer.cmd_bind_index_buffer(&RafxIndexBufferBinding {
+            //     buffer: &skybox_index_buffer.get_raw().buffer,
+            //     index_type: RafxIndexType::Uint16,
+            //     offset: 0
+            // })?;
 
-            command_buffer.cmd_bind_index_buffer(&RafxIndexBufferBinding {
-                buffer: &skybox_index_buffer.get_raw().buffer,
-                index_type: RafxIndexType::Uint16,
-                offset: 0
-            })?;
-
-            command_buffer.cmd_draw_indexed(crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA.len() as u32, 0, 0)?;
+            command_buffer.cmd_draw(3, 0)?;
 
             Ok(())
         });

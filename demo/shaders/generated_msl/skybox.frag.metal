@@ -5,7 +5,8 @@ using namespace metal;
 
 struct Args
 {
-    float4x4 mvp;
+    float4x4 inverse_projection;
+    float4x4 inverse_view;
 };
 
 struct spvDescriptorSetBuffer0
@@ -25,7 +26,7 @@ struct main0_in
 
 fragment main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]])
 {
-    constexpr sampler smp(filter::linear, mip_filter::linear, address::repeat, compare_func::never, max_anisotropy(1));
+    constexpr sampler smp(filter::linear, mip_filter::linear, compare_func::never, max_anisotropy(1));
     main0_out out = {};
     out.out_color = spvDescriptorSet0.skybox_tex.sample(smp, in.in_texcoord);
     return out;

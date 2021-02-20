@@ -64,6 +64,7 @@ pub struct RenderGraphConfig {
 // This just wraps a bunch of values so they don't have to be passed individually to all the passes
 struct RenderGraphContext<'a> {
     graph: &'a mut RenderGraphBuilder,
+    resource_context: &'a ResourceContext,
     graph_config: &'a RenderGraphConfig,
     graph_callbacks: &'a mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
     main_view: &'a RenderView,
@@ -87,6 +88,7 @@ pub fn build_render_graph(
 
     let mut graph_context = RenderGraphContext {
         graph: &mut graph,
+        resource_context,
         graph_callbacks: &mut graph_callbacks,
         graph_config,
         main_view: &main_view,
@@ -131,8 +133,8 @@ pub fn build_render_graph(
         &mut graph_context,
         skybox_material_pass,
         skybox_texture,
-        static_resources.skybox_vertex_buffer.clone(),
-        static_resources.skybox_index_buffer.clone(),
+        // static_resources.skybox_vertex_buffer.clone(),
+        // static_resources.skybox_index_buffer.clone(),
         &shadow_maps
     );
 
