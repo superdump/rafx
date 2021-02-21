@@ -24,7 +24,7 @@ vertex main0_out main0(constant spvDescriptorSetBuffer1& spvDescriptorSet1 [[buf
 {
     main0_out out = {};
     out.gl_Position = float4((float((int(gl_VertexIndex) << 1) & 2) * 2.0) - 1.0, (float(int(gl_VertexIndex) & 2) * 2.0) - 1.0, 0.0, 1.0);
-    out.out_texcoord = (((*spvDescriptorSet1.uniform_buffer).inverse_view * (*spvDescriptorSet1.uniform_buffer).inverse_projection) * out.gl_Position).xyz;
+    out.out_texcoord = float3x3((*spvDescriptorSet1.uniform_buffer).inverse_view[0].xyz, (*spvDescriptorSet1.uniform_buffer).inverse_view[1].xyz, (*spvDescriptorSet1.uniform_buffer).inverse_view[2].xyz) * ((*spvDescriptorSet1.uniform_buffer).inverse_projection * out.gl_Position).xyz;
     return out;
 }
 

@@ -1,10 +1,9 @@
 use distill::loader::handle::Handle;
 use distill::loader::storage::LoadStatus;
-use rafx::api::{RafxResult, RafxBufferDef};
+use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{MaterialAsset, ImageAsset};
 use rafx::assets::{AssetManager, ComputePipelineAsset};
-use rafx::framework::{BufferResource, ResourceArc};
 
 fn wait_for_asset_to_load<T>(
     asset_handle: &distill::loader::handle::Handle<T>,
@@ -80,8 +79,6 @@ pub struct GameRendererStaticResources {
     pub imgui_material: Handle<MaterialAsset>,
     pub skybox_material: Handle<MaterialAsset>,
     pub skybox_texture: Handle<ImageAsset>,
-    // pub skybox_vertex_buffer: ResourceArc<BufferResource>,
-    // pub skybox_index_buffer: ResourceArc<BufferResource>,
     pub compute_test: Handle<ComputePipelineAsset>,
 }
 
@@ -206,18 +203,6 @@ impl GameRendererStaticResources {
             "compute pipeline",
         )?;
 
-        // let skybox_vertex_buffer = asset_manager.device_context().create_buffer(
-        //     &RafxBufferDef::for_staging_vertex_buffer_data(&crate::features::skybox::SKYBOX_CUBE_VERTEX_BUFFER_DATA)
-        // )?;
-        // skybox_vertex_buffer.copy_to_host_visible_buffer(&crate::features::skybox::SKYBOX_CUBE_VERTEX_BUFFER_DATA)?;
-        // let skybox_vertex_buffer = asset_manager.resource_manager().resources().insert_buffer(skybox_vertex_buffer);
-        //
-        // let skybox_index_buffer = asset_manager.device_context().create_buffer(
-        //     &RafxBufferDef::for_staging_index_buffer_data(&crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA)
-        // )?;
-        // skybox_index_buffer.copy_to_host_visible_buffer(&crate::features::skybox::SKYBOX_CUBE_INDEX_BUFFER_DATA)?;
-        // let skybox_index_buffer = asset_manager.resource_manager().resources().insert_buffer(skybox_index_buffer);
-
         Ok(GameRendererStaticResources {
             sprite_material,
             debug3d_material,
@@ -227,8 +212,6 @@ impl GameRendererStaticResources {
             imgui_material,
             skybox_material,
             skybox_texture,
-            // skybox_vertex_buffer,
-            // skybox_index_buffer,
             compute_test,
         })
     }

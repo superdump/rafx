@@ -133,8 +133,6 @@ pub fn build_render_graph(
         &mut graph_context,
         skybox_material_pass,
         skybox_texture,
-        // static_resources.skybox_vertex_buffer.clone(),
-        // static_resources.skybox_index_buffer.clone(),
         &shadow_maps
     );
 

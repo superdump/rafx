@@ -4,9 +4,8 @@ use rafx::graph::*;
 
 use super::RenderGraphContext;
 use super::ShadowMapImageResources;
-use rafx::api::{RafxColorClearValue, RafxDepthStencilClearValue, RafxVertexBufferBinding, RafxIndexBufferBinding, RafxIndexType};
-use rafx::framework::{MaterialPassResource, ResourceArc, ImageViewResource, BufferResource, ResourceContext};
-//use crate::features::skybox::SKYBOX_VERTEX_LAYOUT;
+use rafx::api::{RafxColorClearValue, RafxDepthStencilClearValue};
+use rafx::framework::{MaterialPassResource, ResourceArc, ImageViewResource};
 use rafx::nodes::RenderPhase;
 
 pub(super) struct OpaquePass {
@@ -20,8 +19,6 @@ pub(super) fn opaque_pass(
     context: &mut RenderGraphContext,
     skybox_material: ResourceArc<MaterialPassResource>,
     skybox_texture: ResourceArc<ImageViewResource>,
-    // skybox_vertex_buffer: ResourceArc<BufferResource>,
-    // skybox_index_buffer: ResourceArc<BufferResource>,
     shadow_map_passes: &[ShadowMapImageResources],
 ) -> OpaquePass {
     let node = context
@@ -80,26 +77,6 @@ pub(super) fn opaque_pass(
 
     let main_view = context.main_view.clone();
 
-    // // Set up a descriptor set pointing at the image so we can sample from it
-    // let mut descriptor_set_allocator = context
-    //     .resource_context
-    //     .create_descriptor_set_allocator();
-
-    // let mvp = (main_view.projection_matrix() * main_view.view_matrix());
-    // println!("mvp: {:?}", mvp.to_cols_array_2d());
-    //
-    // let descriptor_set_layouts = &skybox_material.get_raw().descriptor_set_layouts;
-    // let skybox_material_dyn_set = descriptor_set_allocator.create_descriptor_set(
-    //     &descriptor_set_layouts[shaders::skybox_frag::SKYBOX_TEX_DESCRIPTOR_SET_INDEX],
-    //     shaders::skybox_frag::DescriptorSet0Args {
-    //         uniform_buffer: &shaders::skybox_frag::ArgsUniform {
-    //             mvp: mvp.to_cols_array_2d()
-    //         },
-    //         skybox_tex: &skybox_texture,
-    //     },
-    // ).unwrap();
-    //descriptor_set_allocator.flush_changes();
-
     context
         .graph_callbacks
         .set_renderpass_callback(node, move |args, user_context| {
@@ -111,73 +88,15 @@ pub(super) fn opaque_pass(
             //
             // render the skybox last
             //
-
-            // Get the pipeline
-            let pipeline = args
-                .graph_context
-                .resource_context()
-                .graphics_pipeline_cache()
-                .get_or_create_graphics_pipeline(
-                    OpaqueRenderPhase::render_phase_index(),
-                    &skybox_material,
-                    &args.render_target_meta,
-                    &super::EMPTY_VERTEX_LAYOUT,
-                )?;
-
-            let mvp = (main_view.projection_matrix() * main_view.view_matrix() * glam::Mat4::from_scale(glam::Vec3::new(1000.0,1000.0,1000.0)));
-            //println!("mvp: {:?}", mvp.to_cols_array_2d());
-
-            // Set up a descriptor set pointing at the image so we can sample from it
-            let mut descriptor_set_allocator = args
-                .graph_context
-                .resource_context()
-                .create_descriptor_set_allocator();
-
-            let descriptor_set_layouts = &pipeline.get_raw().descriptor_set_layouts;
-            let skybox_material_dyn_set0 = descriptor_set_allocator.create_descriptor_set(
-                &descriptor_set_layouts[shaders::skybox_frag::SKYBOX_TEX_DESCRIPTOR_SET_INDEX],
-                shaders::skybox_frag::DescriptorSet0Args {
-                    skybox_tex: &skybox_texture,
-                },
-            ).unwrap();
-
-            let skybox_material_dyn_set1 = descriptor_set_allocator.create_descriptor_set(
-                &descriptor_set_layouts[shaders::skybox_frag::UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX],
-                shaders::skybox_frag::DescriptorSet1Args {
-                    uniform_buffer: &shaders::skybox_frag::ArgsUniform {
-                        //mvp: mvp.to_cols_array_2d()
-                        inverse_view: main_view.view_matrix().inverse().to_cols_array_2d(),
-                        inverse_projection: main_view.projection_matrix().inverse().to_cols_array_2d(),
-                    },
-                },
-            ).unwrap();
-
-            descriptor_set_allocator.flush_changes();
-
-            // Draw calls
-            let command_buffer = &args.command_buffer;
-            command_buffer.cmd_bind_pipeline(&*pipeline.get_raw().pipeline)?;
-            skybox_material_dyn_set0.bind(command_buffer)?;
-            skybox_material_dyn_set1.bind(command_buffer)?;
-            // command_buffer.cmd_bind_vertex_buffers(
-            //     0,
-            //     &[
-            //         RafxVertexBufferBinding {
-            //             buffer: &skybox_vertex_buffer.get_raw().buffer,
-            //             offset: 0
-            //         }
-            //     ]
-            // )?;
-            //
-            // command_buffer.cmd_bind_index_buffer(&RafxIndexBufferBinding {
-            //     buffer: &skybox_index_buffer.get_raw().buffer,
-            //     index_type: RafxIndexType::Uint16,
-            //     offset: 0
-            // })?;
-
-            command_buffer.cmd_draw(3, 0)?;
-
-            Ok(())
+            crate::features::skybox::draw_skybox(
+                args.graph_context.resource_context(),
+                &skybox_material,
+                &skybox_texture,
+                &main_view,
+                &args.render_target_meta,
+                &args.command_buffer,
+                OpaqueRenderPhase::render_phase_index()
+            )
         });
 
     OpaquePass {
@@ -187,3 +106,4 @@ pub(super) fn opaque_pass(
         shadow_maps,
     }
 }
+
