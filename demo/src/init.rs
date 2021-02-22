@@ -24,6 +24,7 @@ use rafx::assets::{
 };
 use rafx::nodes::RenderRegistry;
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
+use crate::assets::font::{FontAssetData, FontAsset};
 
 pub fn init_distill_daemon(
     resources: &mut Resources,
@@ -181,6 +182,10 @@ pub fn rendering_init(
         ));
 
         asset_resource.add_storage::<GltfMaterialAsset>();
+
+        asset_resource.add_storage_with_loader::<FontAssetData, FontAsset, _>(Box::new(
+            ResourceAssetLoader(game_resource_manager.create_font_loader()),
+        ));
         game_resource_manager
     };
 
