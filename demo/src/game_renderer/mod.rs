@@ -50,6 +50,8 @@ use rafx::api::{
     RafxResult, RafxSampleCount,
 };
 use rafx::assets::image_upload::ImageUploadParams;
+use crate::features::text::{create_text_extract_job, TextResource};
+use crate::game_asset_manager::GameAssetManager;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
 pub fn perspective_rh(
@@ -114,6 +116,9 @@ impl GameRenderer {
         let mut asset_manager_fetch = resources.get_mut::<AssetManager>().unwrap();
         let asset_manager = &mut *asset_manager_fetch;
 
+        let mut game_asset_manager_fetch = resources.get_mut::<GameAssetManager>().unwrap();
+        let game_asset_manager = &mut *game_asset_manager_fetch;
+
         let rafx_api = resources.get_mut::<RafxApi>().unwrap();
         let device_context = rafx_api.device_context();
 
@@ -159,8 +164,11 @@ impl GameRenderer {
         upload.block_until_upload_complete()?;
 
         log::info!("all waits complete");
-        let game_renderer_resources =
-            GameRendererStaticResources::new(asset_resource, asset_manager)?;
+        let static_resources =
+            GameRendererStaticResources::new(asset_resource, asset_manager, game_asset_manager)?;
+
+        let font = game_asset_manager.font(&static_resources.default_font).unwrap();
+        resources.get_mut::<TextResource>().unwrap().add_font(font);
 
         let render_thread = RenderThread::start();
 
@@ -171,7 +179,7 @@ impl GameRenderer {
                 invalid_image,
                 invalid_cube_map_image,
             },
-            static_resources: game_renderer_resources,
+            static_resources,
             swapchain_resources: None,
 
             render_thread,
@@ -601,6 +609,8 @@ impl GameRenderer {
                 use crate::features::imgui::create_imgui_extract_job;
                 extract_job_set.add_job(create_imgui_extract_job());
             }
+
+            extract_job_set.add_job(create_text_extract_job());
 
             extract_job_set
         };

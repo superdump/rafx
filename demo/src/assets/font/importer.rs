@@ -18,7 +18,7 @@ impl Importer for FontImporter {
         where
             Self: Sized,
     {
-        1
+        3
     }
 
     fn version(&self) -> u32 {

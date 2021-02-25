@@ -82,15 +82,6 @@ impl FeatureCommandWriter<RenderJobWriteContext> for SpriteCommandWriter {
         Ok(())
     }
 
-    fn revert_setup(
-        &self,
-        _write_context: &mut RenderJobWriteContext,
-        _view: &RenderView,
-        _render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()> {
-        Ok(())
-    }
-
     fn feature_debug_name(&self) -> &'static str {
         SpriteRenderFeature::feature_debug_name()
     }

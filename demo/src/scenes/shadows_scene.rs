@@ -8,6 +8,7 @@ use legion::IntoQuery;
 use legion::{Read, Resources, World, Write};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::visibility::{DynamicAabbVisibilityNode, DynamicVisibilityNodeSet};
+use crate::features::text::TextResource;
 
 pub(super) struct ShadowsScene {}
 
@@ -172,6 +173,27 @@ impl super::TestScene for ShadowsScene {
         resources: &Resources,
     ) {
         super::add_light_debug_draw(&resources, &world);
+
+        {
+            let mut text_resource = resources.get_mut::<TextResource>().unwrap();
+
+            let mut font_size: f32 = 25.0;
+            let scale = glyph_brush::ab_glyph::PxScale::from(font_size);
+            let width = 200.0;
+            let height = 100.0;
+            let section = glyph_brush::Section::default()
+                .add_text(
+                    glyph_brush::Text::new("hello world")
+                        .with_scale(scale)
+                        .with_color([0.8, 0.8, 0.8, 1.0]),
+                )
+                .with_bounds((width, height))
+                .with_layout(
+                    glyph_brush::Layout::default().line_breaker(glyph_brush::BuiltInLineBreaker::AnyCharLineBreaker),
+                );
+
+            text_resource.glyph_brush_mut().queue(section);
+        }
 
         {
             let time_state = resources.get::<TimeState>().unwrap();

@@ -1,5 +1,6 @@
 use crate::assets::gltf::{GltfMaterialAsset, MeshAssetData};
 use crate::features::debug3d::{Debug3dRenderFeature, DebugDraw3DResource};
+use crate::features::text::{TextRenderFeature, TextResource};
 #[cfg(feature = "use-imgui")]
 use crate::features::imgui::ImGuiRenderFeature;
 use crate::features::mesh::{MeshRenderFeature, MeshRenderNodeSet};
@@ -97,12 +98,14 @@ pub fn rendering_init(
     resources.insert(StaticVisibilityNodeSet::default());
     resources.insert(DynamicVisibilityNodeSet::default());
     resources.insert(DebugDraw3DResource::new());
+    resources.insert(TextResource::new());
 
     #[allow(unused_mut)]
     let mut render_registry = rafx::nodes::RenderRegistryBuilder::default()
         .register_feature::<SpriteRenderFeature>()
         .register_feature::<MeshRenderFeature>()
         .register_feature::<Debug3dRenderFeature>()
+        .register_feature::<TextRenderFeature>()
         .register_render_phase::<OpaqueRenderPhase>("Opaque")
         .register_render_phase::<ShadowMapRenderPhase>("ShadowMap")
         .register_render_phase::<TransparentRenderPhase>("Transparent")

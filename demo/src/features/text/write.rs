@@ -1,4 +1,4 @@
-use crate::features::debug3d::{Debug3dDrawCall, Debug3dRenderFeature};
+use crate::features::text::{TextDrawCall, TextRenderFeature};
 use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{RafxResult, RafxVertexBufferBinding};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc};
@@ -7,14 +7,24 @@ use rafx::nodes::{
     SubmitNodeId,
 };
 
-pub struct Debug3dCommandWriter {
+pub struct TextCommandWriter {
+    pub(super) vertex_count: u32,
     pub(super) vertex_buffer: Option<ResourceArc<BufferResource>>,
-    pub(super) draw_calls: Vec<Debug3dDrawCall>,
-    pub(super) debug3d_material_pass: ResourceArc<MaterialPassResource>,
-    pub(super) per_view_descriptor_sets: Vec<Option<DescriptorSetArc>>,
+    pub(super) text_material_pass: ResourceArc<MaterialPassResource>,
+    pub(super) per_view_vert_descriptor_sets: Vec<Option<DescriptorSetArc>>,
+    pub(super) per_view_frag_descriptor_sets: Vec<Option<DescriptorSetArc>>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for Debug3dCommandWriter {
+impl FeatureCommandWriter<RenderJobWriteContext> for TextCommandWriter {
+    fn on_phase_begin(
+        &self,
+        write_context: &mut RenderJobWriteContext,
+        view: &RenderView,
+        render_phase_index: RenderPhaseIndex,
+    ) -> RafxResult<()> {
+        Ok(())
+    }
+
     fn apply_setup(
         &self,
         write_context: &mut RenderJobWriteContext,
@@ -27,15 +37,25 @@ impl FeatureCommandWriter<RenderJobWriteContext> for Debug3dCommandWriter {
                 .graphics_pipeline_cache()
                 .get_or_create_graphics_pipeline(
                     render_phase_index,
-                    &self.debug3d_material_pass,
+                    &self.text_material_pass,
                     &write_context.render_target_meta,
-                    &*super::DEBUG_VERTEX_LAYOUT,
+                    &*super::TEXT_VERTEX_LAYOUT,
                 )?;
 
             let command_buffer = &write_context.command_buffer;
             command_buffer.cmd_bind_pipeline(&*pipeline.get_raw().pipeline)?;
 
-            self.per_view_descriptor_sets[view.view_index() as usize]
+            // if self.per_view_vert_descriptor_sets[view.view_index() as usize].is_none() ||
+            //     self.per_view_frag_descriptor_sets[view.view_index() as usize].is_none() {
+            //     return;
+            // }
+
+            self.per_view_vert_descriptor_sets[view.view_index() as usize]
+                .as_ref()
+                .unwrap()
+                .bind(command_buffer)?;
+
+            self.per_view_frag_descriptor_sets[view.view_index() as usize]
                 .as_ref()
                 .unwrap()
                 .bind(command_buffer)?;
@@ -61,20 +81,19 @@ impl FeatureCommandWriter<RenderJobWriteContext> for Debug3dCommandWriter {
         // The prepare phase emits a single node which will draw everything. In the future it might
         // emit a node per draw call that uses transparency
         if index == 0 {
-            let command_buffer = &write_context.command_buffer;
-
-            for draw_call in &self.draw_calls {
-                command_buffer.cmd_draw(draw_call.count as u32, draw_call.first_element as u32)?;
+            if let Some(vertex_buffer) = &self.vertex_buffer {
+                let command_buffer = &write_context.command_buffer;
+                command_buffer.cmd_draw_instanced(self.vertex_count, 0, 4, 0)?;
             }
         }
         Ok(())
     }
 
     fn feature_debug_name(&self) -> &'static str {
-        Debug3dRenderFeature::feature_debug_name()
+        TextRenderFeature::feature_debug_name()
     }
 
     fn feature_index(&self) -> RenderFeatureIndex {
-        Debug3dRenderFeature::feature_index()
+        TextRenderFeature::feature_index()
     }
 }

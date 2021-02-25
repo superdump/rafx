@@ -5,12 +5,22 @@ use crate::{
 use rafx_api::RafxResult;
 
 pub trait FeatureCommandWriter<WriteContextT> {
+    fn on_phase_begin(
+        &self,
+        write_context: &mut WriteContextT,
+        view: &RenderView,
+        render_phase_index: RenderPhaseIndex,
+    ) -> RafxResult<()> {
+        Ok(())
+    }
     fn apply_setup(
         &self,
         write_context: &mut WriteContextT,
         view: &RenderView,
         render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()>;
+    ) -> RafxResult<()> {
+        Ok(())
+    }
     fn render_element(
         &self,
         write_context: &mut WriteContextT,
@@ -23,7 +33,9 @@ pub trait FeatureCommandWriter<WriteContextT> {
         write_context: &mut WriteContextT,
         view: &RenderView,
         render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()>;
+    ) -> RafxResult<()> {
+        Ok(())
+    }
 
     fn feature_debug_name(&self) -> &'static str;
     fn feature_index(&self) -> RenderFeatureIndex;
@@ -65,6 +77,12 @@ impl<WriteContextT> PreparedRenderData<WriteContextT> {
     ) -> RafxResult<()> {
         let submit_nodes = self.submit_nodes.submit_nodes::<PhaseT>(view);
         let render_phase_index = PhaseT::render_phase_index();
+
+        for writer in &self.feature_writers {
+            if let Some(writer) = writer {
+                writer.on_phase_begin(write_context, view, render_phase_index)?;
+            }
+        }
 
         let mut previous_node_feature_index: i32 = -1;
         for submit_node in submit_nodes {

@@ -132,15 +132,6 @@ impl FeatureCommandWriter<RenderJobWriteContext> for ImGuiCommandWriter {
         Ok(())
     }
 
-    fn revert_setup(
-        &self,
-        _write_context: &mut RenderJobWriteContext,
-        _view: &RenderView,
-        _render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()> {
-        Ok(())
-    }
-
     fn feature_debug_name(&self) -> &'static str {
         ImGuiRenderFeature::feature_debug_name()
     }

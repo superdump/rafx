@@ -14,15 +14,6 @@ pub struct MeshCommandWriter {
 }
 
 impl FeatureCommandWriter<RenderJobWriteContext> for MeshCommandWriter {
-    fn apply_setup(
-        &self,
-        _write_context: &mut RenderJobWriteContext,
-        _view: &RenderView,
-        _render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()> {
-        Ok(())
-    }
-
     fn render_element(
         &self,
         write_context: &mut RenderJobWriteContext,
@@ -99,15 +90,6 @@ impl FeatureCommandWriter<RenderJobWriteContext> for MeshCommandWriter {
             0,
             0,
         )?;
-        Ok(())
-    }
-
-    fn revert_setup(
-        &self,
-        _write_context: &mut RenderJobWriteContext,
-        _view: &RenderView,
-        _render_phase_index: RenderPhaseIndex,
-    ) -> RafxResult<()> {
         Ok(())
     }
 
