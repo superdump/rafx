@@ -153,6 +153,8 @@ impl<'a> PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for TextPrep
             text_material_pass: self.text_material_pass,
             per_view_vert_descriptor_sets,
             per_view_frag_descriptor_sets,
+            texture: self.extracted_text_data.texture,
+            image_update: self.extracted_text_data.image_update,
         });
 
         (writer, submit_nodes)

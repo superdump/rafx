@@ -193,6 +193,13 @@ pub fn build_render_graph(
         RafxResourceState::PRESENT,
     );
 
+    graph_callbacks.set_pre_pass_callback(|args, user_context| {
+        let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
+        user_context
+            .prepared_render_data
+            .write_view_phase::<OpaqueRenderPhase>(&main_view, &mut write_context)?;
+    });
+
     //
     // Create the executor, it needs to have access to the resource manager to add framebuffers
     // and renderpasses to the resource lookups

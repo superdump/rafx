@@ -1,7 +1,7 @@
-use crate::features::text::{TextDrawCall, TextRenderFeature};
+use crate::features::text::{TextDrawCall, TextRenderFeature, TextImageUpdate};
 use crate::render_contexts::RenderJobWriteContext;
-use rafx::api::{RafxResult, RafxVertexBufferBinding};
-use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc};
+use rafx::api::{RafxResult, RafxVertexBufferBinding, RafxTextureBarrier, RafxResourceState};
+use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc, ImageViewResource};
 use rafx::nodes::{
     FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
     SubmitNodeId,
@@ -13,6 +13,8 @@ pub struct TextCommandWriter {
     pub(super) text_material_pass: ResourceArc<MaterialPassResource>,
     pub(super) per_view_vert_descriptor_sets: Vec<Option<DescriptorSetArc>>,
     pub(super) per_view_frag_descriptor_sets: Vec<Option<DescriptorSetArc>>,
+    pub(super) texture: Option<ResourceArc<ImageViewResource>>,
+    pub(super) image_update: Option<TextImageUpdate>,
 }
 
 impl FeatureCommandWriter<RenderJobWriteContext> for TextCommandWriter {
@@ -22,6 +24,28 @@ impl FeatureCommandWriter<RenderJobWriteContext> for TextCommandWriter {
         view: &RenderView,
         render_phase_index: RenderPhaseIndex,
     ) -> RafxResult<()> {
+
+        if let Some(image_update) = &self.image_update {
+            write_context.command_buffer.cmd_resource_barrier(&[], &[
+                RafxTextureBarrier::state_transition(
+                    &self.texture.as_ref().unwrap().get_raw().image.get_raw().image,
+                    RafxResourceState::SHADER_RESOURCE,
+                    RafxResourceState::COPY_DST
+                )
+            ])?;
+
+            // copy buffer to texture
+
+            write_context.command_buffer.cmd_resource_barrier(&[], &[
+                RafxTextureBarrier::state_transition(
+                    &self.texture.as_ref().unwrap().get_raw().image.get_raw().image,
+                    RafxResourceState::COPY_DST,
+                    RafxResourceState::SHADER_RESOURCE
+                )
+            ])?;
+        }
+
+
         Ok(())
     }
 

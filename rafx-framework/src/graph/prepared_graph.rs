@@ -314,6 +314,15 @@ impl PreparedRenderGraph {
                     //println!("color bindings:\n{:#?}", color_target_bindings);
                     //println!("depth binding:\n{:#?}", depth_target_binding);
 
+                    // add a call that a pass is starting?
+
+                    let args = VisitRenderpassNodeArgs {
+                        render_target_meta: pass.render_target_meta.clone(),
+                        graph_context: render_graph_context,
+                        command_buffer: command_buffer.clone(),
+                    };
+                    node_visitor.visit_renderpass_node(node_id, args);
+
                     command_buffer
                         .cmd_begin_render_pass(&color_target_bindings, depth_target_binding)?;
 
@@ -358,6 +367,12 @@ impl PreparedRenderGraph {
 }
 
 pub trait RenderGraphNodeVisitor {
+    fn visit_pre_renderpass_node(
+        &self,
+        node_id: RenderGraphNodeId,
+        args: VisitRenderpassNodeArgs,
+    ) -> RafxResult<()>;
+
     fn visit_renderpass_node(
         &self,
         node_id: RenderGraphNodeId,
@@ -385,6 +400,7 @@ enum RenderGraphNodeVisitNodeCallback<RenderGraphUserContextT> {
 /// Created by RenderGraphNodeCallbacks::create_visitor(). Implements RenderGraphNodeVisitor and
 /// forwards the call, adding the user context as a parameter.
 struct RenderGraphNodeVisitorImpl<'b, RenderGraphUserContextT> {
+    pre_renderpass_callback: Option<RenderGraphNodeVisitNodeCallback<RenderGraphUserContextT>>,
     context: &'b RenderGraphUserContextT,
     callbacks: &'b FnvHashMap<
         RenderGraphNodeId,
@@ -395,6 +411,33 @@ struct RenderGraphNodeVisitorImpl<'b, RenderGraphUserContextT> {
 impl<'b, RenderGraphUserContextT> RenderGraphNodeVisitor
     for RenderGraphNodeVisitorImpl<'b, RenderGraphUserContextT>
 {
+    fn visit_pre_renderpass_node(
+        &self,
+        node_id: RenderGraphNodeId,
+        args: VisitRenderpassNodeArgs,
+    ) -> RafxResult<()> {
+        if let Some(pre_renderpass_callback) = self.pre_renderpass_callback {
+            (pre_renderpass_callback)(args, self.context)?;
+        }
+
+        //args.graph_context.prepared_graph.
+
+
+        // if let Some(callback) = self.callbacks.get(&node_id) {
+        //     if let RenderGraphNodeVisitNodeCallback::Renderpass(render_callback) = callback {
+        //         (render_callback)(args, self.context)?
+        //     } else {
+        //         let debug_name = args.graph_context.prepared_graph.node_debug_name(node_id);
+        //         log::error!("Tried to call a render node callback but a compute callback was registered for node {:?} ({:?})", node_id, debug_name);
+        //     }
+        // } else {
+        //     //let debug_name = args.graph_context.prepared_graph.node_debug_name(node_id);
+        //     //log::error!("No callback found for node {:?} ({:?})", node_id, debug_name);
+        // }
+
+        Ok(())
+    }
+
     fn visit_renderpass_node(
         &self,
         node_id: RenderGraphNodeId,
@@ -439,12 +482,24 @@ impl<'b, RenderGraphUserContextT> RenderGraphNodeVisitor
 /// All the callbacks associated with rendergraph nodes. We keep them separate from the nodes so
 /// that we can avoid propagating generic parameters throughout the rest of the rendergraph code
 pub struct RenderGraphNodeCallbacks<RenderGraphUserContextT> {
+    pre_renderpass_callback: Option<RenderGraphNodeVisitNodeCallback<RenderGraphUserContextT>>,
     callbacks:
         FnvHashMap<RenderGraphNodeId, RenderGraphNodeVisitNodeCallback<RenderGraphUserContextT>>,
     render_phase_dependencies: FnvHashMap<RenderGraphNodeId, FnvHashSet<RenderPhaseIndex>>,
 }
 
 impl<RenderGraphUserContextT> RenderGraphNodeCallbacks<RenderGraphUserContextT> {
+    pub fn set_pre_renderpass_callback<CallbackFnT>(
+        &mut self,
+        f: CallbackFnT,
+    ) where
+        CallbackFnT: Fn(VisitRenderpassNodeArgs, &RenderGraphUserContextT) -> RafxResult<()>
+        + 'static
+        + Send,
+    {
+        self.pre_renderpass_callback = Some(RenderGraphNodeVisitNodeCallback::Renderpass(Box::new(f)));
+    }
+
     /// Adds a callback that receives the renderpass associated with the node
     pub fn set_renderpass_callback<CallbackFnT>(
         &mut self,
@@ -497,6 +552,7 @@ impl<RenderGraphUserContextT> RenderGraphNodeCallbacks<RenderGraphUserContextT> 
         context: &'a RenderGraphUserContextT,
     ) -> Box<dyn RenderGraphNodeVisitor + 'a> {
         Box::new(RenderGraphNodeVisitorImpl::<'a, RenderGraphUserContextT> {
+            pre_renderpass_callback: &self.pre_renderpass_callback,
             context,
             callbacks: &self.callbacks,
         })
@@ -506,6 +562,7 @@ impl<RenderGraphUserContextT> RenderGraphNodeCallbacks<RenderGraphUserContextT> 
 impl<T> Default for RenderGraphNodeCallbacks<T> {
     fn default() -> Self {
         RenderGraphNodeCallbacks {
+            pre_renderpass_callback: Default::default(),
             callbacks: Default::default(),
             render_phase_dependencies: Default::default(),
         }

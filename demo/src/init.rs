@@ -213,6 +213,7 @@ pub fn rendering_destroy(resources: &mut Resources) -> RafxResult<()> {
         resources.remove::<StaticVisibilityNodeSet>();
         resources.remove::<DynamicVisibilityNodeSet>();
         resources.remove::<DebugDraw3DResource>();
+        resources.remove::<TextResource>();
         resources.remove::<GameAssetManager>();
         resources.remove::<RenderRegistry>();
 
