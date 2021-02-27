@@ -1,11 +1,7 @@
 use crate::features::sprite::{SpriteDrawCall, SpriteRenderFeature};
-use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{RafxIndexBufferBinding, RafxIndexType, RafxResult, RafxVertexBufferBinding};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc};
-use rafx::nodes::{
-    FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
-    SubmitNodeId,
-};
+use rafx::nodes::{FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView, SubmitNodeId, RenderJobWriteContext};
 
 pub struct SpriteCommandWriter {
     pub vertex_buffers: Vec<ResourceArc<BufferResource>>,
@@ -15,7 +11,7 @@ pub struct SpriteCommandWriter {
     pub sprite_material: ResourceArc<MaterialPassResource>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for SpriteCommandWriter {
+impl FeatureCommandWriter for SpriteCommandWriter {
     fn apply_setup(
         &self,
         write_context: &mut RenderJobWriteContext,

@@ -1,16 +1,13 @@
 use crate::features::text::prepare::TextPrepareJobImpl;
 use crate::features::text::{TextRenderFeature, ExtractedTextData, TextResource, TextVertex, TextImageUpdate};
 use crate::game_renderer::GameRendererStaticResources;
-use crate::render_contexts::{
-    RenderJobExtractContext, RenderJobPrepareContext, RenderJobWriteContext,
-};
-use rafx::nodes::{
-    ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex, RenderView,
-};
+use rafx::nodes::{ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex, RenderView, RenderJobExtractContext};
 use glyph_brush::{BrushError, BrushAction, GlyphVertex};
-use rafx::api::{RafxBufferDef, RafxResourceType, RafxExtents2D, RafxTextureDef, RafxExtents3D, RafxSampleCount, RafxFormat, RafxTextureDimensions};
+use rafx::api::{RafxBufferDef, RafxResourceType, RafxTextureDef, RafxExtents3D, RafxFormat};
 use glyph_brush::ab_glyph::Rect;
 use std::sync::Arc;
+use crate::legion_support::LegionResources;
+use rafx::assets::{AssetManager, AssetManagerRenderResource};
 
 pub struct TextExtractJob {}
 
@@ -20,7 +17,7 @@ impl TextExtractJob {
     }
 }
 
-impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWriteContext>
+impl ExtractJob
     for TextExtractJob
 {
     fn extract(
@@ -28,11 +25,12 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
         extract_context: &RenderJobExtractContext,
         _frame_packet: &FramePacket,
         _views: &[&RenderView],
-    ) -> Box<dyn PrepareJob<RenderJobPrepareContext, RenderJobWriteContext>> {
+    ) -> Box<dyn PrepareJob> {
         profiling::scope!("Text Extract");
+        let legion_resources = extract_context.render_resources.fetch::<LegionResources>();
+        let asset_manager = extract_context.render_resources.fetch::<AssetManagerRenderResource>();
 
-        let mut text_resource = extract_context
-            .resources
+        let mut text_resource = legion_resources
             .get_mut::<TextResource>()
             .unwrap();
         let glyph_brush = text_resource.glyph_brush_mut();
@@ -40,7 +38,7 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
         let mut image_update = None;
         let mut new_texture_size = None;
 
-        let device_context = extract_context.asset_manager.device_context();
+        let device_context = asset_manager.device_context();
         let max_image_dimension = 4096;
         let mut brush_action;
 
@@ -111,8 +109,8 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
                 ..Default::default()
             }).unwrap();
 
-            let image = extract_context.asset_manager.resources().insert_image(texture);
-            let image_view = extract_context.asset_manager.resources().get_or_create_image_view(&image, None).unwrap();
+            let image = asset_manager.resources().insert_image(texture);
+            let image_view = asset_manager.resources().get_or_create_image_view(&image, None).unwrap();
 
             *text_resource.glyph_texture_mut() = Some(image_view);
         }
@@ -131,8 +129,7 @@ impl ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWrite
             .render_resources
             .fetch::<GameRendererStaticResources>()
             .text_material;
-        let text_material_pass = extract_context
-            .asset_manager
+        let text_material_pass = asset_manager
             .get_material_pass_by_index(&text_material, 0)
             .unwrap();
 

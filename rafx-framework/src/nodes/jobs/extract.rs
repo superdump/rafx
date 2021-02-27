@@ -1,23 +1,23 @@
-use crate::{FramePacket, PrepareJob, PrepareJobSet, RenderFeatureIndex, RenderView};
+use crate::nodes::{FramePacket, PrepareJob, PrepareJobSet, RenderFeatureIndex, RenderView, RenderJobExtractContext};
 
-pub trait ExtractJob<ExtractContextT, PrepareContextT, WriteContextT> {
+pub trait ExtractJob {
     fn extract(
         self: Box<Self>,
-        extract_context: &ExtractContextT,
+        extract_context: &RenderJobExtractContext,
         frame_packet: &FramePacket,
         views: &[&RenderView],
-    ) -> Box<dyn PrepareJob<PrepareContextT, WriteContextT>>;
+    ) -> Box<dyn PrepareJob>;
 
     fn feature_debug_name(&self) -> &'static str;
     fn feature_index(&self) -> RenderFeatureIndex;
 }
 
-pub struct ExtractJobSet<ExtractContextT, PrepareContextT, WriteContextT> {
-    extract_jobs: Vec<Box<dyn ExtractJob<ExtractContextT, PrepareContextT, WriteContextT>>>,
+pub struct ExtractJobSet {
+    extract_jobs: Vec<Box<dyn ExtractJob>>,
 }
 
-impl<ExtractContextT, PrepareContextT, WriteContextT> Default
-    for ExtractJobSet<ExtractContextT, PrepareContextT, WriteContextT>
+impl Default
+    for ExtractJobSet
 {
     fn default() -> Self {
         ExtractJobSet {
@@ -26,8 +26,7 @@ impl<ExtractContextT, PrepareContextT, WriteContextT> Default
     }
 }
 
-impl<ExtractContextT, PrepareContextT, WriteContextT>
-    ExtractJobSet<ExtractContextT, PrepareContextT, WriteContextT>
+impl ExtractJobSet
 {
     pub fn new() -> Self {
         Default::default()
@@ -35,17 +34,17 @@ impl<ExtractContextT, PrepareContextT, WriteContextT>
 
     pub fn add_job(
         &mut self,
-        extract_job: Box<dyn ExtractJob<ExtractContextT, PrepareContextT, WriteContextT>>,
+        extract_job: Box<dyn ExtractJob>,
     ) {
         self.extract_jobs.push(extract_job)
     }
 
     pub fn extract(
         self,
-        extract_context: &ExtractContextT,
+        extract_context: &RenderJobExtractContext,
         frame_packet: &FramePacket,
         views: &[&RenderView],
-    ) -> PrepareJobSet<PrepareContextT, WriteContextT> {
+    ) -> PrepareJobSet {
         log::trace!("Start extract job set");
 
         let mut prepare_jobs = vec![];

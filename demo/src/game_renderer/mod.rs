@@ -5,18 +5,14 @@ use crate::features::mesh::{
 use crate::features::sprite::{create_sprite_extract_job, SpriteRenderNodeSet};
 use crate::phases::TransparentRenderPhase;
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, UiRenderPhase};
-use crate::render_contexts::RenderJobExtractContext;
 use crate::time::TimeState;
 use legion::*;
 use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::{image_upload, GpuImageDataColorSpace};
+use rafx::assets::{image_upload, GpuImageDataColorSpace, AssetManagerRenderResource};
 use rafx::assets::{AssetManager, GpuImageData};
 use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
-use rafx::nodes::{
-    AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMask, RenderPhaseMaskBuilder,
-    RenderRegistry, RenderView, RenderViewDepthRange, RenderViewSet, VisibilityResult,
-};
+use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderPhaseMask, RenderPhaseMaskBuilder, RenderRegistry, RenderView, RenderViewDepthRange, RenderViewSet, VisibilityResult, RenderJobExtractContext};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
 
@@ -52,6 +48,7 @@ use rafx::api::{
 use rafx::assets::image_upload::ImageUploadParams;
 use crate::features::text::{create_text_extract_job, TextResource};
 use crate::game_asset_manager::GameAssetManager;
+use crate::legion_support::{LegionWorld, LegionResources};
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
 pub fn perspective_rh(
@@ -385,7 +382,6 @@ impl GameRenderer {
         };
 
         let swapchain_surface_info = swapchain_resources.swapchain_surface_info.clone();
-        render_resources.insert(swapchain_surface_info.clone());
 
         let render_view_set = RenderViewSet::default();
 
@@ -615,11 +611,19 @@ impl GameRenderer {
             extract_job_set
         };
 
+        render_resources.insert(swapchain_surface_info.clone());
+        unsafe {
+            render_resources.insert(LegionWorld::new(world));
+            render_resources.insert(LegionResources::new(resources));
+            render_resources.insert(AssetManagerRenderResource::new(asset_manager));
+        }
+
         let frame_packet = frame_packet_builder.build();
         let prepare_job_set = {
             profiling::scope!("renderer extract");
+
             let extract_context =
-                RenderJobExtractContext::new(&world, &resources, &render_resources, asset_manager);
+                RenderJobExtractContext::new(&render_resources);
 
             let mut extract_views = Vec::default();
             extract_views.push(&main_view);
@@ -638,6 +642,11 @@ impl GameRenderer {
 
             extract_job_set.extract(&extract_context, &frame_packet, &extract_views)
         };
+
+
+        render_resources.remove::<LegionWorld>();
+        render_resources.remove::<LegionResources>();
+        render_resources.remove::<AssetManagerRenderResource>();
 
         //TODO: This is now possible to run on the render thread
         let render_graph = render_graph::build_render_graph(

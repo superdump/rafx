@@ -1,38 +1,33 @@
-use crate::{
-    MergedFrameSubmitNodes, RenderFeatureIndex, RenderPhase, RenderPhaseIndex, RenderRegistry,
-    RenderView, SubmitNodeId,
-};
+use crate::nodes::{MergedFrameSubmitNodes, RenderFeatureIndex, RenderPhase, RenderPhaseIndex, RenderRegistry, RenderView, SubmitNodeId, RenderJobWriteContext, RenderJobBeginExecuteGraphContext};
 use rafx_api::RafxResult;
 
-pub trait FeatureCommandWriter<WriteContextT> {
-    fn on_phase_begin(
+pub trait FeatureCommandWriter {
+    fn on_begin_execute_graph(
         &self,
-        write_context: &mut WriteContextT,
-        view: &RenderView,
-        render_phase_index: RenderPhaseIndex,
+        _write_context: &mut RenderJobBeginExecuteGraphContext,
     ) -> RafxResult<()> {
         Ok(())
     }
     fn apply_setup(
         &self,
-        write_context: &mut WriteContextT,
-        view: &RenderView,
-        render_phase_index: RenderPhaseIndex,
+        _write_context: &mut RenderJobWriteContext,
+        _view: &RenderView,
+        _render_phase_index: RenderPhaseIndex,
     ) -> RafxResult<()> {
         Ok(())
     }
     fn render_element(
         &self,
-        write_context: &mut WriteContextT,
+        write_context: &mut RenderJobWriteContext,
         view: &RenderView,
         render_phase_index: RenderPhaseIndex,
         index: SubmitNodeId,
     ) -> RafxResult<()>;
     fn revert_setup(
         &self,
-        write_context: &mut WriteContextT,
-        view: &RenderView,
-        render_phase_index: RenderPhaseIndex,
+        _write_context: &mut RenderJobWriteContext,
+        _view: &RenderView,
+        _render_phase_index: RenderPhaseIndex,
     ) -> RafxResult<()> {
         Ok(())
     }
@@ -41,18 +36,18 @@ pub trait FeatureCommandWriter<WriteContextT> {
     fn feature_index(&self) -> RenderFeatureIndex;
 }
 
-// pub struct FeatureCommandWriterSet<WriteContextT> {
-//     prepare_jobs: Vec<Box<dyn FeatureCommandWriter<WriteContextT>>>,
+// pub struct FeatureCommandWriterSet {
+//     prepare_jobs: Vec<Box<dyn FeatureCommandWriter>>,
 // }
 
-pub struct PreparedRenderData<WriteContextT> {
-    feature_writers: Vec<Option<Box<dyn FeatureCommandWriter<WriteContextT>>>>,
+pub struct PreparedRenderData {
+    feature_writers: Vec<Option<Box<dyn FeatureCommandWriter>>>,
     submit_nodes: MergedFrameSubmitNodes,
 }
 
-impl<WriteContextT> PreparedRenderData<WriteContextT> {
+impl PreparedRenderData {
     pub fn new(
-        feature_writers: Vec<Box<dyn FeatureCommandWriter<WriteContextT>>>,
+        feature_writers: Vec<Box<dyn FeatureCommandWriter>>,
         submit_nodes: MergedFrameSubmitNodes,
     ) -> Self {
         let mut writers: Vec<_> = (0..RenderRegistry::registered_feature_count())
@@ -70,19 +65,26 @@ impl<WriteContextT> PreparedRenderData<WriteContextT> {
         }
     }
 
+    pub fn on_begin_execute_graph(
+        &self,
+        write_context: &mut RenderJobBeginExecuteGraphContext,
+    ) -> RafxResult<()> {
+        for writer in &self.feature_writers {
+            if let Some(writer) = writer {
+                writer.on_begin_execute_graph(write_context)?;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn write_view_phase<PhaseT: RenderPhase>(
         &self,
         view: &RenderView,
-        write_context: &mut WriteContextT,
+        write_context: &mut RenderJobWriteContext,
     ) -> RafxResult<()> {
         let submit_nodes = self.submit_nodes.submit_nodes::<PhaseT>(view);
         let render_phase_index = PhaseT::render_phase_index();
-
-        for writer in &self.feature_writers {
-            if let Some(writer) = writer {
-                writer.on_phase_begin(write_context, view, render_phase_index)?;
-            }
-        }
 
         let mut previous_node_feature_index: i32 = -1;
         for submit_node in submit_nodes {

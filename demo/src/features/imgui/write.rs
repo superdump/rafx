@@ -1,12 +1,8 @@
 use crate::features::imgui::ImGuiRenderFeature;
 use crate::imgui_support::{ImGuiDrawCmd, ImGuiDrawData};
-use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{RafxIndexBufferBinding, RafxIndexType, RafxResult, RafxVertexBufferBinding};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc};
-use rafx::nodes::{
-    FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
-    SubmitNodeId,
-};
+use rafx::nodes::{FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView, SubmitNodeId, RenderJobWriteContext};
 
 pub struct ImGuiCommandWriter {
     pub(super) vertex_buffers: Vec<ResourceArc<BufferResource>>,
@@ -17,7 +13,7 @@ pub struct ImGuiCommandWriter {
     pub(super) imgui_material_pass: ResourceArc<MaterialPassResource>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for ImGuiCommandWriter {
+impl FeatureCommandWriter for ImGuiCommandWriter {
     fn apply_setup(
         &self,
         write_context: &mut RenderJobWriteContext,

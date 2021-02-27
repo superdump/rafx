@@ -34,7 +34,7 @@ use rafx_framework::DynCommandPoolAllocator;
 use rafx_framework::DynResourceAllocatorSetProvider;
 use rafx_framework::ResourceLookupSet;
 use rafx_framework::{ResourceManager, ResourceManagerMetrics};
-use rafx_nodes::RenderRegistry;
+use rafx_framework::nodes::RenderRegistry;
 use std::sync::Arc;
 
 #[derive(Debug)]

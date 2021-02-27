@@ -1,16 +1,12 @@
 use super::write::TextCommandWriter;
 use crate::features::text::{
-    TextDrawCall, TextRenderFeature, TextUniformBufferObject, TextVertex,
+    TextRenderFeature, TextUniformBufferObject,
     ExtractedTextData,
 };
 use crate::phases::OpaqueRenderPhase;
-use crate::render_contexts::{RenderJobPrepareContext, RenderJobWriteContext};
-use rafx::api::{RafxBufferDef, RafxMemoryUsage, RafxResourceType};
+use rafx::api::RafxBufferDef;
 use rafx::framework::{MaterialPassResource, ResourceArc};
-use rafx::nodes::{
-    FeatureCommandWriter, FeatureSubmitNodes, FramePacket, PrepareJob, RenderFeature,
-    RenderFeatureIndex, RenderView, ViewSubmitNodes,
-};
+use rafx::nodes::{FeatureCommandWriter, FeatureSubmitNodes, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex, RenderView, ViewSubmitNodes, RenderJobPrepareContext};
 
 pub struct TextPrepareJobImpl {
     text_material_pass: ResourceArc<MaterialPassResource>,
@@ -29,14 +25,14 @@ impl TextPrepareJobImpl {
     }
 }
 
-impl<'a> PrepareJob<RenderJobPrepareContext, RenderJobWriteContext> for TextPrepareJobImpl {
+impl<'a> PrepareJob for TextPrepareJobImpl {
     fn prepare(
         self: Box<Self>,
         prepare_context: &RenderJobPrepareContext,
         _frame_packet: &FramePacket,
         views: &[&RenderView],
     ) -> (
-        Box<dyn FeatureCommandWriter<RenderJobWriteContext>>,
+        Box<dyn FeatureCommandWriter>,
         FeatureSubmitNodes,
     ) {
         profiling::scope!("Text Prepare");

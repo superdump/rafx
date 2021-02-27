@@ -1,5 +1,4 @@
 use crate::features::mesh::ShadowMapRenderView;
-use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{
     RafxDeviceContext, RafxFormat, RafxPrimitiveTopology, RafxResourceState, RafxResourceType,
     RafxResult, RafxSampleCount,
@@ -8,7 +7,7 @@ use rafx::framework::ResourceContext;
 use rafx::framework::VertexDataSetLayout;
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::graph::*;
-use rafx::nodes::{PreparedRenderData, RenderView};
+use rafx::nodes::{PreparedRenderData, RenderView, RenderJobBeginExecuteGraphContext};
 
 mod shadow_map_pass;
 use shadow_map_pass::ShadowMapImageResources;
@@ -40,7 +39,7 @@ lazy_static::lazy_static! {
 // Any data you want available within rendergraph execution callbacks should go here. This can
 // include data that is not known until later after the extract/prepare phases have completed.
 pub struct RenderGraphUserContext {
-    pub prepared_render_data: Box<PreparedRenderData<RenderJobWriteContext>>,
+    pub prepared_render_data: Box<PreparedRenderData>,
 }
 
 // Everything produced by the graph. This includes resources that may be needed during the prepare
@@ -193,11 +192,13 @@ pub fn build_render_graph(
         RafxResourceState::PRESENT,
     );
 
-    graph_callbacks.set_pre_pass_callback(|args, user_context| {
-        let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
+    graph_callbacks.set_begin_execute_graph_callback(move |args, user_context| {
+        let mut write_context = RenderJobBeginExecuteGraphContext::from_on_begin_execute_graph_args(&args);
         user_context
             .prepared_render_data
-            .write_view_phase::<OpaqueRenderPhase>(&main_view, &mut write_context)?;
+            .on_begin_execute_graph(&mut write_context);
+
+        Ok(())
     });
 
     //

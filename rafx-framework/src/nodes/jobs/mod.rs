@@ -1,30 +1,27 @@
-use legion::*;
-use rafx::api::RafxDeviceContext;
-use rafx::assets::AssetManager;
-use rafx::framework::ResourceContext;
-use rafx::framework::{DynCommandBuffer, GraphicsPipelineRenderTargetMeta, RenderResources};
-use rafx::graph::VisitRenderpassNodeArgs;
+mod extract;
+pub use extract::*;
+
+mod prepare;
+pub use prepare::*;
+
+mod write;
+pub use write::*;
+
+use crate::{RenderResources, ResourceContext, DynCommandBuffer, GraphicsPipelineRenderTargetMeta};
+use rafx_api::RafxDeviceContext;
+use crate::graph::{OnBeginExecuteGraphArgs, VisitRenderpassNodeArgs};
 
 pub struct RenderJobExtractContext {
-    pub world: &'static World,
-    pub resources: &'static Resources,
     pub render_resources: &'static RenderResources,
-    pub asset_manager: &'static AssetManager,
 }
 
 impl RenderJobExtractContext {
     pub fn new<'a>(
-        world: &'a World,
-        resources: &'a Resources,
         render_resources: &'a RenderResources,
-        asset_manager: &'a AssetManager,
     ) -> Self {
         unsafe {
             RenderJobExtractContext {
-                world: force_to_static_lifetime(world),
-                resources: force_to_static_lifetime(resources),
                 render_resources: force_to_static_lifetime(render_resources),
-                asset_manager: force_to_static_lifetime(asset_manager),
             }
         }
     }
@@ -47,6 +44,39 @@ impl RenderJobPrepareContext {
             resource_context,
             render_resources: unsafe { force_to_static_lifetime(render_resources) },
         }
+    }
+}
+
+pub struct RenderJobBeginExecuteGraphContext {
+    pub device_context: RafxDeviceContext,
+    pub resource_context: ResourceContext,
+    pub command_buffer: DynCommandBuffer,
+}
+
+impl RenderJobBeginExecuteGraphContext {
+    pub fn new(
+        device_context: RafxDeviceContext,
+        resource_context: ResourceContext,
+        command_buffer: DynCommandBuffer,
+    ) -> Self {
+        RenderJobBeginExecuteGraphContext {
+            device_context,
+            resource_context,
+            command_buffer,
+        }
+    }
+
+    pub fn from_on_begin_execute_graph_args(
+        args: &OnBeginExecuteGraphArgs
+    ) -> RenderJobBeginExecuteGraphContext {
+        RenderJobBeginExecuteGraphContext::new(
+            args.graph_context.device_context().clone(),
+            args
+                .graph_context
+                .resource_context()
+                .clone(),
+            args.command_buffer.clone(),
+        )
     }
 }
 
@@ -73,16 +103,16 @@ impl RenderJobWriteContext {
     }
 
     pub fn from_graph_visit_render_pass_args(
-        visit_renderpass_args: &VisitRenderpassNodeArgs
+        args: &VisitRenderpassNodeArgs
     ) -> RenderJobWriteContext {
         RenderJobWriteContext::new(
-            visit_renderpass_args.graph_context.device_context().clone(),
-            visit_renderpass_args
+            args.graph_context.device_context().clone(),
+            args
                 .graph_context
                 .resource_context()
                 .clone(),
-            visit_renderpass_args.command_buffer.clone(),
-            visit_renderpass_args.render_target_meta.clone(),
+            args.command_buffer.clone(),
+            args.render_target_meta.clone(),
         )
     }
 }

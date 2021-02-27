@@ -1,11 +1,7 @@
-use crate::features::text::{TextDrawCall, TextRenderFeature, TextImageUpdate};
-use crate::render_contexts::RenderJobWriteContext;
+use crate::features::text::{TextRenderFeature, TextImageUpdate};
 use rafx::api::{RafxResult, RafxVertexBufferBinding, RafxTextureBarrier, RafxResourceState};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc, ImageViewResource};
-use rafx::nodes::{
-    FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
-    SubmitNodeId,
-};
+use rafx::nodes::{FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView, SubmitNodeId, RenderJobWriteContext, RenderJobBeginExecuteGraphContext};
 
 pub struct TextCommandWriter {
     pub(super) vertex_count: u32,
@@ -17,14 +13,11 @@ pub struct TextCommandWriter {
     pub(super) image_update: Option<TextImageUpdate>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for TextCommandWriter {
-    fn on_phase_begin(
+impl FeatureCommandWriter for TextCommandWriter {
+    fn on_begin_execute_graph(
         &self,
-        write_context: &mut RenderJobWriteContext,
-        view: &RenderView,
-        render_phase_index: RenderPhaseIndex,
+        write_context: &mut RenderJobBeginExecuteGraphContext,
     ) -> RafxResult<()> {
-
         if let Some(image_update) = &self.image_update {
             write_context.command_buffer.cmd_resource_barrier(&[], &[
                 RafxTextureBarrier::state_transition(

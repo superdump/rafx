@@ -1,5 +1,5 @@
-use crate::registry::{RenderPhaseMaskInnerType, MAX_RENDER_PHASE_COUNT};
-use crate::{RenderPhase, RenderPhaseIndex};
+use super::registry::{RenderPhaseMaskInnerType, MAX_RENDER_PHASE_COUNT};
+use super::{RenderPhase, RenderPhaseIndex};
 use glam::{Mat4, Vec3};
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;

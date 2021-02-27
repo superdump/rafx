@@ -1,4 +1,4 @@
-use crate::SubmitNode;
+use super::SubmitNode;
 use fnv::FnvHashMap;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;

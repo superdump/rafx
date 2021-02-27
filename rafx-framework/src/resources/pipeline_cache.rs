@@ -6,7 +6,7 @@ use rafx_api::{
     RafxFormat, RafxResult, RafxSampleCount, RafxVertexAttributeRate, RafxVertexLayout,
     RafxVertexLayoutAttribute, RafxVertexLayoutBuffer,
 };
-use rafx_nodes::{RenderPhase, RenderPhaseIndex, RenderRegistry, MAX_RENDER_PHASE_COUNT};
+use crate::nodes::{RenderPhase, RenderPhaseIndex, RenderRegistry, MAX_RENDER_PHASE_COUNT};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 

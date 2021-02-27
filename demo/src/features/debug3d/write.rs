@@ -1,10 +1,9 @@
 use crate::features::debug3d::{Debug3dDrawCall, Debug3dRenderFeature};
-use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{RafxResult, RafxVertexBufferBinding};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc};
 use rafx::nodes::{
     FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
-    SubmitNodeId,
+    SubmitNodeId, RenderJobWriteContext
 };
 
 pub struct Debug3dCommandWriter {
@@ -14,7 +13,7 @@ pub struct Debug3dCommandWriter {
     pub(super) per_view_descriptor_sets: Vec<Option<DescriptorSetArc>>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for Debug3dCommandWriter {
+impl FeatureCommandWriter for Debug3dCommandWriter {
     fn apply_setup(
         &self,
         write_context: &mut RenderJobWriteContext,

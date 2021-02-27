@@ -9,4 +9,4 @@ pub use static_visibility_node_set::StaticVisibilityNodeSet;
 mod dynamic_visibility_node_set;
 pub use dynamic_visibility_node_set::DynamicVisibilityNodeSet;
 
-pub use rafx_nodes::VisibilityResult;
+pub use crate::nodes::VisibilityResult;

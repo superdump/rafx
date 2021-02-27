@@ -1,6 +1,5 @@
-use distill::importer::{Error, ImportedAsset, Importer, ImporterValue};
+use distill::importer::{ImportedAsset, Importer, ImporterValue};
 use distill::{core::AssetUuid, importer::ImportOp};
-use rafx::api::RafxResourceType;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use type_uuid::*;

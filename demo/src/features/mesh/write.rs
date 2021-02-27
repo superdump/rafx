@@ -1,19 +1,15 @@
 use crate::features::mesh::{
     ExtractedFrameNodeMeshData, MeshRenderFeature, PreparedSubmitNodeMeshData,
 };
-use crate::render_contexts::RenderJobWriteContext;
 use rafx::api::{RafxIndexBufferBinding, RafxIndexType, RafxResult, RafxVertexBufferBinding};
-use rafx::nodes::{
-    FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView,
-    SubmitNodeId,
-};
+use rafx::nodes::{FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView, SubmitNodeId, RenderJobWriteContext};
 
 pub struct MeshCommandWriter {
     pub(super) extracted_frame_node_mesh_data: Vec<Option<ExtractedFrameNodeMeshData>>,
     pub(super) prepared_submit_node_mesh_data: Vec<PreparedSubmitNodeMeshData>,
 }
 
-impl FeatureCommandWriter<RenderJobWriteContext> for MeshCommandWriter {
+impl FeatureCommandWriter for MeshCommandWriter {
     fn render_element(
         &self,
         write_context: &mut RenderJobWriteContext,

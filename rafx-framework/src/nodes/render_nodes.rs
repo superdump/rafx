@@ -1,5 +1,5 @@
-use crate::RenderFeatureIndex;
-use crate::RenderRegistry;
+use super::RenderFeatureIndex;
+use super::RenderRegistry;
 use rafx_base::slab::SlabIndexT;
 
 pub type RenderNodeIndex = u32;

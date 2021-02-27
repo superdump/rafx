@@ -1,6 +1,6 @@
 use glyph_brush::{GlyphBrush, GlyphBrushBuilder, FontId};
 use crate::features::text::TextVertex;
-use rafx::framework::{VertexData, ResourceArc, ImageViewResource};
+use rafx::framework::{ResourceArc, ImageViewResource};
 use std::sync::Arc;
 use glyph_brush::ab_glyph::{FontArc, Font};
 use crate::assets::font::FontAsset;

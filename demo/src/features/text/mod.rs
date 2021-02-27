@@ -1,7 +1,4 @@
 use crate::features::text::extract::TextExtractJob;
-use crate::render_contexts::{
-    RenderJobExtractContext, RenderJobPrepareContext, RenderJobWriteContext,
-};
 use rafx::framework::{VertexDataLayout, VertexDataSetLayout, ImageViewResource, ResourceArc};
 use rafx::nodes::ExtractJob;
 use rafx::nodes::RenderFeature;
@@ -14,11 +11,11 @@ mod prepare;
 mod write;
 
 pub use text_resource::*;
-use rafx::api::{RafxPrimitiveTopology, RafxBuffer, RafxExtents2D};
+use rafx::api::{RafxPrimitiveTopology, RafxBuffer};
 use std::sync::Arc;
 
 pub fn create_text_extract_job(
-) -> Box<dyn ExtractJob<RenderJobExtractContext, RenderJobPrepareContext, RenderJobWriteContext>> {
+) -> Box<dyn ExtractJob> {
     Box::new(TextExtractJob::new())
 }
 
@@ -66,9 +63,4 @@ pub(self) struct ExtractedTextData {
     texture: Option<ResourceArc<ImageViewResource>>
 }
 
-#[derive(Debug)]
-struct TextDrawCall {
-    first_element: u32,
-    count: u32,
-}
 
