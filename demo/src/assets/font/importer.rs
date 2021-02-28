@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 use type_uuid::*;
 use crate::assets::font::FontAssetData;
+use fnv::FnvHasher;
+use std::hash::{Hash, Hasher};
 
 #[derive(TypeUuid, Serialize, Deserialize, Default)]
 #[uuid = "c0228ccb-c3d6-40c1-aa19-458f93b5aff9"]
@@ -44,8 +46,17 @@ impl Importer for FontImporter {
         let mut bytes = Vec::new();
         source.read_to_end(&mut bytes)?;
 
+        let scale = 40;
+
+        let mut hasher = FnvHasher::default();
+        bytes.hash(&mut hasher);
+        scale.hash(&mut hasher);
+        let data_hash = hasher.finish();
+
         let asset_data = FontAssetData {
+            data_hash,
             data: bytes,
+            scale: scale as f32,
         };
 
         Ok(ImporterValue {

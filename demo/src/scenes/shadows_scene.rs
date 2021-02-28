@@ -9,8 +9,12 @@ use legion::{Read, Resources, World, Write};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::visibility::{DynamicAabbVisibilityNode, DynamicVisibilityNodeSet};
 use crate::features::text::TextResource;
+use crate::assets::font::FontAsset;
+use distill::loader::handle::Handle;
 
-pub(super) struct ShadowsScene {}
+pub(super) struct ShadowsScene {
+    font: Handle<FontAsset>
+}
 
 impl ShadowsScene {
     pub(super) fn new(
@@ -20,6 +24,11 @@ impl ShadowsScene {
         let mut mesh_render_nodes = resources.get_mut::<MeshRenderNodeSet>().unwrap();
         let mut dynamic_visibility_node_set =
             resources.get_mut::<DynamicVisibilityNodeSet>().unwrap();
+
+        let font = {
+            let asset_resource = resources.get::<AssetResource>().unwrap();
+            asset_resource.load_asset_path::<FontAsset, _>("fonts/mplus-1p-regular.ttf")
+        };
 
         //
         // Add a floor
@@ -162,7 +171,9 @@ impl ShadowsScene {
             },
         );
 
-        ShadowsScene {}
+        ShadowsScene {
+            font
+        }
     }
 }
 
@@ -177,22 +188,36 @@ impl super::TestScene for ShadowsScene {
         {
             let mut text_resource = resources.get_mut::<TextResource>().unwrap();
 
-            let mut font_size: f32 = 25.0;
-            let scale = glyph_brush::ab_glyph::PxScale::from(font_size);
-            let width = 200.0;
-            let height = 100.0;
-            let section = glyph_brush::Section::default()
-                .add_text(
-                    glyph_brush::Text::new("hello world")
-                        .with_scale(scale)
-                        .with_color([0.8, 0.8, 0.8, 1.0]),
-                )
-                .with_bounds((width, height))
-                .with_layout(
-                    glyph_brush::Layout::default().line_breaker(glyph_brush::BuiltInLineBreaker::AnyCharLineBreaker),
-                );
+            text_resource.add_text(
+                "some text".to_string(),
+                glam::Vec3::new(0.0, 0.0, 0.0),
+                &self.font,
+                20.0,
+                glam::Vec4::new(1.0, 1.0, 1.0, 1.0)
+            ).append(
+                "more text".to_string(),
+                glam::Vec3::new(0.0, 0.0, 0.0),
+                &self.font,
+                20.0,
+                glam::Vec4::new(1.0, 1.0, 1.0, 1.0)
+            );
 
-            text_resource.glyph_brush_mut().queue(section);
+            // let mut font_size: f32 = 25.0;
+            // let scale = glyph_brush::ab_glyph::PxScale::from(font_size);
+            // let width = 200.0;
+            // let height = 100.0;
+            // let section = glyph_brush::Section::default()
+            //     .add_text(
+            //         glyph_brush::Text::new("hello world")
+            //             .with_scale(scale)
+            //             .with_color([0.8, 0.8, 0.8, 1.0]),
+            //     )
+            //     .with_bounds((width, height))
+            //     .with_layout(
+            //         glyph_brush::Layout::default().line_breaker(glyph_brush::BuiltInLineBreaker::AnyCharLineBreaker),
+            //     );
+            //
+            // text_resource.glyph_brush_mut().queue(section);
         }
 
         {

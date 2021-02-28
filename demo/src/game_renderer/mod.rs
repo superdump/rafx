@@ -164,8 +164,8 @@ impl GameRenderer {
         let static_resources =
             GameRendererStaticResources::new(asset_resource, asset_manager, game_asset_manager)?;
 
-        let font = game_asset_manager.font(&static_resources.default_font).unwrap();
-        resources.get_mut::<TextResource>().unwrap().add_font(font);
+        //let font = game_asset_manager.font(&static_resources.default_font).unwrap();
+        //resources.get_mut::<TextResource>().unwrap().add_font(font);
 
         let render_thread = RenderThread::start();
 

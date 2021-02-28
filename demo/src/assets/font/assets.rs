@@ -5,12 +5,15 @@ use std::sync::Arc;
 #[derive(TypeUuid, Serialize, Deserialize, Clone)]
 #[uuid = "197bfd7a-3df9-4440-86f0-8e10756c714e"]
 pub struct FontAssetData {
+    pub data_hash: u64,
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
+    pub scale: f32,
 }
 
 pub struct FontAssetInner {
-    pub data: Vec<u8>
+    pub data_hash: u64,
+    pub font: fontdue::Font
 }
 
 #[derive(TypeUuid, Clone)]

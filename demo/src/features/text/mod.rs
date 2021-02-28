@@ -25,10 +25,8 @@ pub type TextUniformBufferObject = shaders::text_vert::PerViewUboUniform;
 #[derive(Clone, Debug, Copy, Default)]
 #[repr(C)]
 pub struct TextVertex {
-    pub left_top: [f32; 3],
-    pub right_bottom: [f32; 2],
-    pub tex_left_top: [f32; 2],
-    pub tex_right_bottom: [f32; 2],
+    pub position: [f32; 3],
+    pub uv: [f32; 2],
     pub color: [f32; 4],
 }
 
@@ -37,20 +35,18 @@ lazy_static::lazy_static! {
         use rafx::api::RafxFormat;
 
         VertexDataLayout::build_vertex_layout(&TextVertex::default(), |builder, vertex| {
-            builder.add_member(&vertex.left_top, "left_top", RafxFormat::R32G32B32_SFLOAT);
-            builder.add_member(&vertex.right_bottom, "right_bottom", RafxFormat::R32G32_SFLOAT);
-            builder.add_member(&vertex.tex_left_top, "tex_left_top", RafxFormat::R32G32_SFLOAT);
-            builder.add_member(&vertex.tex_right_bottom, "tex_right_bottom", RafxFormat::R32G32_SFLOAT);
-            builder.add_member(&vertex.color, "color", RafxFormat::R32G32B32A32_SFLOAT);
-        }).into_set(RafxPrimitiveTopology::TriangleStrip)
+            builder.add_member(&vertex.position, "POSITION", RafxFormat::R32G32B32_SFLOAT);
+            builder.add_member(&vertex.uv, "TEXCOORD", RafxFormat::R32G32_SFLOAT);
+            builder.add_member(&vertex.color, "COLOR", RafxFormat::R32G32B32A32_SFLOAT);
+        }).into_set(RafxPrimitiveTopology::TriangleList)
     };
 }
 
 rafx::declare_render_feature!(TextRenderFeature, TEXT_FEATURE_INDEX);
 
 struct TextImageUpdate {
-    upload_buffer: RafxBuffer,
-    upload_rectangle: glyph_brush::Rectangle<u32>,
+    // upload_buffer: RafxBuffer,
+    // upload_rectangle: glyph_brush::Rectangle<u32>,
 }
 
 pub(self) struct ExtractedTextData {
@@ -58,7 +54,7 @@ pub(self) struct ExtractedTextData {
     image_update: Option<TextImageUpdate>,
 
     // Either provides new vertex data or indicates to redraw previous vertex data
-    vertex_data: Arc<Vec<TextVertex>>,
+    vertex_data: Vec<TextVertex>,
 
     texture: Option<ResourceArc<ImageViewResource>>
 }

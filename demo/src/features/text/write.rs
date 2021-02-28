@@ -1,5 +1,5 @@
 use crate::features::text::{TextRenderFeature, TextImageUpdate};
-use rafx::api::{RafxResult, RafxVertexBufferBinding, RafxTextureBarrier, RafxResourceState};
+use rafx::api::{RafxResult, RafxVertexBufferBinding, RafxTextureBarrier, RafxResourceState, RafxCmdCopyBufferToTextureParams};
 use rafx::framework::{BufferResource, DescriptorSetArc, MaterialPassResource, ResourceArc, ImageViewResource};
 use rafx::nodes::{FeatureCommandWriter, RenderFeature, RenderFeatureIndex, RenderPhaseIndex, RenderView, SubmitNodeId, RenderJobWriteContext, RenderJobBeginExecuteGraphContext};
 
@@ -28,6 +28,14 @@ impl FeatureCommandWriter for TextCommandWriter {
             ])?;
 
             // copy buffer to texture
+            // write_context.command_buffer.cmd_copy_buffer_to_texture(
+            //     &image_update.upload_buffer,
+            //     self.texture.as_ref().unwrap(),
+            //     &RafxCmdCopyBufferToTextureParams {
+            //
+            //     }
+            // );
+
 
             write_context.command_buffer.cmd_resource_barrier(&[], &[
                 RafxTextureBarrier::state_transition(

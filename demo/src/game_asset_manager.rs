@@ -12,6 +12,7 @@ use rafx::api::RafxResult;
 use rafx::assets::{AssetLookup, AssetManager, GenericLoader, LoadQueues};
 use std::sync::Arc;
 use crate::assets::font::{FontAssetData, FontAsset, FontAssetInner};
+use fontdue::FontSettings;
 
 #[derive(Debug)]
 pub struct GameAssetManagerMetrics {
@@ -253,11 +254,16 @@ impl GameAssetManager {
     #[profiling::function]
     fn load_font(
         &mut self,
-        asset_manager: &AssetManager,
+        _asset_manager: &AssetManager,
         font_asset: FontAssetData,
     ) -> RafxResult<FontAsset> {
+        let mut settings = FontSettings::default();
+        settings.scale = font_asset.scale;
+        let font = fontdue::Font::from_bytes(font_asset.data.as_slice(), settings).map_err(|x| x.to_string())?;
+
         let inner = FontAssetInner {
-            data: font_asset.data
+            font,
+            data_hash: font_asset.data_hash
         };
 
         Ok(FontAsset {
