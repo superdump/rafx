@@ -1,10 +1,11 @@
 use fnv::FnvHashMap;
-use rafx_api::RafxShaderPackage;
+use rafx_api::{RafxShaderPackage, RafxResult};
 use rafx_framework::ResourceArc;
 use rafx_framework::{ReflectedEntryPoint, ShaderModuleHash, ShaderModuleResource};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use type_uuid::*;
+use crate::{AssetManager, SimpleAssetTypeLoadHandler, SimpleAssetTypeHandler};
 
 #[derive(TypeUuid, Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[uuid = "e0ae2222-1a44-4022-af95-03c9101ac89e"]
@@ -26,3 +27,36 @@ pub struct ShaderAsset {
     pub shader_module: ResourceArc<ShaderModuleResource>,
     pub reflection_data: Arc<FnvHashMap<String, ReflectedEntryPoint>>,
 }
+
+pub struct ShaderLoadHandler;
+
+impl SimpleAssetTypeLoadHandler<ShaderAssetData, ShaderAsset> for ShaderLoadHandler {
+    #[profiling::function]
+    fn load(
+        asset_manager: &mut AssetManager,
+        asset_data: ShaderAssetData,
+    ) -> RafxResult<ShaderAsset> {
+        let mut reflection_data_lookup = FnvHashMap::default();
+        if let Some(reflection_data) = &asset_data.reflection_data {
+            for entry_point in reflection_data {
+                let old = reflection_data_lookup.insert(
+                    entry_point.rafx_api_reflection.entry_point_name.clone(),
+                    entry_point.clone(),
+                );
+                assert!(old.is_none());
+            }
+        }
+
+        let shader_module = asset_manager.resources().get_or_create_shader_module(
+            &asset_data.shader_package,
+            Some(asset_data.shader_module_hash),
+        )?;
+
+        Ok(ShaderAsset {
+            shader_module,
+            reflection_data: Arc::new(reflection_data_lookup),
+        })
+    }
+}
+
+pub type ShaderAssetTypeHandler = SimpleAssetTypeHandler<ShaderAssetData, ShaderAsset, ShaderLoadHandler>;

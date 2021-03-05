@@ -42,7 +42,6 @@ use crate::components::{
     DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
 };
 use crate::features::text::{create_text_extract_job, FontAtlasCache};
-use crate::game_asset_manager::GameAssetManager;
 use crate::legion_support::{LegionResources, LegionWorld};
 use crate::RenderOptions;
 use arrayvec::ArrayVec;
@@ -117,9 +116,6 @@ impl GameRenderer {
         let mut asset_manager_fetch = resources.get_mut::<AssetManager>().unwrap();
         let asset_manager = &mut *asset_manager_fetch;
 
-        let mut game_asset_manager_fetch = resources.get_mut::<GameAssetManager>().unwrap();
-        let game_asset_manager = &mut *game_asset_manager_fetch;
-
         let rafx_api = resources.get_mut::<RafxApi>().unwrap();
         let device_context = rafx_api.device_context();
 
@@ -166,7 +162,7 @@ impl GameRenderer {
 
         log::info!("all waits complete");
         let static_resources =
-            GameRendererStaticResources::new(asset_resource, asset_manager, game_asset_manager)?;
+            GameRendererStaticResources::new(asset_resource, asset_manager)?;
 
         //let font = game_asset_manager.font(&static_resources.default_font).unwrap();
         //resources.get_mut::<TextResource>().unwrap().add_font(font);

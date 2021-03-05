@@ -10,7 +10,6 @@ use rafx::api::RafxResult;
 use rafx::assets::AssetManager;
 
 use crate::daemon::AssetDaemonArgs;
-use crate::game_asset_manager::GameAssetManager;
 use crate::game_renderer::GameRenderer;
 use crate::scenes::SceneManager;
 use crate::time::TimeState;
@@ -20,8 +19,6 @@ mod assets;
 mod components;
 pub mod daemon;
 mod features;
-mod game_asset_lookup;
-mod game_asset_manager;
 mod game_renderer;
 #[cfg(feature = "use-imgui")]
 mod imgui_support;
@@ -215,12 +212,8 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
         {
             profiling::scope!("update asset loaders");
             let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-            let mut game_resource_manager = resources.get_mut::<GameAssetManager>().unwrap();
 
             asset_manager.update_asset_loaders().unwrap();
-            game_resource_manager
-                .update_asset_loaders(&*asset_manager)
-                .unwrap();
         }
 
         //

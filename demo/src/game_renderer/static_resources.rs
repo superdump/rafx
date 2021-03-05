@@ -1,5 +1,4 @@
 use crate::assets::font::FontAsset;
-use crate::game_asset_manager::GameAssetManager;
 use distill::loader::handle::Handle;
 use distill::loader::storage::LoadStatus;
 use rafx::api::RafxResult;
@@ -11,7 +10,6 @@ fn wait_for_asset_to_load<T>(
     asset_handle: &distill::loader::handle::Handle<T>,
     asset_resource: &mut AssetResource,
     asset_manager: &mut AssetManager,
-    game_asset_manager: &mut GameAssetManager,
     asset_name: &str,
 ) -> RafxResult<()> {
     const PRINT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1000);
@@ -33,7 +31,6 @@ fn wait_for_asset_to_load<T>(
     loop {
         asset_resource.update();
         asset_manager.update_asset_loaders()?;
-        game_asset_manager.update_asset_loaders(asset_manager)?;
         match asset_resource.load_status(&asset_handle) {
             LoadStatus::NotRequested => {
                 unreachable!();
@@ -92,7 +89,6 @@ impl GameRendererStaticResources {
     pub fn new(
         asset_resource: &mut AssetResource,
         asset_manager: &mut AssetManager,
-        game_asset_manager: &mut GameAssetManager,
     ) -> RafxResult<Self> {
         //
         // Sprite resources
@@ -159,7 +155,6 @@ impl GameRendererStaticResources {
             &sprite_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "sprite_material",
         )?;
 
@@ -167,7 +162,6 @@ impl GameRendererStaticResources {
             &debug3d_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "debug material",
         )?;
 
@@ -175,7 +169,6 @@ impl GameRendererStaticResources {
             &bloom_extract_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "bloom extract material",
         )?;
 
@@ -183,7 +176,6 @@ impl GameRendererStaticResources {
             &bloom_blur_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "bloom blur material",
         )?;
 
@@ -191,7 +183,6 @@ impl GameRendererStaticResources {
             &bloom_combine_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "bloom combine material",
         )?;
 
@@ -199,7 +190,6 @@ impl GameRendererStaticResources {
             &imgui_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "imgui material",
         )?;
 
@@ -207,7 +197,6 @@ impl GameRendererStaticResources {
             &skybox_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "skybox material",
         )?;
 
@@ -215,7 +204,6 @@ impl GameRendererStaticResources {
             &skybox_texture,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "skybox texture",
         )?;
 
@@ -223,7 +211,6 @@ impl GameRendererStaticResources {
             &compute_test,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "compute pipeline",
         )?;
 
@@ -231,7 +218,6 @@ impl GameRendererStaticResources {
             &text_material,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "text material",
         )?;
 
@@ -239,7 +225,6 @@ impl GameRendererStaticResources {
             &default_font,
             asset_resource,
             asset_manager,
-            game_asset_manager,
             "default font",
         )?;
 

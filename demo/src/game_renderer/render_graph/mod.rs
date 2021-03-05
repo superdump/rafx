@@ -19,7 +19,6 @@ mod bloom_extract_pass;
 use crate::game_renderer::swapchain_resources::SwapchainResources;
 use crate::game_renderer::GameRendererStaticResources;
 use bloom_extract_pass::BloomExtractPass;
-use distill::loader::handle::AssetHandle;
 use rafx::assets::AssetManager;
 
 mod bloom_blur_pass;
@@ -96,9 +95,7 @@ pub fn build_render_graph(
     let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context, shadow_map_views);
 
     let compute_test_pipeline = asset_manager
-        .loaded_assets()
-        .compute_pipelines
-        .get_committed(static_resources.compute_test.load_handle())
+        .committed_asset(&static_resources.compute_test)
         .unwrap()
         .compute_pipeline
         .clone();
@@ -123,7 +120,7 @@ pub fn build_render_graph(
         .unwrap();
 
     let skybox_texture = asset_manager
-        .get_image_asset(&static_resources.skybox_texture)
+        .committed_asset(&static_resources.skybox_texture)
         .unwrap()
         .image_view
         .clone();

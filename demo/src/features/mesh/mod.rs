@@ -1,4 +1,3 @@
-use crate::game_asset_lookup::MeshAsset;
 use distill::loader::handle::Handle;
 use rafx::base::slab::{DropSlab, DropSlabKey};
 use rafx::framework::MaterialPass;
@@ -32,6 +31,7 @@ use crate::components::{
 use fnv::FnvHashMap;
 pub use shaders::mesh_frag::PerObjectDataUniform as MeshPerObjectFragmentShaderParam;
 pub use shaders::mesh_frag::PerViewDataUniform as MeshPerViewFragmentShaderParam;
+use crate::assets::gltf::MeshAsset;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum LightId {

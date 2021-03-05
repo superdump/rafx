@@ -5,7 +5,6 @@ use crate::components::{
 };
 use crate::features::mesh::{MeshRenderNode, MeshRenderNodeSet};
 use crate::features::text::TextResource;
-use crate::game_asset_lookup::MeshAsset;
 use crate::time::TimeState;
 use distill::loader::handle::Handle;
 use glam::Vec3;
@@ -13,6 +12,7 @@ use legion::IntoQuery;
 use legion::{Read, Resources, World, Write};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::visibility::{DynamicAabbVisibilityNode, DynamicVisibilityNodeSet};
+use crate::assets::gltf::MeshAsset;
 
 pub(super) struct ShadowsScene {
     font: Handle<FontAsset>,

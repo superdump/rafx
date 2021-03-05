@@ -1,13 +1,11 @@
-use crate::assets::font::{FontAsset, FontAssetData};
-use crate::assets::gltf::{GltfMaterialAsset, MeshAssetData};
+use crate::assets::font::FontAssetType;
+use crate::assets::gltf::{GltfMaterialAsset, MeshAssetType};
 use crate::features::debug3d::{Debug3dRenderFeature, DebugDraw3DResource};
 #[cfg(feature = "use-imgui")]
 use crate::features::imgui::ImGuiRenderFeature;
 use crate::features::mesh::{MeshRenderFeature, MeshRenderNodeSet};
 use crate::features::sprite::{SpriteRenderFeature, SpriteRenderNodeSet};
 use crate::features::text::{TextRenderFeature, TextResource};
-use crate::game_asset_lookup::MeshAsset;
-use crate::game_asset_manager::{GameAssetManager, FontAssetType, MeshAssetType};
 use crate::game_renderer::{GameRenderer, SwapchainHandler};
 use crate::phases::PostProcessRenderPhase;
 use crate::phases::TransparentRenderPhase;
@@ -18,12 +16,7 @@ use distill::loader::{
 use legion::Resources;
 use rafx::api::{RafxApi, RafxDeviceContext, RafxQueueType, RafxResult};
 use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::distill_impl::ResourceAssetLoader;
-use rafx::assets::{AssetManager, ComputePipelineAsset, ComputePipelineAssetData};
-use rafx::assets::{BufferAsset, ImageAsset, MaterialAsset, MaterialInstanceAsset, ShaderAsset};
-use rafx::assets::{
-    BufferAssetData, ImageAssetData, MaterialAssetData, MaterialInstanceAssetData, ShaderAssetData,
-};
+use rafx::assets::AssetManager;
 use rafx::nodes::RenderRegistry;
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
@@ -126,13 +119,12 @@ pub fn rendering_init(
     let graphics_queue = device_context.create_queue(RafxQueueType::Graphics)?;
     let transfer_queue = device_context.create_queue(RafxQueueType::Transfer)?;
 
-    let resource_manager = {
+    let asset_manager = {
         let mut asset_resource = resources.get_mut::<AssetResource>().unwrap();
 
-        let asset_manager = rafx::assets::AssetManager::new(
+        let mut asset_manager = rafx::assets::AssetManager::new(
             &device_context,
             &render_registry,
-            asset_resource.loader(),
             rafx::assets::UploadQueueConfig {
                 max_concurrent_uploads: 4,
                 max_new_uploads_in_single_frame: 4,
@@ -141,54 +133,18 @@ pub fn rendering_init(
             &graphics_queue,
             &transfer_queue,
         );
-        let loaders = asset_manager.create_loaders();
 
-        asset_resource.add_storage_with_loader::<ShaderAssetData, ShaderAsset, _>(Box::new(
-            ResourceAssetLoader(loaders.shader_loader),
-        ));
-        asset_resource
-            .add_storage_with_loader::<ComputePipelineAssetData, ComputePipelineAsset, _>(
-                Box::new(ResourceAssetLoader(loaders.compute_pipeline_loader)),
-            );
-        asset_resource.add_storage_with_loader::<MaterialAssetData, MaterialAsset, _>(Box::new(
-            ResourceAssetLoader(loaders.material_loader),
-        ));
-        asset_resource
-            .add_storage_with_loader::<MaterialInstanceAssetData, MaterialInstanceAsset, _>(
-                Box::new(ResourceAssetLoader(loaders.material_instance_loader)),
-            );
-        asset_resource.add_storage_with_loader::<ImageAssetData, ImageAsset, _>(Box::new(
-            ResourceAssetLoader(loaders.image_loader),
-        ));
-        asset_resource.add_storage_with_loader::<BufferAssetData, BufferAsset, _>(Box::new(
-            ResourceAssetLoader(loaders.buffer_loader),
-        ));
-
+        asset_manager.register_default_asset_types(&mut asset_resource);
+        asset_manager.register_asset_type::<FontAssetType>(&mut asset_resource);
+        asset_manager.register_asset_type::<MeshAssetType>(&mut asset_resource);
+        asset_resource.add_storage::<GltfMaterialAsset>();
         asset_manager
     };
 
     resources.insert(rafx_api);
     resources.insert(device_context);
-    resources.insert(resource_manager);
+    resources.insert(asset_manager);
     resources.insert(render_registry);
-
-    let game_resource_manager = {
-        //
-        // Create the game resource manager
-        //
-        let mut asset_resource = resources.get_mut::<AssetResource>().unwrap();
-
-        let mut game_resource_manager = GameAssetManager::new();
-
-        game_resource_manager.add_asset_type::<FontAssetType>(&mut asset_resource);
-        game_resource_manager.add_asset_type::<MeshAssetType>(&mut asset_resource);
-
-        asset_resource.add_storage::<GltfMaterialAsset>();
-
-        game_resource_manager
-    };
-
-    resources.insert(game_resource_manager);
 
     let game_renderer = GameRenderer::new(&resources, &graphics_queue, &transfer_queue).unwrap();
     resources.insert(game_renderer);
@@ -210,7 +166,6 @@ pub fn rendering_destroy(resources: &mut Resources) -> RafxResult<()> {
         resources.remove::<DynamicVisibilityNodeSet>();
         resources.remove::<DebugDraw3DResource>();
         resources.remove::<TextResource>();
-        resources.remove::<GameAssetManager>();
         resources.remove::<RenderRegistry>();
 
         // Remove the asset resource because we have asset storages that reference resources

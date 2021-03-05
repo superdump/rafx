@@ -66,7 +66,7 @@ impl ExtractJob for SpriteExtractJob {
                 .get_raw(render_node_handle)
                 .unwrap();
 
-            let image_asset = asset_manager.get_image_asset(&sprite_render_node.image);
+            let image_asset = asset_manager.committed_asset(&sprite_render_node.image);
 
             let extracted_frame_node = image_asset.and_then(|image_asset| {
                 Some(ExtractedSpriteData {

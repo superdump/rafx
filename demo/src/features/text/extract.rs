@@ -1,6 +1,5 @@
 use crate::features::text::prepare::TextPrepareJobImpl;
 use crate::features::text::{ExtractedTextData, TextRenderFeature, TextResource};
-use crate::game_asset_manager::GameAssetManager;
 use crate::game_renderer::GameRendererStaticResources;
 use crate::legion_support::LegionResources;
 use fnv::FnvHashMap;
@@ -31,7 +30,6 @@ impl ExtractJob for TextExtractJob {
             .render_resources
             .fetch::<AssetManagerRenderResource>();
 
-        let game_asset_manager = legion_resources.get::<GameAssetManager>().unwrap();
         let mut text_resource = legion_resources.get_mut::<TextResource>().unwrap();
 
         let text_material = &extract_context
@@ -45,7 +43,7 @@ impl ExtractJob for TextExtractJob {
         let text_draw_data = text_resource.take_text_draw_data();
         let mut font_assets = FnvHashMap::default();
         for (load_handle, handle) in text_draw_data.fonts {
-            let asset = game_asset_manager.asset(&handle).unwrap().clone();
+            let asset = asset_manager.committed_asset(&handle).unwrap().clone();
             let old = font_assets.insert(load_handle, asset);
             assert!(old.is_none());
         }

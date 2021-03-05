@@ -1,28 +1,22 @@
 use crossbeam_channel::Sender;
-use distill::loader::handle::{AssetHandle, GenericHandle};
-use distill::loader::handle::Handle;
 use distill::loader::storage::AssetLoadOp;
-use distill::loader::{Loader, LoadHandle};
 use rafx_api::RafxResult;
-use crate::{AssetLookup, DynAssetLookup, AssetManager, GenericLoader, LoadQueues};
-use std::sync::Arc;
-use rafx_base::resource_map::ResourceMap;
+use crate::{AssetLookup, DynAssetLookup, AssetManager, LoadQueues};
 use crate::distill_impl::{AssetResource, ResourceAssetLoader};
-use fnv::FnvHashMap;
 use type_uuid::TypeUuid;
 use std::any::TypeId;
 use std::marker::PhantomData;
 
 
-pub trait AssetTypeFactory {
-    fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetType>;
+pub trait AssetTypeHandlerFactory {
+    fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler>;
 }
 
-pub trait AssetType {
+pub trait AssetTypeHandler: Sync {
     fn process_load_requests(
         &mut self,
-        asset_manager: &AssetManager,
-    );
+        asset_manager: &mut AssetManager,
+    ) -> RafxResult<()>;
 
     fn asset_lookup(
         &self
@@ -33,23 +27,14 @@ pub trait AssetType {
 
 
 
-
-
-
-
-
-
-
-
-
 pub trait SimpleAssetTypeLoadHandler<AssetDataT, AssetT> {
     fn load(
-        asset_manager: &AssetManager,
+        asset_manager: &mut AssetManager,
         font_asset: AssetDataT,
     ) -> RafxResult<AssetT>;
 }
 
-pub struct SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+pub struct SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
     where LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT>
 {
     asset_lookup: AssetLookup<AssetT>,
@@ -57,13 +42,13 @@ pub struct SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
     phantom_data: PhantomData<LoadHandlerT>,
 }
 
-impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeFactory for SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
     where
         AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
-        AssetT: TypeUuid + 'static + Send + Clone,
-        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static
+        AssetT: TypeUuid + 'static + Send + Clone + Sync,
+        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync
 {
-    fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetType> {
+    fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler> {
         let load_queues = LoadQueues::<AssetDataT, AssetT>::default();
 
         asset_resource.add_storage_with_loader::<AssetDataT, AssetT, _>(Box::new(
@@ -78,13 +63,13 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeFactory for SimpleAssetTypeWithL
     }
 }
 
-impl<AssetDataT, AssetT, LoadHandlerT> AssetType for SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
     where
         AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
-        AssetT: TypeUuid + 'static + Send + Clone,
-        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static
+        AssetT: TypeUuid + 'static + Send + Clone + Sync,
+        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync
 {
-    fn process_load_requests(&mut self, asset_manager: &AssetManager) {
+    fn process_load_requests(&mut self, asset_manager: &mut AssetManager) -> RafxResult<()> {
         for request in self.load_queues.take_load_requests() {
             log::trace!("Create asset type {} {:?}", std::any::type_name::<AssetT>(), request.load_handle);
             let loaded_asset = LoadHandlerT::load(asset_manager, request.asset);
@@ -98,6 +83,7 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetType for SimpleAssetTypeWithLoader<A
 
         handle_commit_requests(&mut self.load_queues, &mut self.asset_lookup);
         handle_free_requests(&mut self.load_queues, &mut self.asset_lookup);
+        Ok(())
     }
 
     fn asset_lookup(
@@ -112,7 +98,9 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetType for SimpleAssetTypeWithLoader<A
 }
 
 
-fn handle_load_result<AssetT: Clone>(
+
+
+pub fn handle_load_result<AssetT: Clone>(
     load_op: AssetLoadOp,
     loaded_asset: RafxResult<AssetT>,
     asset_lookup: &mut AssetLookup<AssetT>,
@@ -130,7 +118,7 @@ fn handle_load_result<AssetT: Clone>(
     }
 }
 
-fn handle_commit_requests<AssetDataT, AssetT>(
+pub fn handle_commit_requests<AssetDataT, AssetT>(
     load_queues: &mut LoadQueues<AssetDataT, AssetT>,
     asset_lookup: &mut AssetLookup<AssetT>,
 ) {
@@ -144,7 +132,7 @@ fn handle_commit_requests<AssetDataT, AssetT>(
     }
 }
 
-fn handle_free_requests<AssetDataT, AssetT>(
+pub fn handle_free_requests<AssetDataT, AssetT>(
     load_queues: &mut LoadQueues<AssetDataT, AssetT>,
     asset_lookup: &mut AssetLookup<AssetT>,
 ) {
@@ -152,3 +140,5 @@ fn handle_free_requests<AssetDataT, AssetT>(
         asset_lookup.commit(request.load_handle);
     }
 }
+
+

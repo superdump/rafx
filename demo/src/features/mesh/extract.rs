@@ -7,7 +7,6 @@ use crate::features::mesh::{
     ExtractedDirectionalLight, ExtractedFrameNodeMeshData, ExtractedPointLight, ExtractedSpotLight,
     MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet,
 };
-use crate::game_asset_manager::GameAssetManager;
 use crate::legion_support::{LegionResources, LegionWorld};
 use legion::*;
 use rafx::base::slab::RawSlabKey;
@@ -15,6 +14,7 @@ use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex,
     RenderJobExtractContext, RenderView,
 };
+use rafx::assets::AssetManagerRenderResource;
 
 pub struct MeshExtractJob {}
 
@@ -38,6 +38,8 @@ impl ExtractJob for MeshExtractJob {
         let legion_world = extract_context.render_resources.fetch::<LegionWorld>();
         let world = &**legion_world;
 
+        let asset_manager = extract_context.render_resources.fetch::<AssetManagerRenderResource>();
+
         //
         // Update the mesh render nodes. This could be done earlier as part of a system
         //
@@ -55,8 +57,6 @@ impl ExtractJob for MeshExtractJob {
         //
         // Get the position/mesh asset pairs we will draw
         //
-        let game_resource_manager = legion_resources.get::<GameAssetManager>().unwrap();
-
         let mut extracted_frame_node_mesh_data =
             Vec::<Option<ExtractedFrameNodeMeshData>>::with_capacity(
                 frame_packet.frame_node_count(self.feature_index()) as usize,
@@ -76,7 +76,7 @@ impl ExtractJob for MeshExtractJob {
             let mesh_asset = mesh_render_node
                 .mesh
                 .as_ref()
-                .and_then(|mesh_asset_handle| game_resource_manager.asset(mesh_asset_handle));
+                .and_then(|mesh_asset_handle| asset_manager.committed_asset(mesh_asset_handle));
 
             let extracted_frame_node = mesh_asset.and_then(|mesh_asset| {
                 Some(ExtractedFrameNodeMeshData {
