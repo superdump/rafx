@@ -45,7 +45,7 @@ impl ExtractJob for TextExtractJob {
         let text_draw_data = text_resource.take_text_draw_data();
         let mut font_assets = FnvHashMap::default();
         for (load_handle, handle) in text_draw_data.fonts {
-            let asset = game_asset_manager.font(&handle).unwrap().clone();
+            let asset = game_asset_manager.asset(&handle).unwrap().clone();
             let old = font_assets.insert(load_handle, asset);
             assert!(old.is_none());
         }

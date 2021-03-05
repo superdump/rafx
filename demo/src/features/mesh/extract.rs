@@ -76,7 +76,7 @@ impl ExtractJob for MeshExtractJob {
             let mesh_asset = mesh_render_node
                 .mesh
                 .as_ref()
-                .and_then(|mesh_asset_handle| game_resource_manager.mesh(mesh_asset_handle));
+                .and_then(|mesh_asset_handle| game_resource_manager.asset(mesh_asset_handle));
 
             let extracted_frame_node = mesh_asset.and_then(|mesh_asset| {
                 Some(ExtractedFrameNodeMeshData {

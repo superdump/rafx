@@ -6,6 +6,7 @@ use distill::loader::storage::IndirectionTable;
 use distill::loader::LoadHandle;
 use distill::loader::Loader;
 use fnv::FnvHashMap;
+use downcast_rs::Downcast;
 
 //
 // Represents a single asset which may simultaneously have committed and uncommitted loaded state
@@ -35,10 +36,20 @@ fn resolve_load_handle(
     }
 }
 
+pub trait DynAssetLookup : Downcast {
+
+}
+
+downcast_rs::impl_downcast!(DynAssetLookup);
+
 pub struct AssetLookup<AssetT> {
     //TODO: Slab these for faster lookup?
     pub loaded_assets: FnvHashMap<LoadHandle, LoadedAssetState<AssetT>>,
     pub indirection_table: IndirectionTable,
+}
+
+impl<AssetT> DynAssetLookup for AssetLookup<AssetT> where AssetT: 'static {
+
 }
 
 impl<AssetT> AssetLookup<AssetT> {

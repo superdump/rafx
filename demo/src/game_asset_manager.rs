@@ -1,170 +1,163 @@
 use crate::assets::font::{FontAsset, FontAssetData, FontAssetInner};
 use crate::assets::gltf::MeshAssetData;
 use crate::game_asset_lookup::{
-    GameLoadedAssetLookupSet, GameLoadedAssetMetrics, MeshAsset, MeshAssetInner, MeshAssetPart,
+    MeshAsset, MeshAssetInner, MeshAssetPart,
 };
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase};
 use crossbeam_channel::Sender;
-use distill::loader::handle::AssetHandle;
+use distill::loader::handle::{AssetHandle, GenericHandle};
 use distill::loader::handle::Handle;
 use distill::loader::storage::AssetLoadOp;
-use distill::loader::Loader;
+use distill::loader::{Loader, LoadHandle};
 use fontdue::FontSettings;
 use rafx::api::RafxResult;
-use rafx::assets::{AssetLookup, AssetManager, GenericLoader, LoadQueues};
+use rafx::assets::{AssetLookup, DynAssetLookup, AssetManager, GenericLoader, LoadQueues, SimpleAssetTypeLoadHandler, SimpleAssetTypeWithLoader, AssetType, AssetTypeFactory};
 use std::sync::Arc;
+use rafx::base::resource_map::ResourceMap;
+use rafx::assets::distill_impl::{AssetResource, ResourceAssetLoader};
+use fnv::FnvHashMap;
+use type_uuid::TypeUuid;
+use std::any::TypeId;
+use std::marker::PhantomData;
 
-#[derive(Debug)]
-pub struct GameAssetManagerMetrics {
-    pub game_loaded_asset_metrics: GameLoadedAssetMetrics,
+// pub trait AssetTypeFactory {
+//     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetType>;
+// }
+//
+// pub trait AssetType {
+//     fn process_load_requests(
+//         &mut self,
+//         asset_manager: &AssetManager,
+//     );
+//
+//     fn asset_lookup(
+//         &self
+//     ) -> &dyn DynAssetLookup;
+//
+//     fn asset_type_id(&self) -> TypeId;
+// }
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+// pub trait SimpleAssetTypeLoadHandler<AssetDataT, AssetT> {
+//     fn load(
+//         asset_manager: &AssetManager,
+//         font_asset: AssetDataT,
+//     ) -> RafxResult<AssetT>;
+// }
+//
+// pub struct SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+//     where LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT>
+// {
+//     asset_lookup: AssetLookup<AssetT>,
+//     load_queues: LoadQueues<AssetDataT, AssetT>,
+//     phantom_data: PhantomData<LoadHandlerT>,
+// }
+//
+// impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeFactory for SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+//     where
+//         AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
+//         AssetT: TypeUuid + 'static + Send + Clone,
+//         LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static
+// {
+//     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetType> {
+//         let load_queues = LoadQueues::<AssetDataT, AssetT>::default();
+//
+//         asset_resource.add_storage_with_loader::<AssetDataT, AssetT, _>(Box::new(
+//             ResourceAssetLoader(load_queues.create_loader()),
+//         ));
+//
+//         Box::new(Self {
+//             asset_lookup: AssetLookup::new(asset_resource.loader()),
+//             load_queues,
+//             phantom_data: Default::default()
+//         })
+//     }
+// }
+//
+// impl<AssetDataT, AssetT, LoadHandlerT> AssetType for SimpleAssetTypeWithLoader<AssetDataT, AssetT, LoadHandlerT>
+//     where
+//         AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
+//         AssetT: TypeUuid + 'static + Send + Clone,
+//         LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static
+// {
+//     fn process_load_requests(&mut self, asset_manager: &AssetManager) {
+//         for request in self.load_queues.take_load_requests() {
+//             log::trace!("Create asset type {} {:?}", std::any::type_name::<AssetT>(), request.load_handle);
+//             let loaded_asset = LoadHandlerT::load(asset_manager, request.asset);
+//             GameAssetManager::handle_load_result(
+//                 request.load_op,
+//                 loaded_asset,
+//                 &mut self.asset_lookup,
+//                 request.result_tx,
+//             );
+//         }
+//
+//         GameAssetManager::handle_commit_requests(&mut self.load_queues, &mut self.asset_lookup);
+//         GameAssetManager::handle_free_requests(&mut self.load_queues, &mut self.asset_lookup);
+//     }
+//
+//     fn asset_lookup(
+//         &self,
+//     ) -> &dyn DynAssetLookup {
+//         &self.asset_lookup
+//     }
+//
+//     fn asset_type_id(&self) -> TypeId {
+//         TypeId::of::<AssetT>()
+//     }
+// }
+//
+//
+
+
+
+
+
+
+pub struct FontLoadHandler;
+
+impl SimpleAssetTypeLoadHandler<FontAssetData, FontAsset> for FontLoadHandler {
+    #[profiling::function]
+    fn load(
+        _asset_manager: &AssetManager,
+        font_asset: FontAssetData,
+    ) -> RafxResult<FontAsset> {
+        let settings = FontSettings::default();
+        let font = fontdue::Font::from_bytes(font_asset.data.as_slice(), settings)
+            .map_err(|x| x.to_string())?;
+
+        let inner = FontAssetInner {
+            font,
+            data_hash: font_asset.data_hash,
+            scale: font_asset.scale,
+        };
+
+        Ok(FontAsset {
+            inner: Arc::new(inner),
+        })
+    }
 }
 
-#[derive(Default)]
-pub struct GameLoadQueueSet {
-    pub meshes: LoadQueues<MeshAssetData, MeshAsset>,
-    pub fonts: LoadQueues<FontAssetData, FontAsset>,
-}
 
-pub struct GameAssetManager {
-    loaded_assets: GameLoadedAssetLookupSet,
-    load_queues: GameLoadQueueSet,
-}
 
-impl GameAssetManager {
-    pub fn new(loader: &Loader) -> Self {
-        GameAssetManager {
-            loaded_assets: GameLoadedAssetLookupSet::new(loader),
-            load_queues: Default::default(),
-        }
-    }
 
-    pub fn create_mesh_loader(&self) -> GenericLoader<MeshAssetData, MeshAsset> {
-        self.load_queues.meshes.create_loader()
-    }
 
-    pub fn create_font_loader(&self) -> GenericLoader<FontAssetData, FontAsset> {
-        self.load_queues.fonts.create_loader()
-    }
 
-    pub fn mesh(
-        &self,
-        handle: &Handle<MeshAsset>,
-    ) -> Option<&MeshAsset> {
-        self.loaded_assets
-            .meshes
-            .get_committed(handle.load_handle())
-    }
+pub struct MeshLoadHandler;
 
-    pub fn font(
-        &self,
-        handle: &Handle<FontAsset>,
-    ) -> Option<&FontAsset> {
-        self.loaded_assets.fonts.get_committed(handle.load_handle())
-    }
-
-    // Call whenever you want to handle assets loading/unloading
+impl SimpleAssetTypeLoadHandler<MeshAssetData, MeshAsset> for MeshLoadHandler {
     #[profiling::function]
-    pub fn update_asset_loaders(
-        &mut self,
-        asset_manager: &AssetManager,
-    ) -> RafxResult<()> {
-        self.process_mesh_load_requests(asset_manager);
-        self.process_font_load_requests(asset_manager);
-        Ok(())
-    }
-
-    pub fn metrics(&self) -> GameAssetManagerMetrics {
-        let game_loaded_asset_metrics = self.loaded_assets.metrics();
-
-        GameAssetManagerMetrics {
-            game_loaded_asset_metrics,
-        }
-    }
-
-    #[profiling::function]
-    fn process_mesh_load_requests(
-        &mut self,
-        asset_manager: &AssetManager,
-    ) {
-        for request in self.load_queues.meshes.take_load_requests() {
-            log::trace!("Create mesh {:?}", request.load_handle);
-            let loaded_asset = self.load_mesh(asset_manager, request.asset);
-            Self::handle_load_result(
-                request.load_op,
-                loaded_asset,
-                &mut self.loaded_assets.meshes,
-                request.result_tx,
-            );
-        }
-
-        Self::handle_commit_requests(&mut self.load_queues.meshes, &mut self.loaded_assets.meshes);
-        Self::handle_free_requests(&mut self.load_queues.meshes, &mut self.loaded_assets.meshes);
-    }
-
-    #[profiling::function]
-    fn process_font_load_requests(
-        &mut self,
-        asset_manager: &AssetManager,
-    ) {
-        for request in self.load_queues.fonts.take_load_requests() {
-            log::trace!("Create font {:?}", request.load_handle);
-            let loaded_asset = self.load_font(asset_manager, request.asset);
-            Self::handle_load_result(
-                request.load_op,
-                loaded_asset,
-                &mut self.loaded_assets.fonts,
-                request.result_tx,
-            );
-        }
-
-        Self::handle_commit_requests(&mut self.load_queues.fonts, &mut self.loaded_assets.fonts);
-        Self::handle_free_requests(&mut self.load_queues.fonts, &mut self.loaded_assets.fonts);
-    }
-
-    fn handle_load_result<AssetT: Clone>(
-        load_op: AssetLoadOp,
-        loaded_asset: RafxResult<AssetT>,
-        asset_lookup: &mut AssetLookup<AssetT>,
-        result_tx: Sender<AssetT>,
-    ) {
-        match loaded_asset {
-            Ok(loaded_asset) => {
-                asset_lookup.set_uncommitted(load_op.load_handle(), loaded_asset.clone());
-                result_tx.send(loaded_asset).unwrap();
-                load_op.complete()
-            }
-            Err(err) => {
-                load_op.error(err);
-            }
-        }
-    }
-
-    fn handle_commit_requests<AssetDataT, AssetT>(
-        load_queues: &mut LoadQueues<AssetDataT, AssetT>,
-        asset_lookup: &mut AssetLookup<AssetT>,
-    ) {
-        for request in load_queues.take_commit_requests() {
-            log::trace!(
-                "commit asset {:?} {}",
-                request.load_handle,
-                core::any::type_name::<AssetDataT>()
-            );
-            asset_lookup.commit(request.load_handle);
-        }
-    }
-
-    fn handle_free_requests<AssetDataT, AssetT>(
-        load_queues: &mut LoadQueues<AssetDataT, AssetT>,
-        asset_lookup: &mut AssetLookup<AssetT>,
-    ) {
-        for request in load_queues.take_commit_requests() {
-            asset_lookup.commit(request.load_handle);
-        }
-    }
-
-    #[profiling::function]
-    fn load_mesh(
-        &mut self,
+    fn load(
         asset_manager: &AssetManager,
         mesh_asset: MeshAssetData,
     ) -> RafxResult<MeshAsset> {
@@ -248,38 +241,123 @@ impl GameAssetManager {
             inner: Arc::new(inner),
         })
     }
+}
 
-    #[profiling::function]
-    fn load_font(
-        &mut self,
-        _asset_manager: &AssetManager,
-        font_asset: FontAssetData,
-    ) -> RafxResult<FontAsset> {
-        let settings = FontSettings::default();
-        let font = fontdue::Font::from_bytes(font_asset.data.as_slice(), settings)
-            .map_err(|x| x.to_string())?;
+pub type FontAssetType = SimpleAssetTypeWithLoader<FontAssetData, FontAsset, FontLoadHandler>;
+pub type MeshAssetType = SimpleAssetTypeWithLoader<MeshAssetData, MeshAsset, MeshLoadHandler>;
 
-        let inner = FontAssetInner {
-            font,
-            data_hash: font_asset.data_hash,
-            scale: font_asset.scale,
-        };
+#[derive(Debug)]
+pub struct GameAssetManagerMetrics {
+    //pub game_loaded_asset_metrics: GameLoadedAssetMetrics,
+}
 
-        Ok(FontAsset {
-            inner: Arc::new(inner),
-        })
+// #[derive(Default)]
+// pub struct GameLoadQueueSet {
+//     pub meshes: LoadQueues<MeshAssetData, MeshAsset>,
+//     pub fonts: LoadQueues<FontAssetData, FontAsset>,
+// }
+
+pub struct GameAssetManager {
+    asset_types: FnvHashMap<TypeId, Box<dyn AssetType>>,
+}
+
+impl GameAssetManager {
+    pub fn new() -> Self {
+        GameAssetManager {
+            asset_types: Default::default(),
+        }
     }
+
+    pub fn add_asset_type<AssetTypeFactoryT: AssetTypeFactory>(&mut self, asset_resource: &mut AssetResource) {
+        let asset_type = AssetTypeFactoryT::create(asset_resource);
+        let old = self.asset_types.insert(asset_type.asset_type_id(), asset_type);
+        assert!(old.is_none());
+    }
+
+    pub fn asset<AssetT: 'static>(
+        &self,
+        handle: &Handle<AssetT>
+    ) -> Option<&AssetT> {
+        let asset_type = self.asset_types.get(&TypeId::of::<AssetT>())?;
+        asset_type.asset_lookup().downcast_ref::<AssetLookup<AssetT>>().unwrap().get_committed(handle.load_handle())
+    }
+
+    // Call whenever you want to handle assets loading/unloading
+    #[profiling::function]
+    pub fn update_asset_loaders(
+        &mut self,
+        asset_manager: &AssetManager,
+    ) -> RafxResult<()> {
+        // self.process_mesh_load_requests(asset_manager);
+        // self.process_font_load_requests(asset_manager);
+
+        for (ty, asset_type) in &mut self.asset_types {
+            asset_type.process_load_requests(asset_manager);
+        }
+
+        Ok(())
+    }
+
+    // pub fn metrics(&self) -> GameAssetManagerMetrics {
+    //     let game_loaded_asset_metrics = self.loaded_assets.metrics();
+    //
+    //     GameAssetManagerMetrics {
+    //         game_loaded_asset_metrics,
+    //     }
+    // }
+    //
+    // fn handle_load_result<AssetT: Clone>(
+    //     load_op: AssetLoadOp,
+    //     loaded_asset: RafxResult<AssetT>,
+    //     asset_lookup: &mut AssetLookup<AssetT>,
+    //     result_tx: Sender<AssetT>,
+    // ) {
+    //     match loaded_asset {
+    //         Ok(loaded_asset) => {
+    //             asset_lookup.set_uncommitted(load_op.load_handle(), loaded_asset.clone());
+    //             result_tx.send(loaded_asset).unwrap();
+    //             load_op.complete()
+    //         }
+    //         Err(err) => {
+    //             load_op.error(err);
+    //         }
+    //     }
+    // }
+    //
+    // fn handle_commit_requests<AssetDataT, AssetT>(
+    //     load_queues: &mut LoadQueues<AssetDataT, AssetT>,
+    //     asset_lookup: &mut AssetLookup<AssetT>,
+    // ) {
+    //     for request in load_queues.take_commit_requests() {
+    //         log::trace!(
+    //             "commit asset {:?} {}",
+    //             request.load_handle,
+    //             core::any::type_name::<AssetDataT>()
+    //         );
+    //         asset_lookup.commit(request.load_handle);
+    //     }
+    // }
+    //
+    // fn handle_free_requests<AssetDataT, AssetT>(
+    //     load_queues: &mut LoadQueues<AssetDataT, AssetT>,
+    //     asset_lookup: &mut AssetLookup<AssetT>,
+    // ) {
+    //     for request in load_queues.take_commit_requests() {
+    //         asset_lookup.commit(request.load_handle);
+    //     }
+    // }
 }
 
 impl Drop for GameAssetManager {
     fn drop(&mut self) {
         log::info!("Cleaning up game resource manager");
-        log::trace!("Game Resource Manager Metrics:\n{:#?}", self.metrics());
+        //log::trace!("Game Resource Manager Metrics:\n{:#?}", self.metrics());
 
         // Wipe out any loaded assets. This will potentially drop ref counts on resources
-        self.loaded_assets.destroy();
+        //self.loaded_assets.destroy();
+        self.asset_types.clear();
 
         log::info!("Dropping game resource manager");
-        log::trace!("Resource Game Manager Metrics:\n{:#?}", self.metrics());
+        //log::trace!("Resource Game Manager Metrics:\n{:#?}", self.metrics());
     }
 }

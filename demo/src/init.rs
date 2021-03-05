@@ -7,7 +7,7 @@ use crate::features::mesh::{MeshRenderFeature, MeshRenderNodeSet};
 use crate::features::sprite::{SpriteRenderFeature, SpriteRenderNodeSet};
 use crate::features::text::{TextRenderFeature, TextResource};
 use crate::game_asset_lookup::MeshAsset;
-use crate::game_asset_manager::GameAssetManager;
+use crate::game_asset_manager::{GameAssetManager, FontAssetType, MeshAssetType};
 use crate::game_renderer::{GameRenderer, SwapchainHandler};
 use crate::phases::PostProcessRenderPhase;
 use crate::phases::TransparentRenderPhase;
@@ -178,17 +178,13 @@ pub fn rendering_init(
         //
         let mut asset_resource = resources.get_mut::<AssetResource>().unwrap();
 
-        let game_resource_manager = GameAssetManager::new(asset_resource.loader());
+        let mut game_resource_manager = GameAssetManager::new();
 
-        asset_resource.add_storage_with_loader::<MeshAssetData, MeshAsset, _>(Box::new(
-            ResourceAssetLoader(game_resource_manager.create_mesh_loader()),
-        ));
+        game_resource_manager.add_asset_type::<FontAssetType>(&mut asset_resource);
+        game_resource_manager.add_asset_type::<MeshAssetType>(&mut asset_resource);
 
         asset_resource.add_storage::<GltfMaterialAsset>();
 
-        asset_resource.add_storage_with_loader::<FontAssetData, FontAsset, _>(Box::new(
-            ResourceAssetLoader(game_resource_manager.create_font_loader()),
-        ));
         game_resource_manager
     };
 

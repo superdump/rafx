@@ -40,28 +40,28 @@ pub struct GameLoadedAssetMetrics {
 //
 // Lookups by asset for loaded asset state
 //
-pub struct GameLoadedAssetLookupSet {
-    pub meshes: AssetLookup<MeshAsset>,
-    pub fonts: AssetLookup<FontAsset>,
-}
-
-impl GameLoadedAssetLookupSet {
-    pub fn new(loader: &Loader) -> Self {
-        GameLoadedAssetLookupSet {
-            meshes: AssetLookup::new(loader),
-            fonts: AssetLookup::new(loader),
-        }
-    }
-
-    pub fn metrics(&self) -> GameLoadedAssetMetrics {
-        GameLoadedAssetMetrics {
-            mesh_count: self.meshes.len(),
-            font_count: self.fonts.len(),
-        }
-    }
-
-    pub fn destroy(&mut self) {
-        self.meshes.destroy();
-        self.fonts.destroy();
-    }
-}
+// pub struct GameLoadedAssetLookupSet {
+//     pub meshes: AssetLookup<MeshAsset>,
+//     pub fonts: AssetLookup<FontAsset>,
+// }
+//
+// impl GameLoadedAssetLookupSet {
+//     pub fn new(loader: &Loader) -> Self {
+//         GameLoadedAssetLookupSet {
+//             meshes: AssetLookup::new(loader),
+//             fonts: AssetLookup::new(loader),
+//         }
+//     }
+//
+//     pub fn metrics(&self) -> GameLoadedAssetMetrics {
+//         GameLoadedAssetMetrics {
+//             mesh_count: self.meshes.len(),
+//             font_count: self.fonts.len(),
+//         }
+//     }
+//
+//     pub fn destroy(&mut self) {
+//         self.meshes.destroy();
+//         self.fonts.destroy();
+//     }
+// }
