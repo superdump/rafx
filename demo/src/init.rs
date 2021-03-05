@@ -1,5 +1,5 @@
 use crate::assets::font::FontAssetType;
-use crate::assets::gltf::{GltfMaterialAsset, MeshAssetType};
+use crate::assets::gltf::MeshAssetType;
 use crate::features::debug3d::{Debug3dRenderFeature, DebugDraw3DResource};
 #[cfg(feature = "use-imgui")]
 use crate::features::imgui::ImGuiRenderFeature;
@@ -135,9 +135,9 @@ pub fn rendering_init(
         );
 
         asset_manager.register_default_asset_types(&mut asset_resource);
-        asset_manager.register_asset_type::<FontAssetType>(&mut asset_resource);
+
         asset_manager.register_asset_type::<MeshAssetType>(&mut asset_resource);
-        asset_resource.add_storage::<GltfMaterialAsset>();
+        asset_manager.register_asset_type::<FontAssetType>(&mut asset_resource);
         asset_manager
     };
 

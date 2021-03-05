@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use type_uuid::*;
 
-use crate::{AssetManager, ShaderAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
+use crate::{AssetManager, DefaultAssetTypeHandler, DefaultAssetTypeLoadHandler, ShaderAsset};
 use distill::loader::handle::Handle;
 use rafx_api::RafxResult;
 pub use rafx_framework::DescriptorSetLayoutResource;
@@ -27,7 +27,7 @@ pub struct ComputePipelineAsset {
 
 pub struct ComputePipelineLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset>
+impl DefaultAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset>
     for ComputePipelineLoadHandler
 {
     #[profiling::function]
@@ -130,7 +130,7 @@ impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset>
     }
 }
 
-pub type ComputePipelineAssetTypeHandler = SimpleAssetTypeHandler<
+pub type ComputePipelineAssetTypeHandler = DefaultAssetTypeHandler<
     ComputePipelineAssetData,
     ComputePipelineAsset,
     ComputePipelineLoadHandler,

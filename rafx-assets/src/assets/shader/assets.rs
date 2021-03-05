@@ -1,4 +1,4 @@
-use crate::{AssetManager, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
+use crate::{AssetManager, DefaultAssetTypeHandler, DefaultAssetTypeLoadHandler};
 use fnv::FnvHashMap;
 use rafx_api::{RafxResult, RafxShaderPackage};
 use rafx_framework::ResourceArc;
@@ -30,7 +30,7 @@ pub struct ShaderAsset {
 
 pub struct ShaderLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<ShaderAssetData, ShaderAsset> for ShaderLoadHandler {
+impl DefaultAssetTypeLoadHandler<ShaderAssetData, ShaderAsset> for ShaderLoadHandler {
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -60,4 +60,4 @@ impl SimpleAssetTypeLoadHandler<ShaderAssetData, ShaderAsset> for ShaderLoadHand
 }
 
 pub type ShaderAssetTypeHandler =
-    SimpleAssetTypeHandler<ShaderAssetData, ShaderAsset, ShaderLoadHandler>;
+    DefaultAssetTypeHandler<ShaderAssetData, ShaderAsset, ShaderLoadHandler>;

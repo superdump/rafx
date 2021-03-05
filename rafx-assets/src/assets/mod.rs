@@ -56,8 +56,9 @@ pub use asset_lookup::DynAssetLookup;
 mod asset_type_handler;
 pub use asset_type_handler::AssetTypeHandler;
 pub use asset_type_handler::AssetTypeHandlerFactory;
-pub use asset_type_handler::SimpleAssetTypeHandler;
-pub use asset_type_handler::SimpleAssetTypeLoadHandler;
+pub use asset_type_handler::DefaultAssetTypeHandler;
+pub use asset_type_handler::DefaultAssetTypeLoadHandler;
+pub use asset_type_handler::StorageOnlyAssetTypeHandler;
 
 mod load_queue;
 pub use load_queue::GenericLoader;

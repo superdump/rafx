@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use type_uuid::*;
 
 use crate::{
-    AssetManager, ImageAsset, ShaderAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler,
+    AssetManager, DefaultAssetTypeHandler, DefaultAssetTypeLoadHandler, ImageAsset, ShaderAsset,
 };
 use distill::loader::handle::Handle;
 use fnv::FnvHashMap;
@@ -425,7 +425,7 @@ impl Deref for MaterialInstanceAsset {
 
 pub struct MaterialLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<MaterialAssetData, MaterialAsset> for MaterialLoadHandler {
+impl DefaultAssetTypeLoadHandler<MaterialAssetData, MaterialAsset> for MaterialLoadHandler {
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -474,11 +474,11 @@ impl SimpleAssetTypeLoadHandler<MaterialAssetData, MaterialAsset> for MaterialLo
 }
 
 pub type MaterialAssetTypeHandler =
-    SimpleAssetTypeHandler<MaterialAssetData, MaterialAsset, MaterialLoadHandler>;
+    DefaultAssetTypeHandler<MaterialAssetData, MaterialAsset, MaterialLoadHandler>;
 
 pub struct MaterialInstanceLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset>
+impl DefaultAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset>
     for MaterialInstanceLoadHandler
 {
     #[profiling::function]
@@ -561,7 +561,7 @@ impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset
     }
 }
 
-pub type MaterialInstanceAssetTypeHandler = SimpleAssetTypeHandler<
+pub type MaterialInstanceAssetTypeHandler = DefaultAssetTypeHandler<
     MaterialInstanceAssetData,
     MaterialInstanceAsset,
     MaterialInstanceLoadHandler,
@@ -569,7 +569,7 @@ pub type MaterialInstanceAssetTypeHandler = SimpleAssetTypeHandler<
 
 pub struct SamplerLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<SamplerAssetData, SamplerAsset> for SamplerLoadHandler {
+impl DefaultAssetTypeLoadHandler<SamplerAssetData, SamplerAsset> for SamplerLoadHandler {
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -583,4 +583,4 @@ impl SimpleAssetTypeLoadHandler<SamplerAssetData, SamplerAsset> for SamplerLoadH
 }
 
 pub type SamplerAssetTypeHandler =
-    SimpleAssetTypeHandler<SamplerAssetData, SamplerAsset, SamplerLoadHandler>;
+    DefaultAssetTypeHandler<SamplerAssetData, SamplerAsset, SamplerLoadHandler>;

@@ -192,20 +192,12 @@ impl AssetManager {
             .create_descriptor_set_allocator_provider()
     }
 
-    pub(crate) fn material_instance_descriptor_sets(&self) -> &DescriptorSetAllocator {
-        &self.material_instance_descriptor_sets
-    }
-
     pub(crate) fn material_instance_descriptor_sets_mut(&mut self) -> &mut DescriptorSetAllocator {
         &mut self.material_instance_descriptor_sets
     }
 
     pub(crate) fn upload_manager(&self) -> &UploadManager {
         &self.upload_manager
-    }
-
-    pub(crate) fn upload_manager_mut(&mut self) -> &mut UploadManager {
-        &mut self.upload_manager
     }
 
     //

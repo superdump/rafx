@@ -8,30 +8,39 @@ use std::marker::PhantomData;
 use type_uuid::TypeUuid;
 
 pub trait AssetTypeHandlerFactory {
+    /// Register the asset type into the asset resource
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler>;
 }
 
 pub trait AssetTypeHandler: Sync {
+    /// Called every frame to process load queues
     fn process_load_requests(
         &mut self,
         asset_manager: &mut AssetManager,
     ) -> RafxResult<()>;
 
+    /// Return the asset lookup which can be used to obtain the committed and the latest (but
+    /// possibly not committed) version of the asset
     fn asset_lookup(&self) -> &dyn DynAssetLookup;
 
+    /// Returns the TypeId of the asset
     fn asset_type_id(&self) -> TypeId;
 }
 
-pub trait SimpleAssetTypeLoadHandler<AssetDataT, AssetT> {
+//
+// A default asset type handler implementation for asset types that can implement a simple "load"
+// function to convert from asset data to the asset
+//
+pub trait DefaultAssetTypeLoadHandler<AssetDataT, AssetT> {
     fn load(
         asset_manager: &mut AssetManager,
         font_asset: AssetDataT,
     ) -> RafxResult<AssetT>;
 }
 
-pub struct SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
+pub struct DefaultAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
 where
-    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT>,
+    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT>,
 {
     asset_lookup: AssetLookup<AssetT>,
     load_queues: LoadQueues<AssetDataT, AssetT>,
@@ -39,11 +48,11 @@ where
 }
 
 impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory
-    for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
+    for DefaultAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
 where
     AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
     AssetT: TypeUuid + 'static + Send + Clone + Sync,
-    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
+    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
 {
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler> {
         let load_queues = LoadQueues::<AssetDataT, AssetT>::default();
@@ -61,11 +70,11 @@ where
 }
 
 impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler
-    for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
+    for DefaultAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
 where
     AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
     AssetT: TypeUuid + 'static + Send + Clone + Sync,
-    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
+    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
 {
     fn process_load_requests(
         &mut self,
@@ -100,6 +109,29 @@ where
     }
 }
 
+//
+// For use with assets where the load data can be used as the asset directly
+//
+#[derive(Default)]
+pub struct StorageOnlyAssetTypeLoadHandler<AssetT>(PhantomData<AssetT>);
+
+impl<AssetT> DefaultAssetTypeLoadHandler<AssetT, AssetT>
+    for StorageOnlyAssetTypeLoadHandler<AssetT>
+{
+    fn load(
+        _asset_manager: &mut AssetManager,
+        font_asset: AssetT,
+    ) -> RafxResult<AssetT> {
+        Ok(font_asset)
+    }
+}
+
+pub type StorageOnlyAssetTypeHandler<AssetT> =
+    DefaultAssetTypeHandler<AssetT, AssetT, StorageOnlyAssetTypeLoadHandler<AssetT>>;
+
+//
+// Static functions
+//
 pub fn handle_load_result<AssetT: Clone>(
     load_op: AssetLoadOp,
     loaded_asset: RafxResult<AssetT>,

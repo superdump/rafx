@@ -1,6 +1,6 @@
 use fontdue::FontSettings;
 use rafx::api::RafxResult;
-use rafx::assets::{AssetManager, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
+use rafx::assets::{AssetManager, DefaultAssetTypeHandler, DefaultAssetTypeLoadHandler};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use type_uuid::*;
@@ -28,7 +28,7 @@ pub struct FontAsset {
 
 pub struct FontLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<FontAssetData, FontAsset> for FontLoadHandler {
+impl DefaultAssetTypeLoadHandler<FontAssetData, FontAsset> for FontLoadHandler {
     #[profiling::function]
     fn load(
         _asset_manager: &mut AssetManager,
@@ -50,4 +50,4 @@ impl SimpleAssetTypeLoadHandler<FontAssetData, FontAsset> for FontLoadHandler {
     }
 }
 
-pub type FontAssetType = SimpleAssetTypeHandler<FontAssetData, FontAsset, FontLoadHandler>;
+pub type FontAssetType = DefaultAssetTypeHandler<FontAssetData, FontAsset, FontLoadHandler>;

@@ -1,9 +1,10 @@
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase};
 use distill::loader::handle::Handle;
 use rafx::api::{RafxPrimitiveTopology, RafxResult};
-use rafx::assets::ImageAsset;
 use rafx::assets::MaterialInstanceAsset;
-use rafx::assets::{AssetManager, BufferAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
+use rafx::assets::{
+    AssetManager, BufferAsset, DefaultAssetTypeHandler, DefaultAssetTypeLoadHandler,
+};
 use rafx::framework::{
     BufferResource, DescriptorSetArc, MaterialPass, ResourceArc, VertexDataLayout,
     VertexDataSetLayout,
@@ -92,24 +93,6 @@ impl Into<MaterialDataStd140> for GltfMaterialData {
     }
 }
 
-#[derive(TypeUuid, Serialize, Deserialize, Default, Clone)]
-#[uuid = "130a91a8-ba80-4cad-9bce-848326b234c7"]
-pub struct GltfMaterialAsset {
-    //pub name: Option<String>,
-    pub material_data: GltfMaterialData,
-
-    pub base_color_texture: Option<Handle<ImageAsset>>,
-    // metalness in B, roughness in G
-    pub metallic_roughness_texture: Option<Handle<ImageAsset>>,
-    pub normal_texture: Option<Handle<ImageAsset>>,
-    pub occlusion_texture: Option<Handle<ImageAsset>>,
-    pub emissive_texture: Option<Handle<ImageAsset>>,
-    // We would need to change the pipeline for these
-    // double_sided: bool, // defult false
-    // alpha_mode: String, // OPAQUE, MASK, BLEND
-    // support for points/lines?
-}
-
 /// Vertex format for vertices sent to the GPU
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
 #[repr(C)]
@@ -141,7 +124,6 @@ pub struct MeshPartAssetData {
     pub vertex_buffer_size_in_bytes: u32,
     pub index_buffer_offset_in_bytes: u32,
     pub index_buffer_size_in_bytes: u32,
-    pub material: Handle<GltfMaterialAsset>,
     pub material_instance: Handle<MaterialInstanceAsset>,
 }
 
@@ -179,7 +161,7 @@ pub struct MeshAsset {
 
 pub struct MeshLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<MeshAssetData, MeshAsset> for MeshLoadHandler {
+impl DefaultAssetTypeLoadHandler<MeshAssetData, MeshAsset> for MeshLoadHandler {
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -261,4 +243,4 @@ impl SimpleAssetTypeLoadHandler<MeshAssetData, MeshAsset> for MeshLoadHandler {
     }
 }
 
-pub type MeshAssetType = SimpleAssetTypeHandler<MeshAssetData, MeshAsset, MeshLoadHandler>;
+pub type MeshAssetType = DefaultAssetTypeHandler<MeshAssetData, MeshAsset, MeshLoadHandler>;
