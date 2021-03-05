@@ -1,12 +1,11 @@
+use crate::distill_impl::{AssetResource, ResourceAssetLoader};
+use crate::{AssetLookup, AssetManager, DynAssetLookup, LoadQueues};
 use crossbeam_channel::Sender;
 use distill::loader::storage::AssetLoadOp;
 use rafx_api::RafxResult;
-use crate::{AssetLookup, DynAssetLookup, AssetManager, LoadQueues};
-use crate::distill_impl::{AssetResource, ResourceAssetLoader};
-use type_uuid::TypeUuid;
 use std::any::TypeId;
 use std::marker::PhantomData;
-
+use type_uuid::TypeUuid;
 
 pub trait AssetTypeHandlerFactory {
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler>;
@@ -18,14 +17,10 @@ pub trait AssetTypeHandler: Sync {
         asset_manager: &mut AssetManager,
     ) -> RafxResult<()>;
 
-    fn asset_lookup(
-        &self
-    ) -> &dyn DynAssetLookup;
+    fn asset_lookup(&self) -> &dyn DynAssetLookup;
 
     fn asset_type_id(&self) -> TypeId;
 }
-
-
 
 pub trait SimpleAssetTypeLoadHandler<AssetDataT, AssetT> {
     fn load(
@@ -35,18 +30,20 @@ pub trait SimpleAssetTypeLoadHandler<AssetDataT, AssetT> {
 }
 
 pub struct SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
-    where LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT>
+where
+    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT>,
 {
     asset_lookup: AssetLookup<AssetT>,
     load_queues: LoadQueues<AssetDataT, AssetT>,
     phantom_data: PhantomData<LoadHandlerT>,
 }
 
-impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
-    where
-        AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
-        AssetT: TypeUuid + 'static + Send + Clone + Sync,
-        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync
+impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory
+    for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
+where
+    AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
+    AssetT: TypeUuid + 'static + Send + Clone + Sync,
+    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
 {
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler> {
         let load_queues = LoadQueues::<AssetDataT, AssetT>::default();
@@ -58,20 +55,28 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory for SimpleAssetTy
         Box::new(Self {
             asset_lookup: AssetLookup::new(asset_resource.loader()),
             load_queues,
-            phantom_data: Default::default()
+            phantom_data: Default::default(),
         })
     }
 }
 
-impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
-    where
-        AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
-        AssetT: TypeUuid + 'static + Send + Clone + Sync,
-        LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync
+impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler
+    for SimpleAssetTypeHandler<AssetDataT, AssetT, LoadHandlerT>
+where
+    AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
+    AssetT: TypeUuid + 'static + Send + Clone + Sync,
+    LoadHandlerT: SimpleAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
 {
-    fn process_load_requests(&mut self, asset_manager: &mut AssetManager) -> RafxResult<()> {
+    fn process_load_requests(
+        &mut self,
+        asset_manager: &mut AssetManager,
+    ) -> RafxResult<()> {
         for request in self.load_queues.take_load_requests() {
-            log::trace!("Create asset type {} {:?}", std::any::type_name::<AssetT>(), request.load_handle);
+            log::trace!(
+                "Create asset type {} {:?}",
+                std::any::type_name::<AssetT>(),
+                request.load_handle
+            );
             let loaded_asset = LoadHandlerT::load(asset_manager, request.asset);
             handle_load_result(
                 request.load_op,
@@ -86,9 +91,7 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler for SimpleAssetTypeHandl
         Ok(())
     }
 
-    fn asset_lookup(
-        &self,
-    ) -> &dyn DynAssetLookup {
+    fn asset_lookup(&self) -> &dyn DynAssetLookup {
         &self.asset_lookup
     }
 
@@ -96,9 +99,6 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler for SimpleAssetTypeHandl
         TypeId::of::<AssetT>()
     }
 }
-
-
-
 
 pub fn handle_load_result<AssetT: Clone>(
     load_op: AssetLoadOp,
@@ -140,5 +140,3 @@ pub fn handle_free_requests<AssetDataT, AssetT>(
         asset_lookup.commit(request.load_handle);
     }
 }
-
-

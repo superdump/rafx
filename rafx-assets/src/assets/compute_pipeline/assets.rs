@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use type_uuid::*;
 
-use crate::{ShaderAsset, SimpleAssetTypeLoadHandler, AssetManager, SimpleAssetTypeHandler};
+use crate::{AssetManager, ShaderAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
 use distill::loader::handle::Handle;
+use rafx_api::RafxResult;
 pub use rafx_framework::DescriptorSetLayoutResource;
 pub use rafx_framework::GraphicsPipelineResource;
-use rafx_framework::{ComputePipelineResource, ResourceArc, DescriptorSetLayout};
+use rafx_framework::{ComputePipelineResource, DescriptorSetLayout, ResourceArc};
 use std::hash::Hash;
-use rafx_api::RafxResult;
 
 #[derive(TypeUuid, Serialize, Deserialize, Debug, Clone, Hash, PartialEq)]
 #[uuid = "e70aa3d2-5727-433a-80c2-4f6f1d01c91f"]
@@ -27,7 +27,9 @@ pub struct ComputePipelineAsset {
 
 pub struct ComputePipelineLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset> for ComputePipelineLoadHandler {
+impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset>
+    for ComputePipelineLoadHandler
+{
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -43,9 +45,7 @@ impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset> 
         //
         // Find the reflection data in the shader module for the given entry point
         //
-        let reflection_data = shader_module
-            .reflection_data
-            .get(&asset_data.entry_name);
+        let reflection_data = shader_module.reflection_data.get(&asset_data.entry_name);
         let reflection_data = reflection_data.ok_or_else(|| {
             let error_message = format!(
                 "Load Compute Shader Failed - Pass refers to entry point named {}, but no matching reflection data was found",
@@ -60,7 +60,8 @@ impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset> 
             .get_or_create_shader(&[shader_module.shader_module.clone()], &[&reflection_data])?;
 
         let root_signature =
-            asset_manager.resources()
+            asset_manager
+                .resources()
                 .get_or_create_root_signature(&[shader.clone()], &[], &[])?;
 
         //
@@ -106,11 +107,13 @@ impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset> 
 
         for (set_index, descriptor_set_layout_def) in descriptor_set_layout_defs.iter().enumerate()
         {
-            let descriptor_set_layout = asset_manager.resources().get_or_create_descriptor_set_layout(
-                &root_signature,
-                set_index as u32,
-                &descriptor_set_layout_def,
-            )?;
+            let descriptor_set_layout = asset_manager
+                .resources()
+                .get_or_create_descriptor_set_layout(
+                    &root_signature,
+                    set_index as u32,
+                    &descriptor_set_layout_def,
+                )?;
             descriptor_set_layouts.push(descriptor_set_layout);
         }
 
@@ -127,4 +130,8 @@ impl SimpleAssetTypeLoadHandler<ComputePipelineAssetData, ComputePipelineAsset> 
     }
 }
 
-pub type ComputePipelineAssetTypeHandler = SimpleAssetTypeHandler<ComputePipelineAssetData, ComputePipelineAsset, ComputePipelineLoadHandler>;
+pub type ComputePipelineAssetTypeHandler = SimpleAssetTypeHandler<
+    ComputePipelineAssetData,
+    ComputePipelineAsset,
+    ComputePipelineLoadHandler,
+>;

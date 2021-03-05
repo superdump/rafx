@@ -1,14 +1,17 @@
+use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase};
 use distill::loader::handle::Handle;
 use rafx::api::{RafxPrimitiveTopology, RafxResult};
-use rafx::assets::{BufferAsset, SimpleAssetTypeLoadHandler, AssetManager, SimpleAssetTypeHandler};
 use rafx::assets::ImageAsset;
 use rafx::assets::MaterialInstanceAsset;
-use rafx::framework::{VertexDataLayout, VertexDataSetLayout, MaterialPass, DescriptorSetArc, ResourceArc, BufferResource};
+use rafx::assets::{AssetManager, BufferAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
+use rafx::framework::{
+    BufferResource, DescriptorSetArc, MaterialPass, ResourceArc, VertexDataLayout,
+    VertexDataSetLayout,
+};
 use serde::{Deserialize, Serialize};
 use shaders::mesh_frag::MaterialDataStd140;
-use type_uuid::*;
 use std::sync::Arc;
-use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase};
+use type_uuid::*;
 
 //TODO: These are extensions that might be interesting to try supporting. In particular, lights,
 // LOD, and clearcoat

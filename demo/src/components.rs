@@ -1,10 +1,10 @@
+use crate::assets::gltf::MeshAsset;
 use crate::features::mesh::MeshRenderNodeHandle;
 use crate::features::sprite::SpriteRenderNodeHandle;
 use distill::loader::handle::Handle;
 use glam::f32::Vec3;
 use rafx::assets::ImageAsset;
 use rafx::visibility::DynamicAabbVisibilityNodeHandle;
-use crate::assets::gltf::MeshAsset;
 
 #[derive(Clone)]
 pub struct MeshComponent {

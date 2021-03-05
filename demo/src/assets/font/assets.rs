@@ -1,9 +1,9 @@
+use fontdue::FontSettings;
+use rafx::api::RafxResult;
+use rafx::assets::{AssetManager, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use type_uuid::*;
-use rafx::assets::{SimpleAssetTypeLoadHandler, AssetManager, SimpleAssetTypeHandler};
-use rafx::api::RafxResult;
-use fontdue::FontSettings;
 
 #[derive(TypeUuid, Serialize, Deserialize, Clone)]
 #[uuid = "197bfd7a-3df9-4440-86f0-8e10756c714e"]
@@ -25,7 +25,6 @@ pub struct FontAssetInner {
 pub struct FontAsset {
     pub inner: Arc<FontAssetInner>,
 }
-
 
 pub struct FontLoadHandler;
 

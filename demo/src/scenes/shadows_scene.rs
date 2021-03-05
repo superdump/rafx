@@ -1,4 +1,5 @@
 use crate::assets::font::FontAsset;
+use crate::assets::gltf::MeshAsset;
 use crate::components::SpotLightComponent;
 use crate::components::{
     DirectionalLightComponent, MeshComponent, PointLightComponent, PositionComponent,
@@ -12,7 +13,6 @@ use legion::IntoQuery;
 use legion::{Read, Resources, World, Write};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::visibility::{DynamicAabbVisibilityNode, DynamicVisibilityNodeSet};
-use crate::assets::gltf::MeshAsset;
 
 pub(super) struct ShadowsScene {
     font: Handle<FontAsset>,

@@ -1,12 +1,15 @@
-use rafx_framework::{BufferResource, RafxResult};
-use rafx_framework::ResourceArc;
-use serde::{Deserialize, Serialize};
-use type_uuid::*;
-use crate::{AssetLookup, LoadQueues, AssetTypeHandlerFactory, AssetTypeHandler, AssetManager, DynAssetLookup};
-use crate::distill_impl::{AssetResource, ResourceAssetLoader};
 use crate::assets::upload::BufferUploadOpResult;
-use std::any::TypeId;
+use crate::distill_impl::{AssetResource, ResourceAssetLoader};
+use crate::{
+    AssetLookup, AssetManager, AssetTypeHandler, AssetTypeHandlerFactory, DynAssetLookup,
+    LoadQueues,
+};
 use rafx_api::RafxBuffer;
+use rafx_framework::ResourceArc;
+use rafx_framework::{BufferResource, RafxResult};
+use serde::{Deserialize, Serialize};
+use std::any::TypeId;
+use type_uuid::*;
 
 #[derive(TypeUuid, Serialize, Deserialize, Clone)]
 #[uuid = "2d6653ce-5f77-40a2-b050-f2d148699d78"]
@@ -20,8 +23,6 @@ pub struct BufferAssetData {
 pub struct BufferAsset {
     pub buffer: ResourceArc<BufferResource>,
 }
-
-
 
 pub struct BufferAssetTypeHandler {
     asset_lookup: AssetLookup<BufferAsset>,
@@ -44,7 +45,10 @@ impl AssetTypeHandlerFactory for BufferAssetTypeHandler {
 }
 
 impl AssetTypeHandler for BufferAssetTypeHandler {
-    fn process_load_requests(&mut self, asset_manager: &mut AssetManager) -> RafxResult<()> {
+    fn process_load_requests(
+        &mut self,
+        asset_manager: &mut AssetManager,
+    ) -> RafxResult<()> {
         for request in self.load_queues.take_load_requests() {
             //TODO: Route the request directly to the upload queue
             log::trace!("Uploading buffer {:?}", request.load_handle);

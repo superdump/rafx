@@ -1,17 +1,25 @@
 use crate::assets::ImageAssetData;
-use crate::assets::{
-    BufferAsset, ImageAsset, MaterialAsset,
+use crate::assets::{BufferAsset, ImageAsset, MaterialAsset};
+use crate::{
+    AssetLookup, AssetTypeHandler, AssetTypeHandlerFactory, BufferAssetData, GenericLoader,
+    MaterialInstanceSlotAssignment, UploadQueueConfig,
 };
-use crate::{AssetLookup, BufferAssetData, GenericLoader, MaterialInstanceSlotAssignment, UploadQueueConfig, AssetTypeHandler, AssetTypeHandlerFactory};
 use distill::loader::handle::Handle;
 use rafx_framework::{
-    DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider,
-    DescriptorSetAllocatorRef, DescriptorSetLayoutResource,
-    DescriptorSetWriteSet, DynResourceAllocatorSet, GraphicsPipelineCache, MaterialPass,
-    MaterialPassResource, ResourceArc, SlotNameLookup,
+    DescriptorSetAllocatorMetrics, DescriptorSetAllocatorProvider, DescriptorSetAllocatorRef,
+    DescriptorSetLayoutResource, DescriptorSetWriteSet, DynResourceAllocatorSet,
+    GraphicsPipelineCache, MaterialPass, MaterialPassResource, ResourceArc, SlotNameLookup,
 };
 
 use super::upload::UploadManager;
+use crate::assets::buffer::BufferAssetTypeHandler;
+use crate::assets::compute_pipeline::ComputePipelineAssetTypeHandler;
+use crate::assets::graphics_pipeline::{
+    MaterialAssetTypeHandler, MaterialInstanceAssetTypeHandler, SamplerAssetTypeHandler,
+};
+use crate::assets::image::ImageAssetTypeHandler;
+use crate::assets::shader::ShaderAssetTypeHandler;
+use crate::distill_impl::AssetResource;
 use distill::loader::handle::AssetHandle;
 use fnv::FnvHashMap;
 use rafx_api::{RafxDeviceContext, RafxQueue, RafxResult};
@@ -25,14 +33,8 @@ use rafx_framework::DynCommandPoolAllocator;
 use rafx_framework::DynResourceAllocatorSetProvider;
 use rafx_framework::ResourceLookupSet;
 use rafx_framework::{ResourceManager, ResourceManagerMetrics};
-use std::sync::Arc;
 use std::any::TypeId;
-use crate::distill_impl::AssetResource;
-use crate::assets::shader::ShaderAssetTypeHandler;
-use crate::assets::compute_pipeline::ComputePipelineAssetTypeHandler;
-use crate::assets::graphics_pipeline::{MaterialAssetTypeHandler, MaterialInstanceAssetTypeHandler, SamplerAssetTypeHandler};
-use crate::assets::image::ImageAssetTypeHandler;
-use crate::assets::buffer::BufferAssetTypeHandler;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct AssetManagerMetrics {
@@ -89,17 +91,24 @@ impl AssetManager {
         }
     }
 
-
-    pub fn register_asset_type<AssetTypeFactoryT: AssetTypeHandlerFactory>(&mut self, asset_resource: &mut AssetResource) {
+    pub fn register_asset_type<AssetTypeFactoryT: AssetTypeHandlerFactory>(
+        &mut self,
+        asset_resource: &mut AssetResource,
+    ) {
         let asset_type = AssetTypeFactoryT::create(asset_resource);
         let mut asset_registration_order = (*self.asset_registration_order).clone();
         asset_registration_order.push(asset_type.asset_type_id());
         self.asset_registration_order = Arc::new(asset_registration_order);
-        let old = self.asset_types.insert(asset_type.asset_type_id(), asset_type);
+        let old = self
+            .asset_types
+            .insert(asset_type.asset_type_id(), asset_type);
         assert!(old.is_none());
     }
 
-    pub fn register_default_asset_types(&mut self, asset_resource: &mut AssetResource) {
+    pub fn register_default_asset_types(
+        &mut self,
+        asset_resource: &mut AssetResource,
+    ) {
         self.register_asset_type::<ShaderAssetTypeHandler>(asset_resource);
         self.register_asset_type::<ComputePipelineAssetTypeHandler>(asset_resource);
         self.register_asset_type::<MaterialAssetTypeHandler>(asset_resource);
@@ -109,21 +118,28 @@ impl AssetManager {
         self.register_asset_type::<BufferAssetTypeHandler>(asset_resource);
     }
 
-
     pub fn committed_asset<AssetT: 'static>(
         &self,
-        handle: &Handle<AssetT>
+        handle: &Handle<AssetT>,
     ) -> Option<&AssetT> {
         let asset_type = self.asset_types.get(&TypeId::of::<AssetT>())?;
-        asset_type.asset_lookup().downcast_ref::<AssetLookup<AssetT>>().unwrap().get_committed(handle.load_handle())
+        asset_type
+            .asset_lookup()
+            .downcast_ref::<AssetLookup<AssetT>>()
+            .unwrap()
+            .get_committed(handle.load_handle())
     }
 
     pub fn latest_asset<AssetT: 'static>(
         &self,
-        handle: &Handle<AssetT>
+        handle: &Handle<AssetT>,
     ) -> Option<&AssetT> {
         let asset_type = self.asset_types.get(&TypeId::of::<AssetT>())?;
-        asset_type.asset_lookup().downcast_ref::<AssetLookup<AssetT>>().unwrap().get_latest(handle.load_handle())
+        asset_type
+            .asset_lookup()
+            .downcast_ref::<AssetLookup<AssetT>>()
+            .unwrap()
+            .get_latest(handle.load_handle())
     }
 
     pub fn device_context(&self) -> &RafxDeviceContext {
@@ -225,7 +241,8 @@ impl AssetManager {
         for asset_type in &*self.asset_registration_order.clone() {
             let mut asset_type = self.asset_types.remove(asset_type).unwrap();
             asset_type.process_load_requests(self)?;
-            self.asset_types.insert(asset_type.asset_type_id(), asset_type);
+            self.asset_types
+                .insert(asset_type.asset_type_id(), asset_type);
         }
 
         self.upload_manager.update()?;
@@ -292,9 +309,7 @@ impl AssetManager {
 
                     if what_to_bind.bind_images {
                         if let Some(image) = &slot_assignment.image {
-                            let loaded_image = self
-                                .latest_asset(&image)
-                                .unwrap();
+                            let loaded_image = self.latest_asset(&image).unwrap();
                             write_image.image_view =
                                 Some(rafx_framework::descriptor_sets::DescriptorSetWriteElementImageValue::Resource(
                                     loaded_image.image_view.clone(),

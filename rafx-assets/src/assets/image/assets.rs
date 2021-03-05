@@ -1,11 +1,14 @@
+use crate::assets::upload::ImageUploadOpResult;
+use crate::distill_impl::{AssetResource, ResourceAssetLoader};
+use crate::{
+    AssetLookup, AssetManager, AssetTypeHandler, AssetTypeHandlerFactory, DynAssetLookup,
+    LoadQueues,
+};
 use rafx_api::{RafxResourceType, RafxResult, RafxTexture};
 use rafx_framework::{ImageResource, ImageViewResource, ResourceArc};
 use serde::{Deserialize, Serialize};
-use type_uuid::*;
-use crate::{AssetTypeHandlerFactory, AssetTypeHandler, DynAssetLookup, AssetManager, LoadQueues, AssetLookup};
-use crate::distill_impl::{AssetResource, ResourceAssetLoader};
 use std::any::TypeId;
-use crate::assets::upload::ImageUploadOpResult;
+use type_uuid::*;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ImageAssetColorSpace {
@@ -212,8 +215,6 @@ pub struct ImageAsset {
     pub image_view: ResourceArc<ImageViewResource>,
 }
 
-
-
 pub struct ImageAssetTypeHandler {
     asset_lookup: AssetLookup<ImageAsset>,
     load_queues: LoadQueues<ImageAssetData, ImageAsset>,
@@ -235,7 +236,10 @@ impl AssetTypeHandlerFactory for ImageAssetTypeHandler {
 }
 
 impl AssetTypeHandler for ImageAssetTypeHandler {
-    fn process_load_requests(&mut self, asset_manager: &mut AssetManager) -> RafxResult<()> {
+    fn process_load_requests(
+        &mut self,
+        asset_manager: &mut AssetManager,
+    ) -> RafxResult<()> {
         for request in self.load_queues.take_load_requests() {
             //TODO: Route the request directly to the upload queue
             log::trace!("Uploading image {:?}", request.load_handle);
@@ -270,8 +274,14 @@ impl AssetTypeHandler for ImageAssetTypeHandler {
             }
         }
 
-        crate::assets::asset_type_handler::handle_commit_requests(&mut self.load_queues, &mut self.asset_lookup);
-        crate::assets::asset_type_handler::handle_free_requests(&mut self.load_queues, &mut self.asset_lookup);
+        crate::assets::asset_type_handler::handle_commit_requests(
+            &mut self.load_queues,
+            &mut self.asset_lookup,
+        );
+        crate::assets::asset_type_handler::handle_free_requests(
+            &mut self.load_queues,
+            &mut self.asset_lookup,
+        );
         Ok(())
     }
 
@@ -284,7 +294,6 @@ impl AssetTypeHandler for ImageAssetTypeHandler {
     }
 }
 
-
 #[profiling::function]
 fn finish_load_image(
     asset_manager: &mut AssetManager,
@@ -292,7 +301,9 @@ fn finish_load_image(
 ) -> RafxResult<ImageAsset> {
     let image = asset_manager.resources().insert_image(texture);
 
-    let image_view = asset_manager.resources().get_or_create_image_view(&image, None)?;
+    let image_view = asset_manager
+        .resources()
+        .get_or_create_image_view(&image, None)?;
 
     Ok(ImageAsset { image, image_view })
 }

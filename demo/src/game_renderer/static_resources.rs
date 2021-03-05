@@ -221,12 +221,7 @@ impl GameRendererStaticResources {
             "text material",
         )?;
 
-        wait_for_asset_to_load(
-            &default_font,
-            asset_resource,
-            asset_manager,
-            "default font",
-        )?;
+        wait_for_asset_to_load(&default_font, asset_resource, asset_manager, "default font")?;
 
         Ok(GameRendererStaticResources {
             sprite_material,

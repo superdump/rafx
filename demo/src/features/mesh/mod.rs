@@ -25,13 +25,13 @@ const PER_MATERIAL_DESCRIPTOR_SET_INDEX: u32 =
 const PER_INSTANCE_DESCRIPTOR_SET_INDEX: u32 =
     shaders::mesh_frag::PER_OBJECT_DATA_DESCRIPTOR_SET_INDEX as u32;
 
+use crate::assets::gltf::MeshAsset;
 use crate::components::{
     DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
 };
 use fnv::FnvHashMap;
 pub use shaders::mesh_frag::PerObjectDataUniform as MeshPerObjectFragmentShaderParam;
 pub use shaders::mesh_frag::PerViewDataUniform as MeshPerViewFragmentShaderParam;
-use crate::assets::gltf::MeshAsset;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum LightId {

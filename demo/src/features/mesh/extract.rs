@@ -9,12 +9,12 @@ use crate::features::mesh::{
 };
 use crate::legion_support::{LegionResources, LegionWorld};
 use legion::*;
+use rafx::assets::AssetManagerRenderResource;
 use rafx::base::slab::RawSlabKey;
 use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex,
     RenderJobExtractContext, RenderView,
 };
-use rafx::assets::AssetManagerRenderResource;
 
 pub struct MeshExtractJob {}
 
@@ -38,7 +38,9 @@ impl ExtractJob for MeshExtractJob {
         let legion_world = extract_context.render_resources.fetch::<LegionWorld>();
         let world = &**legion_world;
 
-        let asset_manager = extract_context.render_resources.fetch::<AssetManagerRenderResource>();
+        let asset_manager = extract_context
+            .render_resources
+            .fetch::<AssetManagerRenderResource>();
 
         //
         // Update the mesh render nodes. This could be done earlier as part of a system

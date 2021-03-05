@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use type_uuid::*;
 
-use crate::{AssetManager, ImageAsset, ShaderAsset, SimpleAssetTypeLoadHandler, SimpleAssetTypeHandler};
+use crate::{
+    AssetManager, ImageAsset, ShaderAsset, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler,
+};
 use distill::loader::handle::Handle;
 use fnv::FnvHashMap;
 use rafx_api::{
@@ -206,9 +208,7 @@ impl MaterialPassData {
                 self.name
             );
 
-            let shader_asset = asset_manager
-                .latest_asset(&stage.shader_module)
-                .unwrap();
+            let shader_asset = asset_manager.latest_asset(&stage.shader_module).unwrap();
             shader_modules.push(shader_asset.shader_module.clone());
 
             let reflection_data = shader_asset.reflection_data.get(&stage.entry_name);
@@ -423,7 +423,6 @@ impl Deref for MaterialInstanceAsset {
     }
 }
 
-
 pub struct MaterialLoadHandler;
 
 impl SimpleAssetTypeLoadHandler<MaterialAssetData, MaterialAsset> for MaterialLoadHandler {
@@ -474,11 +473,14 @@ impl SimpleAssetTypeLoadHandler<MaterialAssetData, MaterialAsset> for MaterialLo
     }
 }
 
-pub type MaterialAssetTypeHandler = SimpleAssetTypeHandler<MaterialAssetData, MaterialAsset, MaterialLoadHandler>;
+pub type MaterialAssetTypeHandler =
+    SimpleAssetTypeHandler<MaterialAssetData, MaterialAsset, MaterialLoadHandler>;
 
 pub struct MaterialInstanceLoadHandler;
 
-impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset> for MaterialInstanceLoadHandler {
+impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset>
+    for MaterialInstanceLoadHandler
+{
     #[profiling::function]
     fn load(
         asset_manager: &mut AssetManager,
@@ -501,11 +503,12 @@ impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset
         // This will be references to descriptor sets. Indexed by pass, and then by set within the pass.
         let mut material_descriptor_sets = Vec::with_capacity(material_asset.passes.len());
         for pass in &*material_asset.passes {
-            let pass_descriptor_set_writes = asset_manager.create_write_sets_for_material_instance_pass(
-                pass,
-                &asset_data.slot_assignments,
-                asset_manager.resources(),
-            )?;
+            let pass_descriptor_set_writes = asset_manager
+                .create_write_sets_for_material_instance_pass(
+                    pass,
+                    &asset_data.slot_assignments,
+                    asset_manager.resources(),
+                )?;
 
             log::trace!(
                 "load_material_instance descriptor set write\n{:#?}",
@@ -558,7 +561,11 @@ impl SimpleAssetTypeLoadHandler<MaterialInstanceAssetData, MaterialInstanceAsset
     }
 }
 
-pub type MaterialInstanceAssetTypeHandler = SimpleAssetTypeHandler<MaterialInstanceAssetData, MaterialInstanceAsset, MaterialInstanceLoadHandler>;
+pub type MaterialInstanceAssetTypeHandler = SimpleAssetTypeHandler<
+    MaterialInstanceAssetData,
+    MaterialInstanceAsset,
+    MaterialInstanceLoadHandler,
+>;
 
 pub struct SamplerLoadHandler;
 
@@ -568,9 +575,12 @@ impl SimpleAssetTypeLoadHandler<SamplerAssetData, SamplerAsset> for SamplerLoadH
         asset_manager: &mut AssetManager,
         asset_data: SamplerAssetData,
     ) -> RafxResult<SamplerAsset> {
-        let sampler = asset_manager.resources().get_or_create_sampler(&asset_data.sampler)?;
+        let sampler = asset_manager
+            .resources()
+            .get_or_create_sampler(&asset_data.sampler)?;
         Ok(SamplerAsset { sampler })
     }
 }
 
-pub type SamplerAssetTypeHandler = SimpleAssetTypeHandler<SamplerAssetData, SamplerAsset, SamplerLoadHandler>;
+pub type SamplerAssetTypeHandler =
+    SimpleAssetTypeHandler<SamplerAssetData, SamplerAsset, SamplerLoadHandler>;

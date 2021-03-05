@@ -1,11 +1,11 @@
+use crate::{AssetManager, SimpleAssetTypeHandler, SimpleAssetTypeLoadHandler};
 use fnv::FnvHashMap;
-use rafx_api::{RafxShaderPackage, RafxResult};
+use rafx_api::{RafxResult, RafxShaderPackage};
 use rafx_framework::ResourceArc;
 use rafx_framework::{ReflectedEntryPoint, ShaderModuleHash, ShaderModuleResource};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use type_uuid::*;
-use crate::{AssetManager, SimpleAssetTypeLoadHandler, SimpleAssetTypeHandler};
 
 #[derive(TypeUuid, Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[uuid = "e0ae2222-1a44-4022-af95-03c9101ac89e"]
@@ -59,4 +59,5 @@ impl SimpleAssetTypeLoadHandler<ShaderAssetData, ShaderAsset> for ShaderLoadHand
     }
 }
 
-pub type ShaderAssetTypeHandler = SimpleAssetTypeHandler<ShaderAssetData, ShaderAsset, ShaderLoadHandler>;
+pub type ShaderAssetTypeHandler =
+    SimpleAssetTypeHandler<ShaderAssetData, ShaderAsset, ShaderLoadHandler>;
