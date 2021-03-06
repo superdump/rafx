@@ -11,6 +11,8 @@ mod extract;
 mod prepare;
 mod text_resource;
 mod write;
+mod plugin;
+pub use plugin::TextRendererPlugin;
 
 use crate::assets::font::FontAsset;
 use fnv::FnvHashMap;

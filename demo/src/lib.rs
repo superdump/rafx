@@ -10,10 +10,11 @@ use rafx::api::RafxResult;
 use rafx::assets::AssetManager;
 
 use crate::daemon::AssetDaemonArgs;
-use crate::game_renderer::GameRenderer;
+use crate::game_renderer::{GameRenderer, AssetSource};
 use crate::scenes::SceneManager;
 use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
+use rafx::nodes::ExtractResources;
 
 mod assets;
 mod components;
@@ -113,33 +114,19 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
     resources.insert(DebugUiState::default());
     resources.insert(SceneManager::default());
 
-    if let Some(packfile) = &args.packfile {
-        log::info!("Reading from packfile {:?}", packfile);
-
-        // Initialize the packfile loader with the packfile path
-        init::init_distill_packfile(&mut resources, &packfile);
+    let asset_source = if let Some(packfile) = &args.packfile {
+        AssetSource::Packfile(packfile.to_path_buf())
     } else {
-        if !args.external_daemon {
-            log::info!("Hosting local daemon at {:?}", args.daemon_args.address);
-
-            // Spawn the daemon in a background thread. This could be a different process, but
-            // for simplicity we'll launch it here.
-            let daemon_args = args.daemon_args.clone().into();
-            std::thread::spawn(move || {
-                daemon::run(daemon_args);
-            });
-        } else {
-            log::info!("Connecting to daemon at {:?}", args.daemon_args.address);
+        AssetSource::Daemon {
+            external_daemon: args.external_daemon,
+            daemon_args: args.daemon_args.clone().into(),
         }
-
-        // Connect to the daemon we just launched
-        init::init_distill_daemon(&mut resources, args.daemon_args.address.to_string());
-    }
+    };
 
     let sdl2_systems = init::sdl2_init();
     #[cfg(feature = "use-imgui")]
     init::imgui_init(&mut resources, &sdl2_systems.window);
-    init::rendering_init(&mut resources, &sdl2_systems.window)?;
+    init::rendering_init(&mut resources, &sdl2_systems.window, asset_source)?;
 
     log::info!("Starting window event loop");
     let mut event_pump = sdl2_systems
@@ -309,8 +296,9 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
 
             let (window_width, window_height) = sdl2_systems.window.vulkan_drawable_size();
 
+            let extract_resources = ExtractResources::default();
             game_renderer
-                .start_rendering_next_frame(&resources, &world, window_width, window_height)
+                .start_rendering_next_frame(extract_resources, &resources, &world, window_width, window_height)
                 .unwrap();
         }
 

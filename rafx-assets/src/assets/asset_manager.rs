@@ -35,6 +35,7 @@ use rafx_framework::ResourceLookupSet;
 use rafx_framework::{ResourceManager, ResourceManagerMetrics};
 use std::any::TypeId;
 use std::sync::Arc;
+use distill::loader::storage::LoadStatus;
 
 #[derive(Debug)]
 pub struct AssetManagerMetrics {
@@ -140,6 +141,70 @@ impl AssetManager {
             .downcast_ref::<AssetLookup<AssetT>>()
             .unwrap()
             .get_latest(handle.load_handle())
+    }
+
+    pub fn wait_for_asset_to_load<T>(
+        &mut self,
+        asset_handle: &distill::loader::handle::Handle<T>,
+        asset_resource: &mut AssetResource,
+        asset_name: &str,
+    ) -> RafxResult<()> {
+        const PRINT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1000);
+        let mut last_print_time = None;
+
+        fn on_interval<F: Fn()>(
+            interval: std::time::Duration,
+            last_time: &mut Option<std::time::Instant>,
+            f: F,
+        ) {
+            let now = std::time::Instant::now();
+
+            if last_time.is_none() || now - last_time.unwrap() >= interval {
+                (f)();
+                *last_time = Some(now);
+            }
+        }
+
+        loop {
+            asset_resource.update();
+            self.update_asset_loaders()?;
+            match asset_resource.load_status(&asset_handle) {
+                LoadStatus::NotRequested => {
+                    unreachable!();
+                }
+                LoadStatus::Unresolved => {
+                    on_interval(PRINT_INTERVAL, &mut last_print_time, || {
+                        log::info!(
+                            "blocked waiting for asset to resolve {} {:?}",
+                            asset_name,
+                            asset_handle
+                        );
+                    });
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                LoadStatus::Loading => {
+                    on_interval(PRINT_INTERVAL, &mut last_print_time, || {
+                        log::info!(
+                            "blocked waiting for asset to load {} {:?}",
+                            asset_name,
+                            asset_handle
+                        );
+                    });
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    // keep waiting
+                }
+                LoadStatus::Loaded => {
+                    break Ok(());
+                }
+                LoadStatus::Unloading => unreachable!(),
+                LoadStatus::DoesNotExist => {
+                    println!("Essential asset not found");
+                }
+                LoadStatus::Error(err) => {
+                    println!("Error loading essential asset {:?}", err);
+                }
+            }
+        }
     }
 
     pub fn device_context(&self) -> &RafxDeviceContext {

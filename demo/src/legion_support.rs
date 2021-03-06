@@ -1,6 +1,7 @@
 use legion::Resources;
 use legion::World;
 use std::ops::Deref;
+use rafx::base::memory::force_to_static_lifetime;
 
 //TODO: Add a render resource builder or something that lets someone add extract-only things by
 // ref and resources available to all jobs by passing ownership
@@ -47,6 +48,3 @@ impl Deref for LegionResources {
 unsafe impl Send for LegionResources {}
 unsafe impl Sync for LegionResources {}
 
-unsafe fn force_to_static_lifetime<T>(value: &T) -> &'static T {
-    std::mem::transmute(value)
-}

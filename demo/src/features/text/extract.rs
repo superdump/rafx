@@ -1,6 +1,5 @@
 use crate::features::text::prepare::TextPrepareJobImpl;
 use crate::features::text::{ExtractedTextData, TextRenderFeature, TextResource};
-use crate::game_renderer::GameRendererStaticResources;
 use crate::legion_support::LegionResources;
 use fnv::FnvHashMap;
 use rafx::assets::AssetManagerRenderResource;
@@ -8,6 +7,7 @@ use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex,
     RenderJobExtractContext, RenderView,
 };
+use crate::features::text::plugin::TextStaticResources;
 
 pub struct TextExtractJob {}
 
@@ -34,7 +34,7 @@ impl ExtractJob for TextExtractJob {
 
         let text_material = &extract_context
             .render_resources
-            .fetch::<GameRendererStaticResources>()
+            .fetch::<TextStaticResources>()
             .text_material;
         let text_material_pass = asset_manager
             .get_material_pass_by_index(&text_material, 0)

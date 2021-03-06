@@ -3,6 +3,7 @@
 
 use super::AssetManager;
 use std::ops::Deref;
+use rafx_base::memory::force_to_static_lifetime;
 
 // static reference is dangerous, must only be used when extracting
 pub struct AssetManagerRenderResource(&'static AssetManager);
@@ -19,8 +20,4 @@ impl Deref for AssetManagerRenderResource {
     fn deref(&self) -> &Self::Target {
         self.0
     }
-}
-
-unsafe fn force_to_static_lifetime<T>(value: &T) -> &'static T {
-    std::mem::transmute(value)
 }

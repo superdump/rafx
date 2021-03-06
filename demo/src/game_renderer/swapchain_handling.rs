@@ -1,6 +1,5 @@
 use crate::game_renderer::swapchain_resources::SwapchainResources;
 use crate::game_renderer::GameRenderer;
-use legion::Resources;
 use rafx::api::raw_window_handle::HasRawWindowHandle;
 use rafx::api::{
     RafxDeviceContext, RafxExtents2D, RafxPresentableFrame, RafxResult, RafxSwapchain,
@@ -8,36 +7,23 @@ use rafx::api::{
 };
 use rafx::assets::AssetManager;
 use rafx::framework::graph::SwapchainSurfaceInfo;
-use rafx::nodes::RenderRegistry;
 
 pub struct SwapchainHandler<'a> {
-    pub resources: &'a Resources,
     pub asset_manager: &'a mut AssetManager,
-    pub render_registry: &'a RenderRegistry,
     pub game_renderer: &'a GameRenderer,
 }
 
 impl<'a> SwapchainHandler<'a> {
     #[profiling::function]
     pub fn create_swapchain(
-        resources: &mut Resources,
+        asset_manager: &mut AssetManager,
+        game_renderer: &mut GameRenderer,
         window: &dyn HasRawWindowHandle,
         width: u32,
         height: u32,
-    ) -> RafxResult<()> {
+    ) -> RafxResult<RafxSwapchainHelper> {
         let swapchain_helper = {
-            let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-            let render_registry = resources.get::<RenderRegistry>().unwrap();
-            let mut game_renderer = resources.get_mut::<GameRenderer>().unwrap();
-
-            let mut lifetime_listener = SwapchainHandler {
-                resources: &resources,
-                asset_manager: &mut *asset_manager,
-                render_registry: &*render_registry,
-                game_renderer: &mut *game_renderer,
-            };
-
-            let device_context = &*resources.get::<RafxDeviceContext>().unwrap();
+            let device_context = asset_manager.device_context().clone();
             let swapchain = device_context.create_swapchain(
                 window,
                 &RafxSwapchainDef {
@@ -47,55 +33,50 @@ impl<'a> SwapchainHandler<'a> {
                 },
             )?;
 
+            let mut lifetime_listener = SwapchainHandler {
+                asset_manager: &mut *asset_manager,
+                game_renderer: &mut *game_renderer,
+            };
+
             rafx::api::RafxSwapchainHelper::new(
-                device_context,
+                &device_context,
                 swapchain,
                 Some(&mut lifetime_listener),
             )?
         };
 
-        resources.insert(swapchain_helper);
-
-        Ok(())
+        Ok(swapchain_helper)
     }
 
     #[profiling::function]
     pub fn acquire_next_image(
-        resources: &Resources,
+        swapchain_helper: &mut RafxSwapchainHelper,
+        asset_manager: &mut AssetManager,
+        game_renderer: &GameRenderer,
         window_width: u32,
         window_height: u32,
-        game_renderer: &GameRenderer,
     ) -> RafxResult<RafxPresentableFrame> {
-        let mut surface = resources.get_mut::<RafxSwapchainHelper>().unwrap();
-        let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-        let render_registry = resources.get::<RenderRegistry>().unwrap();
-
         let mut lifetime_listener = SwapchainHandler {
-            resources: &resources,
-            asset_manager: &mut *asset_manager,
-            render_registry: &*render_registry,
+            asset_manager,
             game_renderer,
         };
 
-        surface.acquire_next_image(window_width, window_height, Some(&mut lifetime_listener))
+        swapchain_helper.acquire_next_image(window_width, window_height, Some(&mut lifetime_listener))
     }
 
     #[profiling::function]
-    pub fn destroy_swapchain(resources: &mut Resources) -> RafxResult<()> {
-        let mut surface = resources.remove::<RafxSwapchainHelper>().unwrap();
-        let mut game_renderer = resources.get_mut::<GameRenderer>().unwrap();
-        let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-        let render_registry = resources.get::<RenderRegistry>().unwrap();
-
+    pub fn destroy_swapchain(
+        mut swapchain_helper: RafxSwapchainHelper,
+        asset_manager: &mut AssetManager,
+        game_renderer: &GameRenderer,
+    ) -> RafxResult<()> {
         let mut lifetime_listener = SwapchainHandler {
-            resources: &resources,
-            asset_manager: &mut *asset_manager,
-            render_registry: &*render_registry,
-            game_renderer: &mut game_renderer,
+            asset_manager,
+            game_renderer,
         };
 
-        surface.destroy(Some(&mut lifetime_listener))?;
-        std::mem::drop(surface);
+        swapchain_helper.destroy(Some(&mut lifetime_listener))?;
+        std::mem::drop(swapchain_helper);
         Ok(())
     }
 }

@@ -52,7 +52,7 @@ impl RenderFrameJob {
         match result {
             Ok(command_buffers) => {
                 // ignore the error, we will receive it when we try to acquire the next image
-                let graphics_queue = &self.game_renderer.graphics_queue;
+                let graphics_queue = self.game_renderer.graphics_queue();
 
                 let refs: Vec<&RafxCommandBuffer> = command_buffers.iter().map(|x| &**x).collect();
                 let _ = presentable_frame.present(graphics_queue, &refs);
@@ -60,7 +60,7 @@ impl RenderFrameJob {
             Err(err) => {
                 log::error!("Render thread failed with error {:?}", err);
                 // Pass error on to the next swapchain image acquire call
-                let graphics_queue = &self.game_renderer.graphics_queue;
+                let graphics_queue = self.game_renderer.graphics_queue();
                 presentable_frame.present_with_error(graphics_queue, err);
             }
         }
