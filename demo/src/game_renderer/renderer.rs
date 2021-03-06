@@ -11,7 +11,11 @@ use rafx::assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSp
 use rafx::assets::{AssetManager, GpuImageData};
 use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
-use rafx::nodes::{AllRenderNodes, ExtractJobSet, FramePacketBuilder, RenderJobExtractContext, RenderPhaseMask, RenderPhaseMaskBuilder, RenderView, RenderViewDepthRange, RenderViewSet, VisibilityResult, ExtractResources};
+use rafx::nodes::{
+    AllRenderNodes, ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
+    RenderPhaseMask, RenderPhaseMaskBuilder, RenderView, RenderViewDepthRange, RenderViewSet,
+    VisibilityResult,
+};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
 
@@ -25,7 +29,10 @@ use crate::RenderOptions;
 use arrayvec::ArrayVec;
 use fnv::FnvHashMap;
 use rafx::api::extra::upload::{RafxTransferUpload, RafxUploadError};
-use rafx::api::{RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult, RafxSampleCount, RafxSwapchainHelper};
+use rafx::api::{
+    RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult,
+    RafxSampleCount, RafxSwapchainHelper,
+};
 use rafx::assets::image_upload::ImageUploadParams;
 
 /// Creates a right-handed perspective projection matrix with [0,1] depth range.
@@ -87,7 +94,7 @@ impl GameRenderer {
         asset_manager: &mut AssetManager,
         graphics_queue: &RafxQueue,
         transfer_queue: &RafxQueue,
-        mut plugins: Vec<Box<dyn RendererPlugin>>
+        mut plugins: Vec<Box<dyn RendererPlugin>>,
     ) -> RafxResult<Self> {
         let device_context = graphics_queue.device_context();
 
@@ -115,7 +122,7 @@ impl GameRenderer {
             &GpuImageData::new_1x1_rgba8(255, 0, 255, 255, GpuImageDataColorSpace::Linear),
             ImageUploadParams::default(),
         )
-            .map_err(|x| Into::<RafxError>::into(x))?;
+        .map_err(|x| Into::<RafxError>::into(x))?;
 
         let invalid_cube_map_image = Self::upload_image_data(
             &device_context,
@@ -128,7 +135,7 @@ impl GameRenderer {
                 layer_swizzle: Some(&[0, 0, 0, 0, 0, 0]),
             },
         )
-            .map_err(|x| Into::<RafxError>::into(x))?;
+        .map_err(|x| Into::<RafxError>::into(x))?;
 
         upload.block_until_upload_complete()?;
 
@@ -137,7 +144,11 @@ impl GameRenderer {
 
         let mut render_resources = RenderResources::default();
         for plugin in &mut plugins {
-            plugin.initialize_static_resources(asset_manager, asset_resource, &mut render_resources)?;
+            plugin.initialize_static_resources(
+                asset_manager,
+                asset_resource,
+                &mut render_resources,
+            )?;
         }
 
         let render_thread = RenderThread::start(render_resources);
@@ -217,7 +228,7 @@ impl GameRenderer {
                 ..Default::default()
             },
         )
-            .map_err(|x| Into::<RafxError>::into(x))
+        .map_err(|x| Into::<RafxError>::into(x))
     }
 
     // This is externally exposed, it checks result of the previous frame (which implicitly also
@@ -240,7 +251,13 @@ impl GameRenderer {
         let presentable_frame = {
             let mut swapchain_helper = resources.get_mut::<RafxSwapchainHelper>().unwrap();
             let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-            SwapchainHandler::acquire_next_image(&mut *swapchain_helper, &mut *asset_manager, self, window_width, window_height)
+            SwapchainHandler::acquire_next_image(
+                &mut *swapchain_helper,
+                &mut *asset_manager,
+                self,
+                window_width,
+                window_height,
+            )
         }?;
 
         self.inner
@@ -330,7 +347,6 @@ impl GameRenderer {
 
         let render_registry = asset_manager.resource_manager().render_registry().clone();
         let device_context = asset_manager.device_context().clone();
-
 
         //
         // Mark the previous frame as completed
@@ -491,7 +507,7 @@ impl GameRenderer {
                                 &views[5],
                             ),
                         ]
-                            .into(),
+                        .into(),
                     ));
                 }
             }

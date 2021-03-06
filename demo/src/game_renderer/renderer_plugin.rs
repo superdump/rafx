@@ -1,26 +1,25 @@
-use rafx::nodes::{RenderRegistryBuilder, ExtractJob, ExtractResources};
-use rafx::assets::AssetManager;
-use rafx::assets::distill_impl::AssetResource;
-use rafx::framework::RenderResources;
-use rafx::base::resource_map::ResourceMap;
 use rafx::api::RafxResult;
+use rafx::assets::distill_impl::AssetResource;
+use rafx::assets::AssetManager;
+use rafx::base::resource_map::ResourceMap;
+use rafx::framework::RenderResources;
+use rafx::nodes::{ExtractJob, ExtractResources, RenderRegistryBuilder};
 
 // graph builder?
 
 pub trait RendererPlugin: Send {
     //
-    fn configure_asset_daemon(&self) {
+    fn configure_asset_daemon(&self) {}
 
-    }
-
-    fn configure_render_registry(&self, render_registry: RenderRegistryBuilder) -> RenderRegistryBuilder {
+    fn configure_render_registry(
+        &self,
+        render_registry: RenderRegistryBuilder,
+    ) -> RenderRegistryBuilder {
         render_registry
     }
 
     // also add to render resources?
-    fn configure_asset_manager(&self) {
-
-    }
+    fn configure_asset_manager(&self) {}
 
     fn initialize_static_resources(
         &mut self,
@@ -33,14 +32,14 @@ pub trait RendererPlugin: Send {
 
     fn swapchain_created(
         &self,
-        _extract_resources: &ExtractResources
+        _extract_resources: &ExtractResources,
     ) -> RafxResult<()> {
         Ok(())
     }
 
     fn swapchain_destroyed(
         &self,
-        _extract_resources: &ExtractResources
+        _extract_resources: &ExtractResources,
     ) -> RafxResult<()> {
         Ok(())
     }
@@ -50,7 +49,7 @@ pub trait RendererPlugin: Send {
     // extract jobs
     fn prepare_render(
         &self,
-        _extract_resources: &ExtractResources
+        _extract_resources: &ExtractResources,
     ) -> RafxResult<()> {
         Ok(())
     }
@@ -59,8 +58,7 @@ pub trait RendererPlugin: Send {
         &self,
         _extract_resources: &ExtractResources,
         _render_resources: &RenderResources,
-        _extract_jobs: &mut Vec<Box<dyn ExtractJob>>
+        _extract_jobs: &mut Vec<Box<dyn ExtractJob>>,
     ) {
-
     }
 }

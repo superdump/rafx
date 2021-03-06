@@ -1,3 +1,4 @@
+use crate::features::text::plugin::TextStaticResources;
 use crate::features::text::prepare::TextPrepareJobImpl;
 use crate::features::text::{ExtractedTextData, TextRenderFeature, TextResource};
 use crate::legion_support::LegionResources;
@@ -7,7 +8,6 @@ use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex,
     RenderJobExtractContext, RenderView,
 };
-use crate::features::text::plugin::TextStaticResources;
 
 pub struct TextExtractJob {}
 

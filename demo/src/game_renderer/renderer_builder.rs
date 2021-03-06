@@ -1,15 +1,18 @@
-use crate::game_renderer::{RendererPlugin, GameRenderer};
-use legion::Resources;
-use rafx::api::{RafxApi, RafxResult, RafxQueueType};
-use crate::daemon::AssetDaemonOpt;
-use crate::daemon;
-use crate::assets::gltf::MeshAssetType;
 use crate::assets::font::FontAssetType;
-use rafx::assets::distill_impl::AssetResource;
-use crate::features::sprite::SpriteRenderFeature;
-use crate::features::mesh::MeshRenderFeature;
-use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, TransparentRenderPhase, PostProcessRenderPhase, UiRenderPhase};
+use crate::assets::gltf::MeshAssetType;
+use crate::daemon;
+use crate::daemon::AssetDaemonOpt;
 use crate::features::imgui::ImGuiRenderFeature;
+use crate::features::mesh::MeshRenderFeature;
+use crate::features::sprite::SpriteRenderFeature;
+use crate::game_renderer::{GameRenderer, RendererPlugin};
+use crate::phases::{
+    OpaqueRenderPhase, PostProcessRenderPhase, ShadowMapRenderPhase, TransparentRenderPhase,
+    UiRenderPhase,
+};
+use legion::Resources;
+use rafx::api::{RafxApi, RafxQueueType, RafxResult};
+use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 
 pub enum AssetSource {
@@ -23,7 +26,7 @@ pub enum AssetSource {
 pub struct RendererBuilderResult {
     pub asset_resource: AssetResource,
     pub asset_manager: AssetManager,
-    pub renderer: GameRenderer
+    pub renderer: GameRenderer,
 }
 
 #[derive(Default)]
@@ -32,7 +35,10 @@ pub struct RendererBuilder {
 }
 
 impl RendererBuilder {
-    pub fn add_plugin(mut self, plugin: Box<dyn RendererPlugin>) -> Self {
+    pub fn add_plugin(
+        mut self,
+        plugin: Box<dyn RendererPlugin>,
+    ) -> Self {
         self.plugins.push(plugin);
         self
     }
@@ -52,7 +58,7 @@ impl RendererBuilder {
             }
             AssetSource::Daemon {
                 external_daemon,
-                daemon_args
+                daemon_args,
             } => {
                 if !external_daemon {
                     log::info!("Hosting local daemon at {:?}", daemon_args.address);
@@ -101,7 +107,8 @@ impl RendererBuilder {
 
         #[cfg(feature = "use-imgui")]
         {
-            render_registry_builder = render_registry_builder.register_feature::<ImGuiRenderFeature>();
+            render_registry_builder =
+                render_registry_builder.register_feature::<ImGuiRenderFeature>();
         }
 
         let render_registry = render_registry_builder.build();
@@ -134,13 +141,13 @@ impl RendererBuilder {
             &mut asset_manager,
             &graphics_queue,
             &transfer_queue,
-            self.plugins
+            self.plugins,
         )?;
 
         Ok(RendererBuilderResult {
             asset_resource,
             asset_manager,
-            renderer
+            renderer,
         })
     }
 }

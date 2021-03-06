@@ -1,7 +1,7 @@
 use legion::Resources;
 use legion::World;
-use std::ops::Deref;
 use rafx_base::memory::force_to_static_lifetime;
+use std::ops::Deref;
 
 //TODO: Add a render resource builder or something that lets someone add extract-only things by
 // ref and resources available to all jobs by passing ownership

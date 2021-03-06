@@ -10,7 +10,7 @@ use rafx::api::RafxResult;
 use rafx::assets::AssetManager;
 
 use crate::daemon::AssetDaemonArgs;
-use crate::game_renderer::{GameRenderer, AssetSource};
+use crate::game_renderer::{AssetSource, GameRenderer};
 use crate::scenes::SceneManager;
 use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
@@ -298,7 +298,13 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
 
             let extract_resources = ExtractResources::default();
             game_renderer
-                .start_rendering_next_frame(extract_resources, &resources, &world, window_width, window_height)
+                .start_rendering_next_frame(
+                    extract_resources,
+                    &resources,
+                    &world,
+                    window_width,
+                    window_height,
+                )
                 .unwrap();
         }
 

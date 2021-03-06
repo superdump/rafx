@@ -92,11 +92,7 @@ impl GameRendererStaticResources {
             "bloom combine material",
         )?;
 
-        asset_manager.wait_for_asset_to_load(
-            &imgui_material,
-            asset_resource,
-            "imgui material",
-        )?;
+        asset_manager.wait_for_asset_to_load(&imgui_material, asset_resource, "imgui material")?;
 
         asset_manager.wait_for_asset_to_load(
             &skybox_material,
@@ -104,17 +100,9 @@ impl GameRendererStaticResources {
             "skybox material",
         )?;
 
-        asset_manager.wait_for_asset_to_load(
-            &skybox_texture,
-            asset_resource,
-            "skybox texture",
-        )?;
+        asset_manager.wait_for_asset_to_load(&skybox_texture, asset_resource, "skybox texture")?;
 
-        asset_manager.wait_for_asset_to_load(
-            &compute_test,
-            asset_resource,
-            "compute pipeline",
-        )?;
+        asset_manager.wait_for_asset_to_load(&compute_test, asset_resource, "compute pipeline")?;
 
         Ok(GameRendererStaticResources {
             sprite_material,

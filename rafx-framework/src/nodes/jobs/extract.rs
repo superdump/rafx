@@ -28,9 +28,7 @@ impl Default for ExtractJobSet {
 
 impl ExtractJobSet {
     pub fn new(extract_jobs: Vec<Box<dyn ExtractJob>>) -> Self {
-        ExtractJobSet {
-            extract_jobs
-        }
+        ExtractJobSet { extract_jobs }
     }
 
     pub fn add_job(

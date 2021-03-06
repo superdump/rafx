@@ -3,10 +3,10 @@ use std::{
     path::PathBuf,
 };
 
-use structopt::StructOpt;
 use rafx::assets::distill_impl::AssetResource;
-use rafx::distill::loader::{RpcIO, Loader, PackfileReader};
 use rafx::distill::loader::storage::DefaultIndirectionResolver;
+use rafx::distill::loader::{Loader, PackfileReader, RpcIO};
+use structopt::StructOpt;
 
 /// Parameters to the asset daemon.
 ///
@@ -76,19 +76,14 @@ pub fn run(opt: AssetDaemonOpt) {
         .run();
 }
 
-
-pub fn init_distill_daemon(
-    connect_string: String,
-) -> AssetResource {
+pub fn init_distill_daemon(connect_string: String) -> AssetResource {
     let rpc_loader = RpcIO::new(connect_string).unwrap();
     let loader = Loader::new(Box::new(rpc_loader));
     let resolver = Box::new(DefaultIndirectionResolver);
     AssetResource::new(loader, resolver)
 }
 
-pub fn init_distill_packfile(
-    pack_file: &std::path::Path,
-) -> AssetResource {
+pub fn init_distill_packfile(pack_file: &std::path::Path) -> AssetResource {
     let packfile = std::fs::File::open(pack_file).unwrap();
     let packfile_loader = PackfileReader::new(packfile).unwrap();
     let loader = Loader::new(Box::new(packfile_loader));

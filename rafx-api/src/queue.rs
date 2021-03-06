@@ -7,7 +7,10 @@ use crate::empty::RafxQueueEmpty;
 use crate::metal::RafxQueueMetal;
 #[cfg(feature = "rafx-vulkan")]
 use crate::vulkan::RafxQueueVulkan;
-use crate::{RafxCommandBuffer, RafxCommandPool, RafxCommandPoolDef, RafxFence, RafxPresentSuccessResult, RafxQueueType, RafxResult, RafxSemaphore, RafxSwapchain, RafxDeviceContext};
+use crate::{
+    RafxCommandBuffer, RafxCommandPool, RafxCommandPoolDef, RafxDeviceContext, RafxFence,
+    RafxPresentSuccessResult, RafxQueueType, RafxResult, RafxSemaphore, RafxSwapchain,
+};
 
 /// A queue allows work to be submitted to the GPU
 ///
@@ -40,16 +43,12 @@ impl RafxQueue {
             #[cfg(feature = "rafx-vulkan")]
             RafxQueue::Vk(inner) => RafxDeviceContext::Vk(inner.device_context().clone()),
             #[cfg(feature = "rafx-metal")]
-            RafxQueue::Metal(inner) => {
-                RafxDeviceContext::Metal(inner.device_context().clone())
-            }
+            RafxQueue::Metal(inner) => RafxDeviceContext::Metal(inner.device_context().clone()),
             #[cfg(any(
-            feature = "rafx-empty",
-            not(any(feature = "rafx-metal", feature = "rafx-vulkan"))
+                feature = "rafx-empty",
+                not(any(feature = "rafx-metal", feature = "rafx-vulkan"))
             ))]
-            RafxQueue::Empty(inner) => {
-                RafxDeviceContext::Empty(inner.device_context().clone())
-            }
+            RafxQueue::Empty(inner) => RafxDeviceContext::Empty(inner.device_context().clone()),
         }
     }
 

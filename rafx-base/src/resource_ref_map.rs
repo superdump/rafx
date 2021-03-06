@@ -1,14 +1,14 @@
-use crate::resource_map::{Resource, ResourceMap, ReadBorrow, WriteBorrow};
-use std::ops::{Deref, DerefMut};
-use std::marker::PhantomData;
 use crate::memory::force_to_static_lifetime_mut;
+use crate::resource_map::{ReadBorrow, Resource, ResourceMap, WriteBorrow};
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 /// Like ResourceMap, but the insertions are temporary. This is an alternative to making a large
 /// amount of code generic just to pass down an arbitrary <T>
 #[derive(Default)]
 pub struct ResourceRefMap<'a> {
     resources: ResourceMap,
-    phantom_data: PhantomData<&'a ()>
+    phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRefMap<'a> {
@@ -24,14 +24,15 @@ impl<'a> ResourceRefMap<'a> {
         R: Resource,
     {
         unsafe {
-            self.resources.insert(ResourceRef(force_to_static_lifetime_mut(r)));
+            self.resources
+                .insert(ResourceRef(force_to_static_lifetime_mut(r)));
         }
     }
 
     /// Remove a type/resource instance from the map
     pub fn remove<R>(&mut self) -> Option<&'a mut R>
-        where
-            R: Resource
+    where
+        R: Resource,
     {
         self.resources.remove::<ResourceRef<R>>().map(|x| x.0)
     }
@@ -59,13 +60,15 @@ impl<'a> ResourceRefMap<'a> {
     /// Read/Write fetch of a resource. Requesting write access to a resource with
     /// any concurrently active read/write is fatal. Returns None if the type is not registered.
     pub fn try_fetch_mut<R: Resource>(&self) -> Option<ResourceRefBorrowMut<R>> {
-        self.resources.try_fetch_mut().map(|x| ResourceRefBorrowMut(x))
+        self.resources
+            .try_fetch_mut()
+            .map(|x| ResourceRefBorrowMut(x))
     }
 
     /// Returns true if the resource is registered.
     pub fn has_value<R>(&self) -> bool
-        where
-            R: Resource,
+    where
+        R: Resource,
     {
         self.resources.has_value::<ResourceRef<R>>()
     }
@@ -95,7 +98,6 @@ impl<T> Deref for ResourceRef<T> {
 // unsafe impl<T> Send for ResourceRef<T> {}
 // unsafe impl<T> Sync for ResourceRef<T> {}
 
-
 //
 // ResourceRefBorrow
 //
@@ -113,7 +115,7 @@ impl<'a, T: Resource> Deref for ResourceRefBorrow<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.0.0
+        self.0 .0
     }
 }
 
@@ -132,13 +134,13 @@ impl<'a, T: Resource> Deref for ResourceRefBorrowMut<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.0.0
+        self.0 .0
     }
 }
 
 impl<'a, T: Resource> DerefMut for ResourceRefBorrowMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.0
+        self.0 .0
     }
 }
 

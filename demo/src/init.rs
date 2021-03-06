@@ -1,8 +1,8 @@
-use crate::features::debug3d::{DebugDraw3DResource, Debug3DRendererPlugin};
+use crate::features::debug3d::{Debug3DRendererPlugin, DebugDraw3DResource};
 use crate::features::mesh::MeshRenderNodeSet;
 use crate::features::sprite::SpriteRenderNodeSet;
-use crate::features::text::{TextResource, TextRendererPlugin};
-use crate::game_renderer::{GameRenderer, SwapchainHandler, RendererBuilder, AssetSource};
+use crate::features::text::{TextRendererPlugin, TextResource};
+use crate::game_renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
 use legion::Resources;
 use rafx::api::{RafxApi, RafxDeviceContext, RafxResult, RafxSwapchainHelper};
 use rafx::assets::distill_impl::AssetResource;
@@ -69,8 +69,7 @@ pub fn rendering_init(
         .add_plugin(Box::new(Debug3DRendererPlugin::default()))
         .add_plugin(Box::new(TextRendererPlugin::default()));
 
-    let mut renderer_builder_result = renderer_builder
-        .build(resources, &rafx_api, asset_source)?;
+    let mut renderer_builder_result = renderer_builder.build(resources, &rafx_api, asset_source)?;
 
     let (width, height) = sdl2_window.vulkan_drawable_size();
     let swapchain_helper = SwapchainHandler::create_swapchain(
@@ -78,14 +77,20 @@ pub fn rendering_init(
         &mut renderer_builder_result.renderer,
         sdl2_window,
         width,
-        height
+        height,
     )?;
 
     resources.insert(rafx_api.device_context());
     resources.insert(rafx_api);
     resources.insert(swapchain_helper);
     resources.insert(renderer_builder_result.asset_resource);
-    resources.insert(renderer_builder_result.asset_manager.resource_manager().render_registry().clone());
+    resources.insert(
+        renderer_builder_result
+            .asset_manager
+            .resource_manager()
+            .render_registry()
+            .clone(),
+    );
     resources.insert(renderer_builder_result.asset_manager);
     resources.insert(renderer_builder_result.renderer);
 
@@ -99,7 +104,11 @@ pub fn rendering_destroy(resources: &mut Resources) -> RafxResult<()> {
             let swapchain_helper = resources.remove::<RafxSwapchainHelper>().unwrap();
             let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
             let game_renderer = resources.get::<GameRenderer>().unwrap();
-            SwapchainHandler::destroy_swapchain(swapchain_helper, &mut *asset_manager, &*game_renderer)?;
+            SwapchainHandler::destroy_swapchain(
+                swapchain_helper,
+                &mut *asset_manager,
+                &*game_renderer,
+            )?;
         }
 
         resources.remove::<GameRenderer>();

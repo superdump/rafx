@@ -21,6 +21,7 @@ use crate::assets::image::ImageAssetTypeHandler;
 use crate::assets::shader::ShaderAssetTypeHandler;
 use crate::distill_impl::AssetResource;
 use distill::loader::handle::AssetHandle;
+use distill::loader::storage::LoadStatus;
 use fnv::FnvHashMap;
 use rafx_api::{RafxDeviceContext, RafxQueue, RafxResult};
 use rafx_framework::descriptor_sets::{
@@ -35,7 +36,6 @@ use rafx_framework::ResourceLookupSet;
 use rafx_framework::{ResourceManager, ResourceManagerMetrics};
 use std::any::TypeId;
 use std::sync::Arc;
-use distill::loader::storage::LoadStatus;
 
 #[derive(Debug)]
 pub struct AssetManagerMetrics {

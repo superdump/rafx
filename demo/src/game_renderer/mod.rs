@@ -16,9 +16,9 @@ mod renderer_plugin;
 pub use renderer_plugin::RendererPlugin;
 
 mod renderer_builder;
+pub use renderer_builder::AssetSource;
 pub use renderer_builder::RendererBuilder;
 pub use renderer_builder::RendererBuilderResult;
-pub use renderer_builder::AssetSource;
 
 //TODO: Find a way to not expose this
 mod swapchain_handling;

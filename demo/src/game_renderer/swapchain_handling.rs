@@ -61,7 +61,11 @@ impl<'a> SwapchainHandler<'a> {
             game_renderer,
         };
 
-        swapchain_helper.acquire_next_image(window_width, window_height, Some(&mut lifetime_listener))
+        swapchain_helper.acquire_next_image(
+            window_width,
+            window_height,
+            Some(&mut lifetime_listener),
+        )
     }
 
     #[profiling::function]

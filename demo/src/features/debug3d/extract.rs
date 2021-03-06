@@ -1,3 +1,4 @@
+use crate::features::debug3d::plugin::Debug3DStaticResources;
 use crate::features::debug3d::prepare::Debug3dPrepareJobImpl;
 use crate::features::debug3d::{Debug3dRenderFeature, DebugDraw3DResource, ExtractedDebug3dData};
 use crate::legion_support::LegionResources;
@@ -6,7 +7,6 @@ use rafx::nodes::{
     ExtractJob, FramePacket, PrepareJob, RenderFeature, RenderFeatureIndex,
     RenderJobExtractContext, RenderView,
 };
-use crate::features::debug3d::plugin::Debug3DStaticResources;
 
 pub struct Debug3dExtractJob {}
 
@@ -34,7 +34,10 @@ impl ExtractJob for Debug3dExtractJob {
             .unwrap()
             .take_line_lists();
 
-        let debug3d_material = &extract_context.render_resources.fetch::<Debug3DStaticResources>().debug3d_material;
+        let debug3d_material = &extract_context
+            .render_resources
+            .fetch::<Debug3DStaticResources>()
+            .debug3d_material;
 
         let debug3d_material_pass = asset_manager
             .get_material_pass_by_index(&debug3d_material, 0)

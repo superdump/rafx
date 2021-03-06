@@ -2,8 +2,8 @@
 // ref and resources available to all jobs by passing ownership
 
 use super::AssetManager;
-use std::ops::Deref;
 use rafx_base::memory::force_to_static_lifetime;
+use std::ops::Deref;
 
 // static reference is dangerous, must only be used when extracting
 pub struct AssetManagerRenderResource(&'static AssetManager);
