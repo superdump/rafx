@@ -1,4 +1,6 @@
+use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
+use rafx::assets::distill::daemon::AssetDaemon;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::base::resource_map::ResourceMap;
@@ -9,7 +11,12 @@ use rafx::nodes::{ExtractJob, ExtractResources, RenderRegistryBuilder};
 
 pub trait RendererPlugin: Send {
     //
-    fn configure_asset_daemon(&self) {}
+    fn configure_asset_daemon(
+        &self,
+        asset_daemon: AssetDaemon,
+    ) -> AssetDaemon {
+        asset_daemon
+    }
 
     fn configure_render_registry(
         &self,
@@ -25,7 +32,9 @@ pub trait RendererPlugin: Send {
         &mut self,
         _asset_manager: &mut AssetManager,
         _asset_resource: &mut AssetResource,
+        _extract_resources: &ExtractResources,
         _render_resources: &mut ResourceMap,
+        _upload: &mut RafxTransferUpload,
     ) -> RafxResult<()> {
         Ok(())
     }

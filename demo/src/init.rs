@@ -7,7 +7,7 @@ use legion::Resources;
 use rafx::api::{RafxApi, RafxDeviceContext, RafxResult, RafxSwapchainHelper};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
-use rafx::nodes::RenderRegistry;
+use rafx::nodes::{ExtractResources, RenderRegistry};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
 pub struct Sdl2Systems {
@@ -39,18 +39,6 @@ pub fn sdl2_init() -> Sdl2Systems {
     }
 }
 
-// Should occur *before* the renderer starts
-#[cfg(feature = "use-imgui")]
-pub fn imgui_init(
-    resources: &mut Resources,
-    sdl2_window: &sdl2::video::Window,
-) {
-    // Load imgui, we do it a little early because it wants to have the actual SDL2 window and
-    // doesn't work with the thin window wrapper
-    let imgui_manager = crate::imgui_support::init_imgui_manager(sdl2_window);
-    resources.insert(imgui_manager);
-}
-
 pub fn rendering_init(
     resources: &mut Resources,
     sdl2_window: &sdl2::video::Window,
@@ -65,11 +53,31 @@ pub fn rendering_init(
 
     let rafx_api = rafx::api::RafxApi::new(sdl2_window, &Default::default())?;
 
-    let renderer_builder = RendererBuilder::default()
+    let mut renderer_builder = RendererBuilder::default();
+    renderer_builder = renderer_builder
         .add_plugin(Box::new(Debug3DRendererPlugin::default()))
         .add_plugin(Box::new(TextRendererPlugin::default()));
 
-    let mut renderer_builder_result = renderer_builder.build(resources, &rafx_api, asset_source)?;
+    #[cfg(feature = "use-imgui")]
+    {
+        use crate::features::imgui::ImguiRendererPlugin;
+        let imgui_manager = crate::features::imgui::init_sdl2_imgui_manager(sdl2_window);
+        resources.insert(imgui_manager);
+        renderer_builder = renderer_builder.add_plugin(Box::new(ImguiRendererPlugin::default()));
+    }
+
+    let mut renderer_builder_result = {
+        let mut extract_resources = ExtractResources::default();
+
+        #[cfg(feature = "use-imgui")]
+        use crate::features::imgui::Sdl2ImguiManager;
+        #[cfg(feature = "use-imgui")]
+        let mut imgui_manager = resources.get_mut::<Sdl2ImguiManager>().unwrap();
+        #[cfg(feature = "use-imgui")]
+        extract_resources.insert(&mut *imgui_manager);
+
+        renderer_builder.build(extract_resources, &rafx_api, asset_source)
+    }?;
 
     let (width, height) = sdl2_window.vulkan_drawable_size();
     let swapchain_helper = SwapchainHandler::create_swapchain(

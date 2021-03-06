@@ -55,10 +55,6 @@ pub fn perspective_rh(
     )
 }
 
-#[cfg(feature = "use-imgui")]
-#[derive(Clone)]
-pub struct ImguiFontAtlas(pub ResourceArc<ImageViewResource>);
-
 #[derive(Clone)]
 pub struct InvalidResources {
     pub invalid_image: ResourceArc<ImageViewResource>,
@@ -66,8 +62,6 @@ pub struct InvalidResources {
 }
 
 pub struct GameRendererInner {
-    #[cfg(feature = "use-imgui")]
-    pub(super) imgui_font_atlas_image_view: ImguiFontAtlas,
     pub(super) invalid_resources: InvalidResources,
 
     // Everything that is loaded all the time
@@ -89,7 +83,7 @@ pub struct GameRenderer {
 
 impl GameRenderer {
     pub fn new(
-        resources: &Resources,
+        extract_resources: ExtractResources,
         asset_resource: &mut AssetResource,
         asset_manager: &mut AssetManager,
         graphics_queue: &RafxQueue,
@@ -105,14 +99,6 @@ impl GameRenderer {
             asset_manager.transfer_queue(),
             asset_manager.graphics_queue(),
             16 * 1024 * 1024,
-        )?;
-
-        #[cfg(feature = "use-imgui")]
-        let imgui_font_atlas_image_view = GameRenderer::create_font_atlas_image_view(
-            resources,
-            &device_context,
-            &mut upload,
-            &dyn_resource_allocator,
         )?;
 
         let invalid_image = Self::upload_image_data(
@@ -137,9 +123,6 @@ impl GameRenderer {
         )
         .map_err(|x| Into::<RafxError>::into(x))?;
 
-        upload.block_until_upload_complete()?;
-
-        log::info!("all waits complete");
         let static_resources = GameRendererStaticResources::new(asset_resource, asset_manager)?;
 
         let mut render_resources = RenderResources::default();
@@ -147,15 +130,17 @@ impl GameRenderer {
             plugin.initialize_static_resources(
                 asset_manager,
                 asset_resource,
+                &extract_resources,
                 &mut render_resources,
+                &mut upload,
             )?;
         }
+
+        upload.block_until_upload_complete()?;
 
         let render_thread = RenderThread::start(render_resources);
 
         let renderer = GameRendererInner {
-            #[cfg(feature = "use-imgui")]
-            imgui_font_atlas_image_view: ImguiFontAtlas(imgui_font_atlas_image_view),
             invalid_resources: InvalidResources {
                 invalid_image,
                 invalid_cube_map_image,
@@ -194,41 +179,6 @@ impl GameRenderer {
         let image = dyn_resource_allocator.insert_texture(texture);
 
         Ok(dyn_resource_allocator.insert_image_view(&image, None)?)
-    }
-
-    #[cfg(feature = "use-imgui")]
-    fn create_font_atlas_image_view(
-        resources: &Resources,
-        device_context: &RafxDeviceContext,
-        upload: &mut RafxTransferUpload,
-        dyn_resource_allocator: &DynResourceAllocatorSet,
-    ) -> RafxResult<ResourceArc<ImageViewResource>> {
-        use crate::imgui_support::Sdl2ImguiManager;
-
-        //TODO: Simplify this setup code for the imgui font atlas
-        let imgui_font_atlas = resources
-            .get::<Sdl2ImguiManager>()
-            .unwrap()
-            .build_font_atlas();
-
-        let imgui_font_atlas = GpuImageData::new_simple(
-            imgui_font_atlas.width,
-            imgui_font_atlas.height,
-            GpuImageDataColorSpace::Linear.rgba8(),
-            imgui_font_atlas.data,
-        );
-
-        Self::upload_image_data(
-            device_context,
-            upload,
-            dyn_resource_allocator,
-            &imgui_font_atlas,
-            ImageUploadParams {
-                generate_mips: false,
-                ..Default::default()
-            },
-        )
-        .map_err(|x| Into::<RafxError>::into(x))
     }
 
     // This is externally exposed, it checks result of the previous frame (which implicitly also
@@ -366,8 +316,8 @@ impl GameRenderer {
         let static_resources = &game_renderer_inner.static_resources;
         render_resources.insert(static_resources.clone());
         render_resources.insert(game_renderer_inner.invalid_resources.clone());
-        #[cfg(feature = "use-imgui")]
-        render_resources.insert(game_renderer_inner.imgui_font_atlas_image_view.clone());
+        // #[cfg(feature = "use-imgui")]
+        // render_resources.insert(game_renderer_inner.imgui_font_atlas_image_view.clone());
 
         //
         // Swapchain Status
@@ -608,11 +558,11 @@ impl GameRenderer {
             // Meshes
             extract_job_set.add_job(create_mesh_extract_job());
 
-            #[cfg(feature = "use-imgui")]
-            {
-                use crate::features::imgui::create_imgui_extract_job;
-                extract_job_set.add_job(create_imgui_extract_job());
-            }
+            // #[cfg(feature = "use-imgui")]
+            // {
+            //     use crate::features::imgui::create_imgui_extract_job;
+            //     extract_job_set.add_job(create_imgui_extract_job());
+            // }
 
             extract_job_set
         };

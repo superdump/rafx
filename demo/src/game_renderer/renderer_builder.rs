@@ -2,7 +2,6 @@ use crate::assets::font::FontAssetType;
 use crate::assets::gltf::MeshAssetType;
 use crate::daemon;
 use crate::daemon::AssetDaemonOpt;
-use crate::features::imgui::ImGuiRenderFeature;
 use crate::features::mesh::MeshRenderFeature;
 use crate::features::sprite::SpriteRenderFeature;
 use crate::game_renderer::{GameRenderer, RendererPlugin};
@@ -10,10 +9,10 @@ use crate::phases::{
     OpaqueRenderPhase, PostProcessRenderPhase, ShadowMapRenderPhase, TransparentRenderPhase,
     UiRenderPhase,
 };
-use legion::Resources;
 use rafx::api::{RafxApi, RafxQueueType, RafxResult};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
+use rafx::nodes::ExtractResources;
 
 pub enum AssetSource {
     Packfile(std::path::PathBuf),
@@ -45,7 +44,7 @@ impl RendererBuilder {
 
     pub fn build(
         self,
-        resources: &Resources,
+        extract_resources: ExtractResources,
         rafx_api: &RafxApi,
         asset_source: AssetSource,
     ) -> RafxResult<RendererBuilderResult> {
@@ -63,20 +62,20 @@ impl RendererBuilder {
                 if !external_daemon {
                     log::info!("Hosting local daemon at {:?}", daemon_args.address);
 
-                    let asset_daemon = rafx::assets::distill_impl::default_daemon();
+                    let mut asset_daemon = rafx::assets::distill_impl::default_daemon()
+                        .with_db_path(daemon_args.db_dir)
+                        .with_address(daemon_args.address)
+                        .with_asset_dirs(daemon_args.asset_dirs);
 
                     for plugin in &self.plugins {
-                        plugin.configure_asset_daemon();
+                        asset_daemon = plugin.configure_asset_daemon(asset_daemon);
                     }
 
                     let asset_daemon = asset_daemon
                         .with_importer("basis", rafx::assets::BasisImageImporter)
                         .with_importer("gltf", crate::assets::gltf::GltfImporter)
                         .with_importer("glb", crate::assets::gltf::GltfImporter)
-                        .with_importer("ttf", crate::assets::font::FontImporter)
-                        .with_db_path(daemon_args.db_dir)
-                        .with_address(daemon_args.address)
-                        .with_asset_dirs(daemon_args.asset_dirs);
+                        .with_importer("ttf", crate::assets::font::FontImporter);
 
                     // Spawn the daemon in a background thread.
                     std::thread::spawn(move || {
@@ -105,12 +104,6 @@ impl RendererBuilder {
             .register_render_phase::<PostProcessRenderPhase>("PostProcess")
             .register_render_phase::<UiRenderPhase>("Ui");
 
-        #[cfg(feature = "use-imgui")]
-        {
-            render_registry_builder =
-                render_registry_builder.register_feature::<ImGuiRenderFeature>();
-        }
-
         let render_registry = render_registry_builder.build();
 
         let device_context = rafx_api.device_context();
@@ -136,18 +129,25 @@ impl RendererBuilder {
         asset_manager.register_asset_type::<FontAssetType>(&mut asset_resource);
 
         let renderer = GameRenderer::new(
-            resources,
+            extract_resources,
             &mut asset_resource,
             &mut asset_manager,
             &graphics_queue,
             &transfer_queue,
             self.plugins,
-        )?;
+        );
 
-        Ok(RendererBuilderResult {
-            asset_resource,
-            asset_manager,
-            renderer,
-        })
+        match renderer {
+            Ok(renderer) => Ok(RendererBuilderResult {
+                asset_resource,
+                asset_manager,
+                renderer,
+            }),
+            Err(e) => {
+                std::mem::drop(asset_resource);
+                std::mem::drop(asset_manager);
+                Err(e)
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 use crate::assets::font::FontAsset;
 use crate::features::text::{FontAtlasCache, TextRenderFeature};
 use crate::game_renderer::RendererPlugin;
+use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{AssetManager, MaterialAsset};
@@ -29,7 +30,9 @@ impl RendererPlugin for TextRendererPlugin {
         &mut self,
         asset_manager: &mut AssetManager,
         asset_resource: &mut AssetResource,
+        _extract_resources: &ExtractResources,
         render_resources: &mut ResourceMap,
+        _upload: &mut RafxTransferUpload,
     ) -> RafxResult<()> {
         let text_material =
             asset_resource.load_asset_path::<MaterialAsset, _>("materials/text.material");

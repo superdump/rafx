@@ -1,5 +1,6 @@
 use crate::features::debug3d::Debug3dRenderFeature;
 use crate::game_renderer::RendererPlugin;
+use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{AssetManager, MaterialAsset};
@@ -27,7 +28,9 @@ impl RendererPlugin for Debug3DRendererPlugin {
         &mut self,
         asset_manager: &mut AssetManager,
         asset_resource: &mut AssetResource,
+        _extract_resources: &ExtractResources,
         render_resources: &mut ResourceMap,
+        _upload: &mut RafxTransferUpload,
     ) -> RafxResult<()> {
         let debug3d_material =
             asset_resource.load_asset_path::<MaterialAsset, _>("materials/debug.material");

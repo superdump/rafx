@@ -21,8 +21,6 @@ mod components;
 pub mod daemon;
 mod features;
 mod game_renderer;
-#[cfg(feature = "use-imgui")]
-mod imgui_support;
 mod init;
 mod legion_support;
 mod phases;
@@ -124,8 +122,6 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
     };
 
     let sdl2_systems = init::sdl2_init();
-    #[cfg(feature = "use-imgui")]
-    init::imgui_init(&mut resources, &sdl2_systems.window);
     init::rendering_init(&mut resources, &sdl2_systems.window, asset_source)?;
 
     log::info!("Starting window event loop");
@@ -178,7 +174,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
         //
         #[cfg(feature = "use-imgui")]
         {
-            use crate::imgui_support::Sdl2ImguiManager;
+            use crate::features::imgui::Sdl2ImguiManager;
             use sdl2::mouse::MouseState;
             let imgui_manager = resources.get::<Sdl2ImguiManager>().unwrap();
             imgui_manager.begin_frame(&sdl2_systems.window, &MouseState::new(&event_pump));
@@ -222,7 +218,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
         //
         #[cfg(feature = "use-imgui")]
         {
-            use crate::imgui_support::Sdl2ImguiManager;
+            use crate::features::imgui::Sdl2ImguiManager;
             profiling::scope!("imgui");
             let imgui_manager = resources.get::<Sdl2ImguiManager>().unwrap();
             let time_state = resources.get::<TimeState>().unwrap();
@@ -276,7 +272,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
         //
         #[cfg(feature = "use-imgui")]
         {
-            use crate::imgui_support::Sdl2ImguiManager;
+            use crate::features::imgui::Sdl2ImguiManager;
             let imgui_manager = resources.get::<Sdl2ImguiManager>().unwrap();
             imgui_manager.render(&sdl2_systems.window);
         }
@@ -326,7 +322,7 @@ fn process_input(
 ) -> bool {
     #[cfg(feature = "use-imgui")]
     let imgui_manager = resources
-        .get::<crate::imgui_support::Sdl2ImguiManager>()
+        .get::<crate::features::imgui::Sdl2ImguiManager>()
         .unwrap();
     let mut scene_manager = resources.get_mut::<SceneManager>().unwrap();
     for event in event_pump.poll_iter() {

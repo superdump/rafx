@@ -10,7 +10,6 @@ pub struct GameRendererStaticResources {
     pub bloom_extract_material: Handle<MaterialAsset>,
     pub bloom_blur_material: Handle<MaterialAsset>,
     pub bloom_combine_material: Handle<MaterialAsset>,
-    pub imgui_material: Handle<MaterialAsset>,
     pub skybox_material: Handle<MaterialAsset>,
     pub skybox_texture: Handle<ImageAsset>,
     pub compute_test: Handle<ComputePipelineAsset>,
@@ -47,12 +46,6 @@ impl GameRendererStaticResources {
         //
         let bloom_combine_material =
             asset_resource.load_asset_path::<MaterialAsset, _>("materials/bloom_combine.material");
-
-        //
-        // ImGui resources
-        //
-        let imgui_material =
-            asset_resource.load_asset_path::<MaterialAsset, _>("materials/imgui.material");
 
         //
         // Skybox resources
@@ -92,8 +85,6 @@ impl GameRendererStaticResources {
             "bloom combine material",
         )?;
 
-        asset_manager.wait_for_asset_to_load(&imgui_material, asset_resource, "imgui material")?;
-
         asset_manager.wait_for_asset_to_load(
             &skybox_material,
             asset_resource,
@@ -109,7 +100,6 @@ impl GameRendererStaticResources {
             bloom_extract_material,
             bloom_blur_material,
             bloom_combine_material,
-            imgui_material,
             skybox_material,
             skybox_texture,
             compute_test,
