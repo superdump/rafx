@@ -1,12 +1,17 @@
-use rafx::nodes::{RenderViewSet, ExtractResources, RenderPhaseMaskBuilder, RenderViewDepthRange, RenderPhaseMask, RenderView, VisibilityResult, FramePacketBuilder};
-use fnv::FnvHashMap;
+use crate::components::{
+    DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
+};
 use crate::features::mesh::{LightId, ShadowMapRenderView};
 use crate::phases::ShadowMapRenderPhase;
-use crate::components::{SpotLightComponent, PositionComponent, DirectionalLightComponent, PointLightComponent};
-use rafx::framework::{ImageViewResource, ResourceArc};
 use arrayvec::ArrayVec;
-use rafx::visibility::{StaticVisibilityNodeSet, DynamicVisibilityNodeSet};
-use rafx::graph::{RenderGraphImageUsageId, RenderGraphExecutor};
+use fnv::FnvHashMap;
+use rafx::framework::{ImageViewResource, ResourceArc};
+use rafx::graph::{PreparedRenderGraph, RenderGraphImageUsageId};
+use rafx::nodes::{
+    ExtractResources, FramePacketBuilder, RenderPhaseMask, RenderPhaseMaskBuilder, RenderView,
+    RenderViewDepthRange, RenderViewSet, VisibilityResult,
+};
+use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
 struct RenderViewVisibility {
     render_view: RenderView,
@@ -38,7 +43,10 @@ impl ShadowMapResource {
         &self.shadow_map_render_views
     }
 
-    pub fn append_render_views(&self, render_views: &mut Vec<RenderView>) {
+    pub fn append_render_views(
+        &self,
+        render_views: &mut Vec<RenderView>,
+    ) {
         for shadow_map_view in &self.shadow_map_render_views {
             match shadow_map_view {
                 ShadowMapRenderView::Single(view) => {
@@ -74,7 +82,10 @@ impl ShadowMapResource {
         // Determine shadowmap views
         //
         let (shadow_map_lookup, shadow_map_render_views) =
-            crate::features::mesh::shadow_map_resource::calculate_shadow_map_views(&render_view_set, extract_resources);
+            crate::features::mesh::shadow_map_resource::calculate_shadow_map_views(
+                &render_view_set,
+                extract_resources,
+            );
 
         self.shadow_map_lookup = shadow_map_lookup;
         self.shadow_map_render_views = shadow_map_render_views;
@@ -123,7 +134,8 @@ impl ShadowMapResource {
                                 dynamic_visibility_node_set,
                                 &views[5],
                             ),
-                        ].into(),
+                        ]
+                        .into(),
                     ));
                 }
             }
@@ -152,23 +164,20 @@ impl ShadowMapResource {
 
     pub fn set_shadow_map_image_usage_ids(
         &mut self,
-        image_usage_ids: Vec<RenderGraphImageUsageId>
+        image_usage_ids: Vec<RenderGraphImageUsageId>,
     ) {
-        assert_eq!(
-            self.shadow_map_render_views.len(),
-            image_usage_ids.len()
-        );
+        assert_eq!(self.shadow_map_render_views.len(), image_usage_ids.len());
         self.image_usage_ids = image_usage_ids;
     }
 
     pub fn set_shadow_map_image_views(
         &mut self,
-        executor: &RenderGraphExecutor,
+        prepared_render_graph: &PreparedRenderGraph,
     ) {
-        let shadow_map_image_views : Vec<_> = self
+        let shadow_map_image_views: Vec<_> = self
             .image_usage_ids
             .iter()
-            .map(|&x| executor.image_view_resource(x).unwrap())
+            .map(|&x| prepared_render_graph.image_view(x).unwrap())
             .collect();
 
         assert_eq!(
@@ -184,10 +193,8 @@ fn create_render_view_visibility(
     dynamic_visibility_node_set: &mut DynamicVisibilityNodeSet,
     render_view: &RenderView,
 ) -> RenderViewVisibility {
-    let static_visibility =
-        static_visibility_node_set.calculate_static_visibility(&render_view);
-    let dynamic_visibility =
-        dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
+    let static_visibility = static_visibility_node_set.calculate_static_visibility(&render_view);
+    let dynamic_visibility = dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
 
     log::trace!(
         "shadow view static node count: {}",
@@ -252,8 +259,7 @@ fn calculate_shadow_map_views(
         let eye_position = position.position;
         let light_to = position.position + light.direction;
 
-        let view =
-            glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
+        let view = glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
 
         let near_plane = 0.25;
         let far_plane = 100.0;

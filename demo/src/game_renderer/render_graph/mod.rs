@@ -2,11 +2,11 @@ use rafx::api::{
     RafxDeviceContext, RafxFormat, RafxPrimitiveTopology, RafxResourceState, RafxResourceType,
     RafxResult, RafxSampleCount,
 };
-use rafx::framework::{ResourceContext, RenderResources};
 use rafx::framework::VertexDataSetLayout;
 use rafx::framework::{ImageViewResource, ResourceArc};
+use rafx::framework::{RenderResources, ResourceContext};
 use rafx::graph::*;
-use rafx::nodes::{RenderJobBeginExecuteGraphContext, RenderView, ExtractResources};
+use rafx::nodes::{ExtractResources, RenderView};
 
 mod shadow_map_pass;
 use shadow_map_pass::ShadowMapImageResources;
@@ -15,12 +15,12 @@ mod opaque_pass;
 use opaque_pass::OpaquePass;
 
 mod bloom_extract_pass;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use crate::game_renderer::swapchain_resources::SwapchainResources;
 use crate::game_renderer::GameRendererStaticResources;
+use crate::RenderOptions;
 use bloom_extract_pass::BloomExtractPass;
 use rafx::assets::AssetManager;
-use crate::RenderOptions;
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 mod bloom_blur_pass;
 
@@ -39,7 +39,7 @@ lazy_static::lazy_static! {
 // Everything produced by the graph. This includes resources that may be needed during the prepare
 // phase
 pub struct BuildRenderGraphResult {
-    pub executor: RenderGraphExecutor,
+    pub prepared_render_graph: PreparedRenderGraph,
 }
 
 // All the data that can influence the rendergraph
@@ -58,7 +58,6 @@ struct RenderGraphContext<'a> {
     graph: &'a mut RenderGraphBuilder,
     resource_context: &'a ResourceContext,
     graph_config: &'a RenderGraphConfig,
-    graph_callbacks: &'a mut RenderGraphNodeCallbacks,
     main_view: &'a RenderView,
     extract_resources: &'a ExtractResources<'a>,
     render_resources: &'a RenderResources,
@@ -104,12 +103,10 @@ pub fn build_render_graph(
     };
 
     let mut graph = RenderGraphBuilder::default();
-    let mut graph_callbacks = RenderGraphNodeCallbacks::default();
 
     let mut graph_context = RenderGraphContext {
         graph: &mut graph,
         resource_context,
-        graph_callbacks: &mut graph_callbacks,
         graph_config: &graph_config,
         main_view: &main_view,
         render_resources,
@@ -213,27 +210,19 @@ pub fn build_render_graph(
         RafxResourceState::PRESENT,
     );
 
-    graph_callbacks.set_begin_execute_graph_callback(move |args| {
-        let mut write_context =
-            RenderJobBeginExecuteGraphContext::from_on_begin_execute_graph_args(&args);
-        args.graph_context.prepared_render_data().on_begin_execute_graph(&mut write_context)
-    });
-
-    //
-    // Create the executor, it needs to have access to the resource manager to add framebuffers
-    // and renderpasses to the resource lookups
-    //
-    let executor = RenderGraphExecutor::new(
+    let prepared_render_graph = PreparedRenderGraph::new(
         &device_context,
         &resource_context,
+        resource_context.resources(),
         graph,
         &swapchain_resources.swapchain_surface_info,
-        graph_callbacks,
     )?;
 
-    render_resources.fetch_mut::<ShadowMapResource>().set_shadow_map_image_views(&executor);
+    render_resources
+        .fetch_mut::<ShadowMapResource>()
+        .set_shadow_map_image_views(&prepared_render_graph);
 
     Ok(BuildRenderGraphResult {
-        executor,
+        prepared_render_graph,
     })
 }

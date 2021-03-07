@@ -1,19 +1,19 @@
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use crate::game_renderer::GameRenderer;
 use rafx::api::{RafxCommandBuffer, RafxDeviceContext, RafxQueue};
 use rafx::api::{RafxPresentableFrame, RafxResult};
 use rafx::framework::{DynCommandBuffer, RenderResources, ResourceContext};
-use rafx::graph::RenderGraphExecutor;
+use rafx::graph::PreparedRenderGraph;
 use rafx::nodes::{
     FramePacket, PrepareJobSet, RenderJobPrepareContext, RenderRegistry, RenderView,
 };
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 pub struct RenderFrameJobResult;
 
 pub struct RenderFrameJob {
     pub game_renderer: GameRenderer,
     pub prepare_job_set: PrepareJobSet,
-    pub render_graph: RenderGraphExecutor,
+    pub prepared_render_graph: PreparedRenderGraph,
     pub resource_context: ResourceContext,
     pub frame_packet: FramePacket,
     pub main_view: RenderView,
@@ -31,7 +31,7 @@ impl RenderFrameJob {
         let t0 = std::time::Instant::now();
         let result = Self::do_render_async(
             self.prepare_job_set,
-            self.render_graph,
+            self.prepared_render_graph,
             self.resource_context,
             self.frame_packet,
             self.main_view,
@@ -74,7 +74,7 @@ impl RenderFrameJob {
     #[allow(clippy::too_many_arguments)]
     fn do_render_async(
         prepare_job_set: PrepareJobSet,
-        render_graph: RenderGraphExecutor,
+        prepared_render_graph: PreparedRenderGraph,
         resource_context: ResourceContext,
         frame_packet: FramePacket,
         main_view: RenderView,
@@ -114,7 +114,7 @@ impl RenderFrameJob {
 
         let command_buffers = {
             profiling::scope!("Renderer Execute Graph");
-            render_graph.execute_graph(prepared_render_data, &graphics_queue)?
+            prepared_render_graph.execute_graph(prepared_render_data, &graphics_queue)?
         };
         let t2 = std::time::Instant::now();
         log::trace!(

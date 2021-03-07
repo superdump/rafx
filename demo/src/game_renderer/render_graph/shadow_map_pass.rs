@@ -1,10 +1,10 @@
 use super::RenderGraphContext;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use crate::features::mesh::ShadowMapRenderView;
 use crate::phases::ShadowMapRenderPhase;
 use rafx::api::{RafxDepthStencilClearValue, RafxResourceType};
 use rafx::graph::*;
 use rafx::nodes::{RenderJobWriteContext, RenderView};
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 pub(super) struct ShadowMapPass {
     pub(super) node: RenderGraphNodeId,
@@ -16,9 +16,7 @@ pub(super) enum ShadowMapImageResources {
     Cube(RenderGraphImageUsageId),
 }
 
-pub(super) fn shadow_map_passes(
-    context: &mut RenderGraphContext,
-) -> Vec<ShadowMapImageResources> {
+pub(super) fn shadow_map_passes(context: &mut RenderGraphContext) -> Vec<ShadowMapImageResources> {
     let mut shadow_map_resource = context.render_resources.fetch_mut::<ShadowMapResource>();
     let shadow_map_views = shadow_map_resource.shadow_map_render_views();
 
@@ -115,19 +113,16 @@ fn shadow_map_pass(
     context.graph.set_image_name(depth, "depth");
 
     context
-        .graph_callbacks
+        .graph
         .add_render_phase_dependency::<ShadowMapRenderPhase>(node);
 
     let render_view = render_view.clone();
-    context
-        .graph_callbacks
-        .set_renderpass_callback(node, move |args| {
-            let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
-            args
-                .graph_context
-                .prepared_render_data()
-                .write_view_phase::<ShadowMapRenderPhase>(&render_view, &mut write_context)
-        });
+    context.graph.set_renderpass_callback(node, move |args| {
+        let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
+        args.graph_context
+            .prepared_render_data()
+            .write_view_phase::<ShadowMapRenderPhase>(&render_view, &mut write_context)
+    });
 
     ShadowMapPass { node, depth }
 }

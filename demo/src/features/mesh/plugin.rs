@@ -1,4 +1,6 @@
 use crate::features::debug3d::Debug3dRenderFeature;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
+use crate::features::mesh::MeshRenderNodeSet;
 use crate::game_renderer::RendererPlugin;
 use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
@@ -6,9 +8,7 @@ use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::base::resource_map::ResourceMap;
 use rafx::framework::RenderResources;
-use rafx::nodes::{ExtractJob, ExtractResources, RenderRegistryBuilder, RenderNodeReservations};
-use crate::features::mesh::MeshRenderNodeSet;
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
+use rafx::nodes::{ExtractJob, ExtractResources, RenderNodeReservations, RenderRegistryBuilder};
 
 #[derive(Default)]
 pub struct MeshRendererPlugin {}

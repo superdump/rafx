@@ -1,4 +1,5 @@
 use super::MeshCommandWriter;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use crate::features::mesh::{
     ExtractedDirectionalLight, ExtractedFrameNodeMeshData, ExtractedPointLight, ExtractedSpotLight,
     LightId, MeshPerObjectFragmentShaderParam, MeshPerViewFragmentShaderParam, MeshRenderFeature,
@@ -20,7 +21,6 @@ use rafx::nodes::{
     FeatureCommandWriter, FeatureSubmitNodes, FramePacket, PerViewNode, PrepareJob, RenderFeature,
     RenderFeatureIndex, RenderJobPrepareContext, RenderView, RenderViewIndex, ViewSubmitNodes,
 };
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 pub struct PreparedDirectionalLight<'a> {
     light: &'a DirectionalLightComponent,
@@ -55,7 +55,9 @@ impl PrepareJob for MeshPrepareJob {
     ) -> (Box<dyn FeatureCommandWriter>, FeatureSubmitNodes) {
         profiling::scope!("Mesh Prepare");
         let invalid_resources = prepare_context.render_resources.fetch::<InvalidResources>();
-        let shadow_map_data = prepare_context.render_resources.fetch::<ShadowMapResource>();
+        let shadow_map_data = prepare_context
+            .render_resources
+            .fetch::<ShadowMapResource>();
 
         let mut descriptor_set_allocator = prepare_context
             .resource_context

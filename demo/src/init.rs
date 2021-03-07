@@ -72,7 +72,9 @@ pub fn rendering_init(
         let mut extract_resources = ExtractResources::default();
 
         #[cfg(feature = "use-imgui")]
-        let mut imgui_manager = resources.get_mut::<crate::features::imgui::Sdl2ImguiManager>().unwrap();
+        let mut imgui_manager = resources
+            .get_mut::<crate::features::imgui::Sdl2ImguiManager>()
+            .unwrap();
         #[cfg(feature = "use-imgui")]
         extract_resources.insert(&mut *imgui_manager);
 

@@ -8,22 +8,21 @@ use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::nodes::{
     ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
-    RenderNodeReservations, RenderPhaseMaskBuilder, RenderView,
-    RenderViewDepthRange, RenderViewSet,
+    RenderNodeReservations, RenderPhaseMaskBuilder, RenderView, RenderViewDepthRange,
+    RenderViewSet,
 };
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
 
 use super::*;
 
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use rafx::api::extra::upload::{RafxTransferUpload, RafxUploadError};
 use rafx::api::{
     RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult,
     RafxSwapchainHelper,
 };
 use rafx::assets::image_upload::ImageUploadParams;
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
-
 
 #[derive(Clone)]
 pub struct InvalidResources {
@@ -291,7 +290,6 @@ impl GameRenderer {
 
         let swapchain_surface_info = swapchain_resources.swapchain_surface_info.clone();
 
-
         //
         // Build the frame packet - this takes the views and visibility results and creates a
         // structure that's used during the extract/prepare/write phases
@@ -299,7 +297,8 @@ impl GameRenderer {
         let frame_packet_builder = {
             let mut render_node_reservations = RenderNodeReservations::default();
             for plugin in &game_renderer_inner.plugins {
-                plugin.add_render_node_reservations(&mut render_node_reservations, extract_resources);
+                plugin
+                    .add_render_node_reservations(&mut render_node_reservations, extract_resources);
             }
 
             FramePacketBuilder::new(&render_node_reservations)
@@ -335,8 +334,6 @@ impl GameRenderer {
             main_view_dynamic_visibility_result.handles.len()
         );
 
-
-
         // After these jobs end, user calls functions to start jobs that extract data
         frame_packet_builder.add_view(
             &main_view,
@@ -348,7 +345,13 @@ impl GameRenderer {
 
         {
             let mut shadow_map_resource = render_resources.fetch_mut::<ShadowMapResource>();
-            shadow_map_resource.recalculate_shadow_map_views(&render_view_set, extract_resources, &frame_packet_builder, static_visibility_node_set, dynamic_visibility_node_set);
+            shadow_map_resource.recalculate_shadow_map_views(
+                &render_view_set,
+                extract_resources,
+                &frame_packet_builder,
+                static_visibility_node_set,
+                dynamic_visibility_node_set,
+            );
         }
 
         let frame_packet = frame_packet_builder.build();
@@ -412,7 +415,7 @@ impl GameRenderer {
         let prepared_frame = RenderFrameJob {
             game_renderer,
             prepare_job_set,
-            render_graph: render_graph.executor,
+            prepared_render_graph: render_graph.prepared_render_graph,
             resource_context,
             frame_packet,
             main_view,

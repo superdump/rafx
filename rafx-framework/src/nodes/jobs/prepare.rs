@@ -45,9 +45,6 @@ impl PrepareJobSet {
         // Merge all submit nodes
         let merged_submit_nodes = MergedFrameSubmitNodes::new(all_submit_nodes, registry);
 
-        PreparedRenderData::new(
-            feature_command_writers,
-            merged_submit_nodes,
-        )
+        PreparedRenderData::new(feature_command_writers, merged_submit_nodes)
     }
 }
