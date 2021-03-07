@@ -1,5 +1,5 @@
 use super::daemon::AssetDaemonOpt;
-use super::{daemon, GameRenderer};
+use super::{daemon, Renderer};
 use super::{RenderGraphGenerator, RendererPlugin};
 use rafx_api::{RafxApi, RafxQueueType, RafxResult};
 use rafx_assets::distill_impl::AssetResource;
@@ -17,7 +17,7 @@ pub enum AssetSource {
 pub struct RendererBuilderResult {
     pub asset_resource: AssetResource,
     pub asset_manager: AssetManager,
-    pub renderer: GameRenderer,
+    pub renderer: Renderer,
 }
 
 #[derive(Default)]
@@ -107,7 +107,7 @@ impl RendererBuilder {
             plugin.register_asset_types(&mut asset_manager, &mut asset_resource);
         }
 
-        let renderer = GameRenderer::new(
+        let renderer = Renderer::new(
             extract_resources,
             &mut asset_resource,
             &mut asset_manager,

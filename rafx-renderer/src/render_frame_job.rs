@@ -1,4 +1,4 @@
-use super::GameRenderer;
+use super::Renderer;
 use super::RendererPlugin;
 use rafx_api::{RafxCommandBuffer, RafxDeviceContext, RafxQueue};
 use rafx_api::{RafxPresentableFrame, RafxResult};
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct RenderFrameJobResult;
 
 pub struct RenderFrameJob {
-    pub game_renderer: GameRenderer,
+    pub renderer: Renderer,
     pub prepare_job_set: PrepareJobSet,
     pub prepared_render_graph: PreparedRenderGraph,
     pub resource_context: ResourceContext,
@@ -52,7 +52,7 @@ impl RenderFrameJob {
         match result {
             Ok(command_buffers) => {
                 // ignore the error, we will receive it when we try to acquire the next image
-                let graphics_queue = self.game_renderer.graphics_queue();
+                let graphics_queue = self.renderer.graphics_queue();
 
                 let refs: Vec<&RafxCommandBuffer> = command_buffers.iter().map(|x| &**x).collect();
                 let _ = presentable_frame.present(graphics_queue, &refs);
@@ -60,7 +60,7 @@ impl RenderFrameJob {
             Err(err) => {
                 log::error!("Render thread failed with error {:?}", err);
                 // Pass error on to the next swapchain image acquire call
-                let graphics_queue = self.game_renderer.graphics_queue();
+                let graphics_queue = self.renderer.graphics_queue();
                 presentable_frame.present_with_error(graphics_queue, err);
             }
         }

@@ -12,7 +12,7 @@ use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::nodes::{ExtractResources, RenderRegistry};
 use rafx::renderer::ViewportsResource;
-use rafx::renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
+use rafx::renderer::{AssetSource, Renderer, RendererBuilder, SwapchainHandler};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
 pub struct Sdl2Systems {
@@ -129,7 +129,7 @@ pub fn rendering_destroy(resources: &mut Resources) -> RafxResult<()> {
         {
             let swapchain_helper = resources.remove::<RafxSwapchainHelper>().unwrap();
             let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
-            let game_renderer = resources.get::<GameRenderer>().unwrap();
+            let game_renderer = resources.get::<Renderer>().unwrap();
             SwapchainHandler::destroy_swapchain(
                 swapchain_helper,
                 &mut *asset_manager,
@@ -137,7 +137,7 @@ pub fn rendering_destroy(resources: &mut Resources) -> RafxResult<()> {
             )?;
         }
 
-        resources.remove::<GameRenderer>();
+        resources.remove::<Renderer>();
         resources.remove::<SpriteRenderNodeSet>();
         resources.remove::<MeshRenderNodeSet>();
         resources.remove::<StaticVisibilityNodeSet>();

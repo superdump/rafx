@@ -26,20 +26,20 @@ pub struct InvalidResources {
     pub invalid_cube_map_image: ResourceArc<ImageViewResource>,
 }
 
-pub struct GameRendererInner {
+pub struct RendererInner {
     pub(super) render_graph_generator: Box<dyn RenderGraphGenerator>,
     pub(super) render_thread: RenderThread,
     pub(super) plugins: Arc<Vec<Box<dyn RendererPlugin>>>,
 }
 
 #[derive(Clone)]
-pub struct GameRenderer {
-    pub(super) inner: Arc<Mutex<GameRendererInner>>,
+pub struct Renderer {
+    pub(super) inner: Arc<Mutex<RendererInner>>,
     pub(super) graphics_queue: RafxQueue,
     pub(super) transfer_queue: RafxQueue,
 }
 
-impl GameRenderer {
+impl Renderer {
     pub fn new(
         extract_resources: ExtractResources,
         asset_resource: &mut AssetResource,
@@ -105,13 +105,13 @@ impl GameRenderer {
 
         let render_thread = RenderThread::start(render_resources);
 
-        let renderer = GameRendererInner {
+        let renderer = RendererInner {
             plugins,
             render_thread,
             render_graph_generator,
         };
 
-        Ok(GameRenderer {
+        Ok(Renderer {
             inner: Arc::new(Mutex::new(renderer)),
             graphics_queue: graphics_queue.clone(),
             transfer_queue: transfer_queue.clone(),
@@ -183,28 +183,27 @@ impl GameRenderer {
     }
 
     fn create_and_start_render_job(
-        game_renderer: &GameRenderer,
+        renderer: &Renderer,
         extract_resources: &mut ExtractResources,
         presentable_frame: RafxPresentableFrame,
     ) {
-        let result =
-            Self::try_create_render_job(&game_renderer, extract_resources, &presentable_frame);
+        let result = Self::try_create_render_job(&renderer, extract_resources, &presentable_frame);
 
-        let mut guard = game_renderer.inner.lock().unwrap();
-        let game_renderer_inner = &mut *guard;
+        let mut guard = renderer.inner.lock().unwrap();
+        let renderer_inner = &mut *guard;
         match result {
-            Ok(prepared_frame) => game_renderer_inner
+            Ok(prepared_frame) => renderer_inner
                 .render_thread
                 .render(prepared_frame, presentable_frame),
             Err(e) => {
-                let graphics_queue = game_renderer.graphics_queue();
+                let graphics_queue = renderer.graphics_queue();
                 presentable_frame.present_with_error(graphics_queue, e)
             }
         };
     }
 
     fn try_create_render_job(
-        game_renderer: &GameRenderer,
+        renderer: &Renderer,
         extract_resources: &mut ExtractResources,
         presentable_frame: &RafxPresentableFrame,
     ) -> RafxResult<RenderFrameJob> {
@@ -232,9 +231,9 @@ impl GameRenderer {
 
         let resource_context = asset_manager.resource_manager().resource_context();
 
-        let mut guard = game_renderer.inner.lock().unwrap();
-        let game_renderer_inner = &mut *guard;
-        let render_resources = &mut game_renderer_inner
+        let mut guard = renderer.inner.lock().unwrap();
+        let renderer_inner = &mut *guard;
+        let render_resources = &mut renderer_inner
             .render_thread
             .render_resources()
             .lock()
@@ -267,7 +266,7 @@ impl GameRenderer {
         //
         let frame_packet_builder = {
             let mut render_node_reservations = RenderNodeReservations::default();
-            for plugin in &*game_renderer_inner.plugins {
+            for plugin in &*renderer_inner.plugins {
                 plugin
                     .add_render_node_reservations(&mut render_node_reservations, extract_resources);
             }
@@ -327,7 +326,7 @@ impl GameRenderer {
         let mut render_views = Vec::default();
         render_views.push(main_view.clone());
 
-        for plugin in &*game_renderer_inner.plugins {
+        for plugin in &*renderer_inner.plugins {
             plugin.add_render_views(
                 extract_resources,
                 render_resources,
@@ -350,7 +349,7 @@ impl GameRenderer {
         // Extract Jobs
         //
         let mut extract_jobs = Vec::default();
-        for plugin in &*game_renderer_inner.plugins {
+        for plugin in &*renderer_inner.plugins {
             plugin.add_extract_jobs(&extract_resources, render_resources, &mut extract_jobs);
         }
 
@@ -376,7 +375,7 @@ impl GameRenderer {
         render_resources.remove::<AssetManagerRenderResource>();
 
         //TODO: This is now possible to run on the render thread
-        let prepared_render_graph = game_renderer_inner
+        let prepared_render_graph = renderer_inner
             .render_graph_generator
             .generate_render_graph(
                 asset_manager,
@@ -386,12 +385,12 @@ impl GameRenderer {
                 render_resources,
             )?;
 
-        let game_renderer = game_renderer.clone();
-        let graphics_queue = game_renderer.graphics_queue.clone();
-        let plugins = game_renderer_inner.plugins.clone();
+        let renderer = renderer.clone();
+        let graphics_queue = renderer.graphics_queue.clone();
+        let plugins = renderer_inner.plugins.clone();
 
         let prepared_frame = RenderFrameJob {
-            game_renderer,
+            renderer,
             prepare_job_set,
             prepared_render_graph,
             resource_context,

@@ -15,7 +15,7 @@ use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::nodes::ExtractResources;
 use rafx::renderer::ViewportsResource;
-use rafx::renderer::{AssetSource, GameRenderer};
+use rafx::renderer::{AssetSource, Renderer};
 
 mod assets;
 mod components;
@@ -297,7 +297,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
         //
         {
             profiling::scope!("Start Next Frame Render");
-            let game_renderer = resources.get::<GameRenderer>().unwrap();
+            let game_renderer = resources.get::<Renderer>().unwrap();
 
             let mut extract_resources = ExtractResources::default();
 
