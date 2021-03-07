@@ -1,4 +1,3 @@
-use crate::features::mesh::ShadowMapRenderView;
 use rafx::api::{
     RafxDeviceContext, RafxFormat, RafxPrimitiveTopology, RafxResourceState, RafxResourceType,
     RafxResult, RafxSampleCount,
@@ -7,7 +6,7 @@ use rafx::framework::{ResourceContext, RenderResources};
 use rafx::framework::VertexDataSetLayout;
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::graph::*;
-use rafx::nodes::{PreparedRenderData, RenderJobBeginExecuteGraphContext, RenderView, ExtractResources};
+use rafx::nodes::{RenderJobBeginExecuteGraphContext, RenderView, ExtractResources};
 
 mod shadow_map_pass;
 use shadow_map_pass::ShadowMapImageResources;
@@ -37,16 +36,10 @@ lazy_static::lazy_static! {
     };
 }
 
-// Any data you want available within rendergraph execution callbacks should go here. This can
-// include data that is not known until later after the extract/prepare phases have completed.
-pub struct RenderGraphUserContext {
-    //pub prepared_render_data: Box<PreparedRenderData>,
-}
-
 // Everything produced by the graph. This includes resources that may be needed during the prepare
 // phase
 pub struct BuildRenderGraphResult {
-    pub executor: RenderGraphExecutor<RenderGraphUserContext>,
+    pub executor: RenderGraphExecutor,
 }
 
 // All the data that can influence the rendergraph
@@ -65,7 +58,7 @@ struct RenderGraphContext<'a> {
     graph: &'a mut RenderGraphBuilder,
     resource_context: &'a ResourceContext,
     graph_config: &'a RenderGraphConfig,
-    graph_callbacks: &'a mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
+    graph_callbacks: &'a mut RenderGraphNodeCallbacks,
     main_view: &'a RenderView,
     extract_resources: &'a ExtractResources<'a>,
     render_resources: &'a RenderResources,
@@ -111,7 +104,7 @@ pub fn build_render_graph(
     };
 
     let mut graph = RenderGraphBuilder::default();
-    let mut graph_callbacks = RenderGraphNodeCallbacks::<RenderGraphUserContext>::default();
+    let mut graph_callbacks = RenderGraphNodeCallbacks::default();
 
     let mut graph_context = RenderGraphContext {
         graph: &mut graph,
@@ -220,10 +213,10 @@ pub fn build_render_graph(
         RafxResourceState::PRESENT,
     );
 
-    graph_callbacks.set_begin_execute_graph_callback(move |args, user_context| {
+    graph_callbacks.set_begin_execute_graph_callback(move |args| {
         let mut write_context =
             RenderJobBeginExecuteGraphContext::from_on_begin_execute_graph_args(&args);
-        args.graph_context.prepared_render_data.on_begin_execute_graph(&mut write_context)
+        args.graph_context.prepared_render_data().on_begin_execute_graph(&mut write_context)
     });
 
     //

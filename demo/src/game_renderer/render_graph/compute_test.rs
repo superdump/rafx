@@ -40,7 +40,7 @@ pub(super) fn compute_test_pass(
 
     context
         .graph_callbacks
-        .set_compute_callback(node, move |args, _user_context| {
+        .set_compute_callback(node, move |args| {
             let mut descriptor_set_allocator = args
                 .graph_context
                 .resource_context()

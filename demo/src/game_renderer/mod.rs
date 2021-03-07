@@ -11,8 +11,6 @@ mod render_frame_job;
 use render_frame_job::RenderFrameJob;
 
 mod render_graph;
-pub use render_graph::RenderGraphUserContext;
-
 mod renderer_plugin;
 pub use renderer_plugin::RendererPlugin;
 

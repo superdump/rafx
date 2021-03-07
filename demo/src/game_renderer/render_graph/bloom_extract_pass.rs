@@ -60,7 +60,7 @@ pub(super) fn bloom_extract_pass(
 
     context
         .graph_callbacks
-        .set_renderpass_callback(node, move |args, _user_context| {
+        .set_renderpass_callback(node, move |args| {
             // Get the color image from before
             let sample_image = args.graph_context.image_view(sample_image);
 

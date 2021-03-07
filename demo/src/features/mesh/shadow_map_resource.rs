@@ -7,7 +7,6 @@ use rafx::framework::{ImageViewResource, ResourceArc};
 use arrayvec::ArrayVec;
 use rafx::visibility::{StaticVisibilityNodeSet, DynamicVisibilityNodeSet};
 use rafx::graph::{RenderGraphImageUsageId, RenderGraphExecutor};
-use crate::game_renderer::RenderGraphUserContext;
 
 struct RenderViewVisibility {
     render_view: RenderView,
@@ -164,7 +163,7 @@ impl ShadowMapResource {
 
     pub fn set_shadow_map_image_views(
         &mut self,
-        executor: &RenderGraphExecutor<RenderGraphUserContext>,
+        executor: &RenderGraphExecutor,
     ) {
         let shadow_map_image_views : Vec<_> = self
             .image_usage_ids

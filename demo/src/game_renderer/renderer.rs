@@ -1,8 +1,5 @@
-use crate::features::mesh::{
-    LightId, ShadowMapRenderView,
-};
 use crate::phases::TransparentRenderPhase;
-use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, UiRenderPhase};
+use crate::phases::{OpaqueRenderPhase, UiRenderPhase};
 use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSpace};
@@ -11,24 +8,18 @@ use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::nodes::{
     ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
-    RenderNodeReservations, RenderPhaseMask, RenderPhaseMaskBuilder, RenderView,
-    RenderViewDepthRange, RenderViewSet, VisibilityResult,
+    RenderNodeReservations, RenderPhaseMaskBuilder, RenderView,
+    RenderViewDepthRange, RenderViewSet,
 };
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
 
 use super::*;
 
-use crate::components::{
-    DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
-};
-use crate::RenderOptions;
-use arrayvec::ArrayVec;
-use fnv::FnvHashMap;
 use rafx::api::extra::upload::{RafxTransferUpload, RafxUploadError};
 use rafx::api::{
     RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult,
-    RafxSampleCount, RafxSwapchainHelper,
+    RafxSwapchainHelper,
 };
 use rafx::assets::image_upload::ImageUploadParams;
 use crate::features::mesh::shadow_map_resource::ShadowMapResource;

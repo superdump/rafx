@@ -50,7 +50,7 @@ pub(super) fn bloom_combine_pass(
 
     context
         .graph_callbacks
-        .set_renderpass_callback(node, move |args, _user_context| {
+        .set_renderpass_callback(node, move |args| {
             // Get the color image from before
             let sdr_image = args.graph_context.image_view(sdr_image).unwrap();
             let hdr_image = args.graph_context.image_view(hdr_image).unwrap();

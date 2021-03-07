@@ -267,7 +267,7 @@ fn run() -> RafxResult<()> {
                 asset_manager.get_material_pass_by_index(&triangle_material_handle, 0)
             {
                 let captured_vertex_layout = vertex_layout.clone();
-                graph_callbacks.set_renderpass_callback(node, move |args, _user_context| {
+                graph_callbacks.set_renderpass_callback(node, move |args| {
                     let vertex_layout = &captured_vertex_layout;
                     let material_pass = &triangle_material;
 

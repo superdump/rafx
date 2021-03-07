@@ -1,7 +1,6 @@
 use distill::loader::handle::Handle;
 use rafx::base::slab::{DropSlab, DropSlabKey};
 use rafx::framework::MaterialPass;
-use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::nodes::RenderView;
 use rafx::nodes::{
     ExtractJob, FrameNodeIndex, GenericRenderNodeHandle, RenderFeature, RenderFeatureIndex,
@@ -35,7 +34,6 @@ use crate::assets::gltf::MeshAsset;
 use crate::components::{
     DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
 };
-use fnv::FnvHashMap;
 pub use shaders::mesh_frag::PerObjectDataUniform as MeshPerObjectFragmentShaderParam;
 pub use shaders::mesh_frag::PerViewDataUniform as MeshPerViewFragmentShaderParam;
 
