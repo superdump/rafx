@@ -4,6 +4,7 @@ use crate::phases::ShadowMapRenderPhase;
 use rafx::api::{RafxDepthStencilClearValue, RafxResourceType};
 use rafx::graph::*;
 use rafx::nodes::{RenderJobWriteContext, RenderView};
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 pub(super) struct ShadowMapPass {
     pub(super) node: RenderGraphNodeId,
@@ -17,8 +18,10 @@ pub(super) enum ShadowMapImageResources {
 
 pub(super) fn shadow_map_passes(
     context: &mut RenderGraphContext,
-    shadow_map_views: &[ShadowMapRenderView],
 ) -> Vec<ShadowMapImageResources> {
+    let mut shadow_map_resource = context.render_resources.fetch_mut::<ShadowMapResource>();
+    let shadow_map_views = shadow_map_resource.shadow_map_render_views();
+
     let mut shadow_map_passes = Vec::default();
     for shadow_map_view in shadow_map_views {
         match shadow_map_view {
@@ -77,6 +80,15 @@ pub(super) fn shadow_map_passes(
         }
     }
 
+    let mut usage_ids = Vec::default();
+    for pass in &shadow_map_passes {
+        match pass {
+            ShadowMapImageResources::Single(usage_id) => usage_ids.push(*usage_id),
+            ShadowMapImageResources::Cube(usage_id) => usage_ids.push(*usage_id),
+        }
+    }
+    shadow_map_resource.set_shadow_map_image_usage_ids(usage_ids);
+
     shadow_map_passes
 }
 
@@ -111,7 +123,8 @@ fn shadow_map_pass(
         .graph_callbacks
         .set_renderpass_callback(node, move |args, user_context| {
             let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
-            user_context
+            args
+                .graph_context
                 .prepared_render_data
                 .write_view_phase::<ShadowMapRenderPhase>(&render_view, &mut write_context)
         });

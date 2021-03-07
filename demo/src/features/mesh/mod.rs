@@ -15,6 +15,12 @@ use extract::MeshExtractJob;
 mod prepare;
 
 mod write;
+
+mod plugin;
+pub use plugin::MeshRendererPlugin;
+
+pub mod shadow_map_resource;
+
 use rafx::framework::DescriptorSetArc;
 use write::MeshCommandWriter;
 
@@ -44,12 +50,6 @@ pub enum LightId {
 pub enum ShadowMapRenderView {
     Single(RenderView), // width, height of texture
     Cube([RenderView; 6]),
-}
-
-pub struct ShadowMapData {
-    pub shadow_map_lookup: FnvHashMap<LightId, usize>,
-    pub shadow_map_render_views: Vec<ShadowMapRenderView>,
-    pub shadow_map_image_views: Vec<ResourceArc<ImageViewResource>>,
 }
 
 pub struct ExtractedDirectionalLight {

@@ -1,5 +1,5 @@
 use crate::features::mesh::{
-    create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData, ShadowMapRenderView,
+    LightId, ShadowMapRenderView,
 };
 use crate::phases::TransparentRenderPhase;
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, UiRenderPhase};
@@ -31,26 +31,8 @@ use rafx::api::{
     RafxSampleCount, RafxSwapchainHelper,
 };
 use rafx::assets::image_upload::ImageUploadParams;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
-/// Creates a right-handed perspective projection matrix with [0,1] depth range.
-pub fn perspective_rh(
-    fov_y_radians: f32,
-    aspect_ratio: f32,
-    z_near: f32,
-    z_far: f32,
-) -> glam::Mat4 {
-    debug_assert!(z_near > 0.0 && z_far > 0.0);
-    let (sin_fov, cos_fov) = (0.5 * fov_y_radians).sin_cos();
-    let h = cos_fov / sin_fov;
-    let w = h / aspect_ratio;
-    let r = z_far / (z_near - z_far);
-    glam::Mat4::from_cols(
-        glam::Vec4::new(w, 0.0, 0.0, 0.0),
-        glam::Vec4::new(0.0, h, 0.0, 0.0),
-        glam::Vec4::new(0.0, 0.0, r, -1.0),
-        glam::Vec4::new(0.0, 0.0, r * z_near, 0.0),
-    )
-}
 
 #[derive(Clone)]
 pub struct InvalidResources {
@@ -265,9 +247,6 @@ impl GameRenderer {
         //
         // Fetch resources
         //
-        let time_state_fetch = extract_resources.fetch::<TimeState>();
-        let time_state = &*time_state_fetch;
-
         let mut static_visibility_node_set_fetch =
             extract_resources.fetch_mut::<StaticVisibilityNodeSet>();
         let static_visibility_node_set = &mut *static_visibility_node_set_fetch;
@@ -275,8 +254,6 @@ impl GameRenderer {
         let mut dynamic_visibility_node_set_fetch =
             extract_resources.fetch_mut::<DynamicVisibilityNodeSet>();
         let dynamic_visibility_node_set = &mut *dynamic_visibility_node_set_fetch;
-
-        let render_options = extract_resources.fetch::<RenderOptions>().clone();
 
         let mut asset_manager_fetch = extract_resources.fetch_mut::<AssetManager>();
         let asset_manager = &mut *asset_manager_fetch;
@@ -302,8 +279,6 @@ impl GameRenderer {
         let static_resources = &game_renderer_inner.static_resources;
         render_resources.insert(static_resources.clone());
         render_resources.insert(game_renderer_inner.invalid_resources.clone());
-        // #[cfg(feature = "use-imgui")]
-        // render_resources.insert(game_renderer_inner.imgui_font_atlas_image_view.clone());
 
         //
         // Swapchain Status
@@ -325,6 +300,20 @@ impl GameRenderer {
 
         let swapchain_surface_info = swapchain_resources.swapchain_surface_info.clone();
 
+
+        //
+        // Build the frame packet - this takes the views and visibility results and creates a
+        // structure that's used during the extract/prepare/write phases
+        //
+        let frame_packet_builder = {
+            let mut render_node_reservations = RenderNodeReservations::default();
+            for plugin in &game_renderer_inner.plugins {
+                plugin.add_render_node_reservations(&mut render_node_reservations, extract_resources);
+            }
+
+            FramePacketBuilder::new(&render_node_reservations)
+        };
+
         let render_view_set = RenderViewSet::default();
 
         //
@@ -334,7 +323,7 @@ impl GameRenderer {
             &render_view_set,
             window_width,
             window_height,
-            time_state,
+            extract_resources,
         );
 
         //
@@ -355,24 +344,7 @@ impl GameRenderer {
             main_view_dynamic_visibility_result.handles.len()
         );
 
-        //
-        // Build the frame packet - this takes the views and visibility results and creates a
-        // structure that's used during the extract/prepare/write phases
-        //
-        let frame_packet_builder = {
-            let mut render_node_reservations = RenderNodeReservations::default();
 
-            for plugin in &game_renderer_inner.plugins {
-                plugin
-                    .add_render_node_reservations(&mut render_node_reservations, extract_resources);
-            }
-
-            let mut mesh_render_nodes = extract_resources.fetch_mut::<MeshRenderNodeSet>();
-            mesh_render_nodes.update();
-            render_node_reservations.add_reservation(&*mesh_render_nodes);
-
-            FramePacketBuilder::new(&render_node_reservations)
-        };
 
         // After these jobs end, user calls functions to start jobs that extract data
         frame_packet_builder.add_view(
@@ -383,176 +355,36 @@ impl GameRenderer {
             ],
         );
 
-        //
-        // Determine shadowmap views
-        //
-        let (shadow_map_lookup, shadow_map_render_views) =
-            GameRenderer::calculate_shadow_map_views(&render_view_set, extract_resources);
-
-        struct RenderViewVisibility {
-            render_view: RenderView,
-            static_visibility: VisibilityResult,
-            dynamic_visibility: VisibilityResult,
+        {
+            let mut shadow_map_resource = render_resources.fetch_mut::<ShadowMapResource>();
+            shadow_map_resource.recalculate_shadow_map_views(&render_view_set, extract_resources, &frame_packet_builder, static_visibility_node_set, dynamic_visibility_node_set);
         }
 
-        enum ShadowMapVisibility {
-            Single(RenderViewVisibility),
-            Cube(ArrayVec<[RenderViewVisibility; 6]>),
-        }
-
-        let mut shadow_map_visibility_results = Vec::default();
-        for render_view in &shadow_map_render_views {
-            fn create_render_view_visibility(
-                static_visibility_node_set: &mut StaticVisibilityNodeSet,
-                dynamic_visibility_node_set: &mut DynamicVisibilityNodeSet,
-                render_view: &RenderView,
-            ) -> RenderViewVisibility {
-                let static_visibility =
-                    static_visibility_node_set.calculate_static_visibility(&render_view);
-                let dynamic_visibility =
-                    dynamic_visibility_node_set.calculate_dynamic_visibility(&render_view);
-
-                log::trace!(
-                    "shadow view static node count: {}",
-                    static_visibility.handles.len()
-                );
-
-                log::trace!(
-                    "shadow view dynamic node count: {}",
-                    dynamic_visibility.handles.len()
-                );
-
-                RenderViewVisibility {
-                    render_view: render_view.clone(),
-                    static_visibility,
-                    dynamic_visibility,
-                }
-            }
-
-            match render_view {
-                ShadowMapRenderView::Single(view) => shadow_map_visibility_results.push(
-                    ShadowMapVisibility::Single(create_render_view_visibility(
-                        static_visibility_node_set,
-                        dynamic_visibility_node_set,
-                        view,
-                    )),
-                ),
-                ShadowMapRenderView::Cube(views) => {
-                    shadow_map_visibility_results.push(ShadowMapVisibility::Cube(
-                        [
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[0],
-                            ),
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[1],
-                            ),
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[2],
-                            ),
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[3],
-                            ),
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[4],
-                            ),
-                            create_render_view_visibility(
-                                static_visibility_node_set,
-                                dynamic_visibility_node_set,
-                                &views[5],
-                            ),
-                        ]
-                        .into(),
-                    ));
-                }
-            }
-        }
-
-        for shadow_map_visibility_result in shadow_map_visibility_results {
-            match shadow_map_visibility_result {
-                ShadowMapVisibility::Single(view) => {
-                    frame_packet_builder.add_view(
-                        &view.render_view,
-                        &[view.static_visibility, view.dynamic_visibility],
-                    );
-                }
-                ShadowMapVisibility::Cube(views) => {
-                    for view in views {
-                        let static_visibility = view.static_visibility;
-                        frame_packet_builder.add_view(
-                            &view.render_view,
-                            &[static_visibility, view.dynamic_visibility],
-                        );
-                    }
-                }
-            }
-        }
+        let frame_packet = frame_packet_builder.build();
 
         //
         // Update Resources and flush descriptor set changes
         //
         asset_manager.on_begin_frame()?;
 
-        let graph_config = {
-            let swapchain_format = swapchain_surface_info.format;
-            let sample_count = if render_options.enable_msaa {
-                RafxSampleCount::SampleCount4
-            } else {
-                RafxSampleCount::SampleCount1
-            };
-
-            let color_format = if render_options.enable_hdr {
-                swapchain_resources.default_color_format_hdr
-            } else {
-                swapchain_resources.default_color_format_sdr
-            };
-
-            render_graph::RenderGraphConfig {
-                color_format,
-                depth_format: swapchain_resources.default_depth_format,
-                samples: sample_count,
-                enable_hdr: render_options.enable_hdr,
-                swapchain_format,
-                enable_bloom: render_options.enable_bloom,
-                blur_pass_count: render_options.blur_pass_count,
-            }
-        };
-
         //
         // Extract Jobs
         //
-        let extract_job_set = {
-            let mut extract_jobs = Vec::default();
-            for plugin in &game_renderer_inner.plugins {
-                plugin.add_extract_jobs(&extract_resources, render_resources, &mut extract_jobs);
-            }
+        let mut extract_jobs = Vec::default();
+        for plugin in &game_renderer_inner.plugins {
+            plugin.add_extract_jobs(&extract_resources, render_resources, &mut extract_jobs);
+        }
 
-            let mut extract_job_set = ExtractJobSet::new(extract_jobs);
+        let extract_job_set = ExtractJobSet::new(extract_jobs);
 
-            //TODO: Is it possible to know up front what extract jobs aren't necessary based on
-            // render phases?
-
-            // Meshes
-            extract_job_set.add_job(create_mesh_extract_job());
-
-            extract_job_set
-        };
-
+        //
+        //
+        //
         render_resources.insert(swapchain_surface_info.clone());
         unsafe {
             render_resources.insert(AssetManagerRenderResource::new(asset_manager));
         }
 
-        let frame_packet = frame_packet_builder.build();
         let prepare_job_set = {
             profiling::scope!("renderer extract");
 
@@ -560,19 +392,10 @@ impl GameRenderer {
                 RenderJobExtractContext::new(&extract_resources, &render_resources);
 
             let mut extract_views = Vec::default();
-            extract_views.push(&main_view);
-            for shadow_map_view in &shadow_map_render_views {
-                match shadow_map_view {
-                    ShadowMapRenderView::Single(view) => {
-                        extract_views.push(view);
-                    }
-                    ShadowMapRenderView::Cube(views) => {
-                        for view in views {
-                            extract_views.push(view);
-                        }
-                    }
-                }
-            }
+            extract_views.push(main_view.clone());
+
+            let shadow_map_resource = render_resources.fetch::<ShadowMapResource>();
+            shadow_map_resource.append_render_views(&mut extract_views);
 
             extract_job_set.extract(&extract_context, &frame_packet, &extract_views)
         };
@@ -584,24 +407,13 @@ impl GameRenderer {
             &device_context,
             &resource_context,
             asset_manager,
-            &graph_config,
             swapchain_image,
             main_view.clone(),
-            &shadow_map_render_views,
             swapchain_resources,
             static_resources,
+            extract_resources,
+            render_resources,
         )?;
-
-        assert_eq!(
-            shadow_map_render_views.len(),
-            render_graph.shadow_map_image_views.len()
-        );
-        let shadow_map_data = ShadowMapData {
-            shadow_map_lookup,
-            shadow_map_render_views: shadow_map_render_views.clone(),
-            shadow_map_image_views: render_graph.shadow_map_image_views.clone(),
-        };
-        render_resources.insert(shadow_map_data);
 
         let game_renderer = game_renderer.clone();
         let graphics_queue = game_renderer.graphics_queue.clone();
@@ -613,7 +425,6 @@ impl GameRenderer {
             resource_context,
             frame_packet,
             main_view,
-            shadow_map_render_views,
             render_registry,
             device_context,
             graphics_queue,
@@ -627,8 +438,11 @@ impl GameRenderer {
         render_view_set: &RenderViewSet,
         window_width: u32,
         window_height: u32,
-        time_state: &TimeState,
+        extract_resources: &ExtractResources,
     ) -> RenderView {
+        let time_state_fetch = extract_resources.fetch::<TimeState>();
+        let time_state = &*time_state_fetch;
+
         let main_camera_render_phase_mask = RenderPhaseMaskBuilder::default()
             .add_render_phase::<OpaqueRenderPhase>()
             .add_render_phase::<TransparentRenderPhase>()
@@ -666,152 +480,5 @@ impl GameRenderer {
             main_camera_render_phase_mask,
             "main".to_string(),
         )
-    }
-
-    #[profiling::function]
-    fn calculate_shadow_map_views(
-        render_view_set: &RenderViewSet,
-        extract_resources: &ExtractResources,
-    ) -> (FnvHashMap<LightId, usize>, Vec<ShadowMapRenderView>) {
-        use legion::*;
-        let world_fetch = extract_resources.fetch::<World>();
-        let world = &*world_fetch;
-
-        let mut shadow_map_render_views = Vec::default();
-        let mut shadow_map_lookup = FnvHashMap::default();
-
-        let shadow_map_phase_mask = RenderPhaseMaskBuilder::default()
-            .add_render_phase::<ShadowMapRenderPhase>()
-            .build();
-
-        //TODO: The look-at calls in this fn will fail if the light is pointed straight down
-
-        const SHADOW_MAP_RESOLUTION: u32 = 1024;
-
-        let mut query = <(Entity, Read<SpotLightComponent>, Read<PositionComponent>)>::query();
-        for (entity, light, position) in query.iter(world) {
-            //TODO: Transform direction by rotation
-            let eye_position = position.position;
-            let light_to = position.position + light.direction;
-
-            let view =
-                glam::Mat4::look_at_rh(eye_position, light_to, glam::Vec3::new(0.0, 0.0, 1.0));
-
-            let near_plane = 0.25;
-            let far_plane = 100.0;
-            let proj = perspective_rh(light.spotlight_half_angle * 2.0, 1.0, far_plane, near_plane);
-
-            let view = render_view_set.create_view(
-                eye_position,
-                view,
-                proj,
-                (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
-                RenderViewDepthRange::new_reverse(near_plane, far_plane),
-                shadow_map_phase_mask,
-                "shadow_map".to_string(),
-            );
-
-            let index = shadow_map_render_views.len();
-            shadow_map_render_views.push(ShadowMapRenderView::Single(view));
-            let old = shadow_map_lookup.insert(LightId::SpotLight(*entity), index);
-            assert!(old.is_none());
-        }
-
-        let mut query = <(Entity, Read<DirectionalLightComponent>)>::query();
-        for (entity, light) in query.iter(world) {
-            let eye_position = light.direction * -40.0;
-            let view = glam::Mat4::look_at_rh(
-                eye_position,
-                glam::Vec3::zero(),
-                glam::Vec3::new(0.0, 0.0, 1.0),
-            );
-
-            let near_plane = 0.25;
-            let far_plane = 100.0;
-            let ortho_projection_size = 10.0;
-            let proj = glam::Mat4::orthographic_rh(
-                -ortho_projection_size,
-                ortho_projection_size,
-                -ortho_projection_size,
-                ortho_projection_size,
-                far_plane,
-                near_plane,
-            );
-
-            let view = render_view_set.create_view(
-                eye_position,
-                view,
-                proj,
-                (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
-                RenderViewDepthRange::new_reverse(near_plane, far_plane),
-                shadow_map_phase_mask,
-                "shadow_map".to_string(),
-            );
-
-            let index = shadow_map_render_views.len();
-            shadow_map_render_views.push(ShadowMapRenderView::Single(view));
-            let old = shadow_map_lookup.insert(LightId::DirectionalLight(*entity), index);
-            assert!(old.is_none());
-        }
-
-        #[rustfmt::skip]
-            // The eye offset and up vector. The directions are per the specification of cubemaps
-            let cube_map_view_directions = [
-            (glam::Vec3::unit_x(), glam::Vec3::unit_y()),
-            (glam::Vec3::unit_x() * -1.0, glam::Vec3::unit_y()),
-            (glam::Vec3::unit_y(), glam::Vec3::unit_z() * -1.0),
-            (glam::Vec3::unit_y() * -1.0, glam::Vec3::unit_z()),
-            (glam::Vec3::unit_z(), glam::Vec3::unit_y()),
-            (glam::Vec3::unit_z() * -1.0, glam::Vec3::unit_y()),
-        ];
-
-        let mut query = <(Entity, Read<PointLightComponent>, Read<PositionComponent>)>::query();
-        for (entity, light, position) in query.iter(world) {
-            fn cube_map_face(
-                phase_mask: RenderPhaseMask,
-                render_view_set: &RenderViewSet,
-                light: &PointLightComponent,
-                position: glam::Vec3,
-                cube_map_view_directions: &(glam::Vec3, glam::Vec3),
-            ) -> RenderView {
-                //NOTE: Cubemaps always use LH
-                let view = glam::Mat4::look_at_lh(
-                    position,
-                    position + cube_map_view_directions.0,
-                    cube_map_view_directions.1,
-                );
-
-                let near = 0.25;
-                let far = light.range;
-                let proj = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, far, near);
-
-                render_view_set.create_view(
-                    position,
-                    view,
-                    proj,
-                    (SHADOW_MAP_RESOLUTION, SHADOW_MAP_RESOLUTION),
-                    RenderViewDepthRange::new_reverse(near, far),
-                    phase_mask,
-                    "shadow_map".to_string(),
-                )
-            }
-
-            #[rustfmt::skip]
-                let cube_map_views = [
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[0]),
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[1]),
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[2]),
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[3]),
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[4]),
-                cube_map_face(shadow_map_phase_mask, &render_view_set, light, position.position, &cube_map_view_directions[5]),
-            ];
-
-            let index = shadow_map_render_views.len();
-            shadow_map_render_views.push(ShadowMapRenderView::Cube(cube_map_views));
-            let old = shadow_map_lookup.insert(LightId::PointLight(*entity), index);
-            assert!(old.is_none());
-        }
-
-        (shadow_map_lookup, shadow_map_render_views)
     }
 }

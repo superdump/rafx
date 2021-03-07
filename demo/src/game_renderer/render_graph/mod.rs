@@ -3,11 +3,11 @@ use rafx::api::{
     RafxDeviceContext, RafxFormat, RafxPrimitiveTopology, RafxResourceState, RafxResourceType,
     RafxResult, RafxSampleCount,
 };
-use rafx::framework::ResourceContext;
+use rafx::framework::{ResourceContext, RenderResources};
 use rafx::framework::VertexDataSetLayout;
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::graph::*;
-use rafx::nodes::{PreparedRenderData, RenderJobBeginExecuteGraphContext, RenderView};
+use rafx::nodes::{PreparedRenderData, RenderJobBeginExecuteGraphContext, RenderView, ExtractResources};
 
 mod shadow_map_pass;
 use shadow_map_pass::ShadowMapImageResources;
@@ -20,6 +20,8 @@ use crate::game_renderer::swapchain_resources::SwapchainResources;
 use crate::game_renderer::GameRendererStaticResources;
 use bloom_extract_pass::BloomExtractPass;
 use rafx::assets::AssetManager;
+use crate::RenderOptions;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 mod bloom_blur_pass;
 
@@ -38,14 +40,13 @@ lazy_static::lazy_static! {
 // Any data you want available within rendergraph execution callbacks should go here. This can
 // include data that is not known until later after the extract/prepare phases have completed.
 pub struct RenderGraphUserContext {
-    pub prepared_render_data: Box<PreparedRenderData>,
+    //pub prepared_render_data: Box<PreparedRenderData>,
 }
 
 // Everything produced by the graph. This includes resources that may be needed during the prepare
 // phase
 pub struct BuildRenderGraphResult {
     pub executor: RenderGraphExecutor<RenderGraphUserContext>,
-    pub shadow_map_image_views: Vec<ResourceArc<ImageViewResource>>,
 }
 
 // All the data that can influence the rendergraph
@@ -66,20 +67,48 @@ struct RenderGraphContext<'a> {
     graph_config: &'a RenderGraphConfig,
     graph_callbacks: &'a mut RenderGraphNodeCallbacks<RenderGraphUserContext>,
     main_view: &'a RenderView,
+    extract_resources: &'a ExtractResources<'a>,
+    render_resources: &'a RenderResources,
 }
 
 pub fn build_render_graph(
     device_context: &RafxDeviceContext,
     resource_context: &ResourceContext,
     asset_manager: &AssetManager,
-    graph_config: &RenderGraphConfig,
     swapchain_image: ResourceArc<ImageViewResource>,
     main_view: RenderView,
-    shadow_map_views: &[ShadowMapRenderView],
     swapchain_resources: &SwapchainResources,
     static_resources: &GameRendererStaticResources,
+    extract_resources: &ExtractResources,
+    render_resources: &RenderResources,
 ) -> RafxResult<BuildRenderGraphResult> {
     profiling::scope!("Build Render Graph");
+
+    let graph_config = {
+        let render_options = extract_resources.fetch::<RenderOptions>().clone();
+        let swapchain_format = swapchain_resources.swapchain_surface_info.format;
+        let sample_count = if render_options.enable_msaa {
+            RafxSampleCount::SampleCount4
+        } else {
+            RafxSampleCount::SampleCount1
+        };
+
+        let color_format = if render_options.enable_hdr {
+            swapchain_resources.default_color_format_hdr
+        } else {
+            swapchain_resources.default_color_format_sdr
+        };
+
+        RenderGraphConfig {
+            color_format,
+            depth_format: swapchain_resources.default_depth_format,
+            samples: sample_count,
+            enable_hdr: render_options.enable_hdr,
+            swapchain_format,
+            enable_bloom: render_options.enable_bloom,
+            blur_pass_count: render_options.blur_pass_count,
+        }
+    };
 
     let mut graph = RenderGraphBuilder::default();
     let mut graph_callbacks = RenderGraphNodeCallbacks::<RenderGraphUserContext>::default();
@@ -88,11 +117,13 @@ pub fn build_render_graph(
         graph: &mut graph,
         resource_context,
         graph_callbacks: &mut graph_callbacks,
-        graph_config,
+        graph_config: &graph_config,
         main_view: &main_view,
+        render_resources,
+        extract_resources,
     };
 
-    let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context, shadow_map_views);
+    let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context);
 
     let compute_test_pipeline = asset_manager
         .committed_asset(&static_resources.compute_test)
@@ -192,9 +223,7 @@ pub fn build_render_graph(
     graph_callbacks.set_begin_execute_graph_callback(move |args, user_context| {
         let mut write_context =
             RenderJobBeginExecuteGraphContext::from_on_begin_execute_graph_args(&args);
-        user_context
-            .prepared_render_data
-            .on_begin_execute_graph(&mut write_context)
+        args.graph_context.prepared_render_data.on_begin_execute_graph(&mut write_context)
     });
 
     //
@@ -209,14 +238,9 @@ pub fn build_render_graph(
         graph_callbacks,
     )?;
 
-    let shadow_map_image_views = opaque_pass
-        .shadow_maps
-        .iter()
-        .map(|&x| executor.image_view_resource(x).unwrap())
-        .collect();
+    render_resources.fetch_mut::<ShadowMapResource>().set_shadow_map_image_views(&executor);
 
     Ok(BuildRenderGraphResult {
-        shadow_map_image_views,
         executor,
     })
 }

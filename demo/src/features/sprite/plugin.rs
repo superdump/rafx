@@ -1,4 +1,4 @@
-use crate::features::sprite::SpriteRenderFeature;
+use crate::features::sprite::{SpriteRenderFeature, SpriteRenderNodeSet};
 use crate::game_renderer::RendererPlugin;
 use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
@@ -48,9 +48,12 @@ impl RendererPlugin for SpriteRendererPlugin {
 
     fn add_render_node_reservations(
         &self,
-        _render_node_reservations: &mut RenderNodeReservations,
-        _extract_resources: &ExtractResources,
+        render_node_reservations: &mut RenderNodeReservations,
+        extract_resources: &ExtractResources,
     ) {
+        let mut sprite_render_nodes = extract_resources.fetch_mut::<SpriteRenderNodeSet>();
+        sprite_render_nodes.update();
+        render_node_reservations.add_reservation(&*sprite_render_nodes);
     }
 
     fn add_extract_jobs(

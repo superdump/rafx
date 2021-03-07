@@ -25,7 +25,7 @@ impl ExtractJob for SpriteExtractJob {
         self: Box<Self>,
         extract_context: &RenderJobExtractContext,
         frame_packet: &FramePacket,
-        _views: &[&RenderView],
+        _views: &[RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Sprite Extract");
         let legion_world = extract_context.extract_resources.fetch::<World>();

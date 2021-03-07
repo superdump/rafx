@@ -22,7 +22,7 @@ impl ExtractJob for ImGuiExtractJobImpl {
         self: Box<Self>,
         extract_context: &RenderJobExtractContext,
         _frame_packet: &FramePacket,
-        _views: &[&RenderView],
+        _views: &[RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("ImGui Extract");
         let asset_manager = extract_context

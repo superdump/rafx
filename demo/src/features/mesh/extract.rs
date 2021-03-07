@@ -30,7 +30,7 @@ impl ExtractJob for MeshExtractJob {
         self: Box<Self>,
         extract_context: &RenderJobExtractContext,
         frame_packet: &FramePacket,
-        _views: &[&RenderView],
+        _views: &[RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Mesh Extract");
         let legion_world = extract_context.extract_resources.fetch::<World>();

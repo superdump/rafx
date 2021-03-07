@@ -80,7 +80,8 @@ pub(super) fn opaque_pass(
         .graph_callbacks
         .set_renderpass_callback(node, move |args, user_context| {
             let mut write_context = RenderJobWriteContext::from_graph_visit_render_pass_args(&args);
-            user_context
+            args
+                .graph_context
                 .prepared_render_data
                 .write_view_phase::<OpaqueRenderPhase>(&main_view, &mut write_context)?;
 

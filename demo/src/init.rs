@@ -1,5 +1,5 @@
 use crate::features::debug3d::{Debug3DRendererPlugin, DebugDraw3DResource};
-use crate::features::mesh::MeshRenderNodeSet;
+use crate::features::mesh::{MeshRenderNodeSet, MeshRendererPlugin};
 use crate::features::sprite::{SpriteRenderNodeSet, SpriteRendererPlugin};
 use crate::features::text::{TextRendererPlugin, TextResource};
 use crate::game_renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
@@ -57,7 +57,8 @@ pub fn rendering_init(
     renderer_builder = renderer_builder
         .add_plugin(Box::new(Debug3DRendererPlugin::default()))
         .add_plugin(Box::new(TextRendererPlugin::default()))
-        .add_plugin(Box::new(SpriteRendererPlugin::default()));
+        .add_plugin(Box::new(SpriteRendererPlugin::default()))
+        .add_plugin(Box::new(MeshRendererPlugin::default()));
 
     #[cfg(feature = "use-imgui")]
     {
@@ -71,9 +72,7 @@ pub fn rendering_init(
         let mut extract_resources = ExtractResources::default();
 
         #[cfg(feature = "use-imgui")]
-        use crate::features::imgui::Sdl2ImguiManager;
-        #[cfg(feature = "use-imgui")]
-        let mut imgui_manager = resources.get_mut::<Sdl2ImguiManager>().unwrap();
+        let mut imgui_manager = resources.get_mut::<crate::features::imgui::Sdl2ImguiManager>().unwrap();
         #[cfg(feature = "use-imgui")]
         extract_resources.insert(&mut *imgui_manager);
 

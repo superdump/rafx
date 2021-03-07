@@ -5,7 +5,7 @@ use crate::graph::graph_node::{RenderGraphNodeId, RenderGraphNodeName};
 use crate::graph::graph_pass::{PrepassBufferBarrier, PrepassImageBarrier, RenderGraphOutputPass};
 use crate::graph::graph_plan::RenderGraphPlan;
 use crate::graph::{RenderGraphBufferUsageId, RenderGraphBuilder, RenderGraphImageUsageId};
-use crate::nodes::{RenderPhase, RenderPhaseIndex};
+use crate::nodes::{RenderPhase, RenderPhaseIndex, PreparedRenderData};
 use crate::resources::DynCommandBuffer;
 use crate::resources::ResourceLookupSet;
 use crate::{BufferResource, GraphicsPipelineRenderTargetMeta, ImageResource};
@@ -26,7 +26,8 @@ pub struct SwapchainSurfaceInfo {
 
 #[derive(Copy, Clone)]
 pub struct RenderGraphContext<'a> {
-    prepared_graph: &'a PreparedRenderGraph,
+    pub prepared_graph: &'a PreparedRenderGraph,
+    pub prepared_render_data: &'a PreparedRenderData,
 }
 
 impl<'a> RenderGraphContext<'a> {
@@ -216,6 +217,7 @@ impl PreparedRenderGraph {
     pub fn execute_graph(
         &self,
         node_visitor: &dyn RenderGraphNodeVisitor,
+        prepared_render_data: PreparedRenderData,
         queue: &RafxQueue,
     ) -> RafxResult<Vec<DynCommandBuffer>> {
         profiling::scope!("Execute Graph");
@@ -235,6 +237,7 @@ impl PreparedRenderGraph {
 
         let render_graph_context = RenderGraphContext {
             prepared_graph: &self,
+            prepared_render_data: &prepared_render_data,
         };
 
         let args = OnBeginExecuteGraphArgs {
@@ -664,9 +667,10 @@ impl<T> RenderGraphExecutor<T> {
     pub fn execute_graph(
         self,
         context: &T,
+        prepared_render_data: PreparedRenderData,
         queue: &RafxQueue,
     ) -> RafxResult<Vec<DynCommandBuffer>> {
         let visitor = self.callbacks.create_visitor(context);
-        self.prepared_graph.execute_graph(&*visitor, queue)
+        self.prepared_graph.execute_graph(&*visitor, prepared_render_data, queue)
     }
 }

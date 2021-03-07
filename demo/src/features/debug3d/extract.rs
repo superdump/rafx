@@ -20,7 +20,7 @@ impl ExtractJob for Debug3dExtractJob {
         self: Box<Self>,
         extract_context: &RenderJobExtractContext,
         _frame_packet: &FramePacket,
-        _views: &[&RenderView],
+        _views: &[RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Debug3d Extract");
         let asset_manager = extract_context

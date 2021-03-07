@@ -8,6 +8,8 @@ use rafx::graph::RenderGraphExecutor;
 use rafx::nodes::{
     FramePacket, PrepareJobSet, RenderJobPrepareContext, RenderRegistry, RenderView,
 };
+use crate::scenes::Scene::Shadows;
+use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 
 pub struct RenderFrameJobResult;
 
@@ -18,7 +20,6 @@ pub struct RenderFrameJob {
     pub resource_context: ResourceContext,
     pub frame_packet: FramePacket,
     pub main_view: RenderView,
-    pub shadow_map_render_views: Vec<ShadowMapRenderView>,
     pub render_registry: RenderRegistry,
     pub device_context: RafxDeviceContext,
     pub graphics_queue: RafxQueue,
@@ -37,7 +38,6 @@ impl RenderFrameJob {
             self.resource_context,
             self.frame_packet,
             self.main_view,
-            self.shadow_map_render_views,
             self.render_registry,
             render_resources,
             self.graphics_queue,
@@ -81,7 +81,6 @@ impl RenderFrameJob {
         resource_context: ResourceContext,
         frame_packet: FramePacket,
         main_view: RenderView,
-        shadow_map_render_views: Vec<ShadowMapRenderView>,
         render_registry: RenderRegistry,
         render_resources: &RenderResources,
         graphics_queue: RafxQueue,
@@ -95,19 +94,10 @@ impl RenderFrameJob {
             profiling::scope!("Renderer Prepare");
 
             let mut prepare_views = Vec::default();
-            prepare_views.push(&main_view);
-            for shadow_map_view in &shadow_map_render_views {
-                match shadow_map_view {
-                    ShadowMapRenderView::Single(view) => {
-                        prepare_views.push(view);
-                    }
-                    ShadowMapRenderView::Cube(views) => {
-                        for view in views {
-                            prepare_views.push(view);
-                        }
-                    }
-                }
-            }
+            prepare_views.push(main_view);
+
+            let shadow_map_resource = render_resources.fetch::<ShadowMapResource>();
+            shadow_map_resource.append_render_views(&mut prepare_views);
 
             let prepare_context =
                 RenderJobPrepareContext::new(resource_context.clone(), &render_resources);
@@ -129,12 +119,12 @@ impl RenderFrameJob {
         // Write Jobs - triggered by the render graph
         //
         let graph_context = RenderGraphUserContext {
-            prepared_render_data,
+            //prepared_render_data,
         };
 
         let command_buffers = {
             profiling::scope!("Renderer Execute Graph");
-            render_graph.execute_graph(&graph_context, &graphics_queue)?
+            render_graph.execute_graph(&graph_context, prepared_render_data, &graphics_queue)?
         };
         let t2 = std::time::Instant::now();
         log::trace!(

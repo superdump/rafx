@@ -21,7 +21,7 @@ impl ExtractJob for TextExtractJob {
         self: Box<Self>,
         extract_context: &RenderJobExtractContext,
         _frame_packet: &FramePacket,
-        _views: &[&RenderView],
+        _views: &[RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Text Extract");
         let asset_manager = extract_context
