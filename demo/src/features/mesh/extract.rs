@@ -7,7 +7,6 @@ use crate::features::mesh::{
     ExtractedDirectionalLight, ExtractedFrameNodeMeshData, ExtractedPointLight, ExtractedSpotLight,
     MeshRenderFeature, MeshRenderNode, MeshRenderNodeSet,
 };
-use crate::legion_support::{LegionResources, LegionWorld};
 use legion::*;
 use rafx::assets::AssetManagerRenderResource;
 use rafx::base::slab::RawSlabKey;
@@ -34,9 +33,8 @@ impl ExtractJob for MeshExtractJob {
         _views: &[&RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Mesh Extract");
-        let legion_resources = extract_context.render_resources.fetch::<LegionResources>();
-        let legion_world = extract_context.render_resources.fetch::<LegionWorld>();
-        let world = &**legion_world;
+        let legion_world = extract_context.extract_resources.fetch::<World>();
+        let world = &*legion_world;
 
         let asset_manager = extract_context
             .render_resources
@@ -45,7 +43,9 @@ impl ExtractJob for MeshExtractJob {
         //
         // Update the mesh render nodes. This could be done earlier as part of a system
         //
-        let mut mesh_render_nodes = legion_resources.get_mut::<MeshRenderNodeSet>().unwrap();
+        let mut mesh_render_nodes = extract_context
+            .extract_resources
+            .fetch_mut::<MeshRenderNodeSet>();
 
         let mut query = <(Read<PositionComponent>, Read<MeshComponent>)>::query();
         for (position_component, mesh_component) in query.iter(world) {

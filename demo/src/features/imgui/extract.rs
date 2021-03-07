@@ -2,7 +2,6 @@ use super::Sdl2ImguiManager;
 use crate::features::imgui::plugin::ImguiStaticResources;
 use crate::features::imgui::prepare::ImGuiPrepareJobImpl;
 use crate::features::imgui::{ExtractedImGuiData, ImGuiRenderFeature, ImGuiUniformBufferObject};
-use crate::legion_support::LegionResources;
 use rafx::assets::AssetManagerRenderResource;
 use rafx::graph::SwapchainSurfaceInfo;
 use rafx::nodes::{
@@ -26,13 +25,12 @@ impl ExtractJob for ImGuiExtractJobImpl {
         _views: &[&RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("ImGui Extract");
-        let legion_resources = extract_context.render_resources.fetch::<LegionResources>();
         let asset_manager = extract_context
             .render_resources
             .fetch::<AssetManagerRenderResource>();
-        let imgui_draw_data = legion_resources
-            .get::<Sdl2ImguiManager>()
-            .unwrap()
+        let imgui_draw_data = extract_context
+            .extract_resources
+            .fetch::<Sdl2ImguiManager>()
             .copy_draw_data();
 
         let framebuffer_scale = match &imgui_draw_data {

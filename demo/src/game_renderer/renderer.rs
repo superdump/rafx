@@ -1,20 +1,18 @@
 use crate::features::mesh::{
     create_mesh_extract_job, LightId, MeshRenderNodeSet, ShadowMapData, ShadowMapRenderView,
 };
-use crate::features::sprite::{create_sprite_extract_job, SpriteRenderNodeSet};
 use crate::phases::TransparentRenderPhase;
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase, UiRenderPhase};
 use crate::time::TimeState;
-use legion::*;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSpace};
 use rafx::assets::{AssetManager, GpuImageData};
 use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::nodes::{
-    AllRenderNodes, ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
-    RenderPhaseMask, RenderPhaseMaskBuilder, RenderView, RenderViewDepthRange, RenderViewSet,
-    VisibilityResult,
+    ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
+    RenderNodeReservations, RenderPhaseMask, RenderPhaseMaskBuilder, RenderView,
+    RenderViewDepthRange, RenderViewSet, VisibilityResult,
 };
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
@@ -24,7 +22,6 @@ use super::*;
 use crate::components::{
     DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
 };
-use crate::legion_support::{LegionResources, LegionWorld};
 use crate::RenderOptions;
 use arrayvec::ArrayVec;
 use fnv::FnvHashMap;
@@ -186,9 +183,7 @@ impl GameRenderer {
     #[profiling::function]
     pub fn start_rendering_next_frame(
         &self,
-        extract_resources: ExtractResources,
-        resources: &Resources,
-        world: &World,
+        extract_resources: &mut ExtractResources,
         window_width: u32,
         window_height: u32,
     ) -> RafxResult<()> {
@@ -196,11 +191,10 @@ impl GameRenderer {
         // Block until the previous frame completes being submitted to GPU
         //
         let t0 = std::time::Instant::now();
-        //let mut swapchain_helper = resources.get_mut::<RafxSwapchainHelper>().unwrap();
 
         let presentable_frame = {
-            let mut swapchain_helper = resources.get_mut::<RafxSwapchainHelper>().unwrap();
-            let mut asset_manager = resources.get_mut::<AssetManager>().unwrap();
+            let mut swapchain_helper = extract_resources.fetch_mut::<RafxSwapchainHelper>();
+            let mut asset_manager = extract_resources.fetch_mut::<AssetManager>();
             SwapchainHandler::acquire_next_image(
                 &mut *swapchain_helper,
                 &mut *asset_manager,
@@ -224,8 +218,6 @@ impl GameRenderer {
 
         Self::create_and_start_render_job(
             self,
-            world,
-            resources,
             extract_resources,
             window_width,
             window_height,
@@ -237,17 +229,13 @@ impl GameRenderer {
 
     fn create_and_start_render_job(
         game_renderer: &GameRenderer,
-        world: &World,
-        resources: &Resources,
-        extract_resources: ExtractResources,
+        extract_resources: &mut ExtractResources,
         window_width: u32,
         window_height: u32,
         presentable_frame: RafxPresentableFrame,
     ) {
         let result = Self::try_create_render_job(
             &game_renderer,
-            world,
-            resources,
             extract_resources,
             window_width,
             window_height,
@@ -269,9 +257,7 @@ impl GameRenderer {
 
     fn try_create_render_job(
         game_renderer: &GameRenderer,
-        world: &World,
-        resources: &Resources,
-        extract_resources: ExtractResources,
+        extract_resources: &mut ExtractResources,
         window_width: u32,
         window_height: u32,
         presentable_frame: &RafxPresentableFrame,
@@ -279,20 +265,20 @@ impl GameRenderer {
         //
         // Fetch resources
         //
-        let time_state_fetch = resources.get::<TimeState>().unwrap();
+        let time_state_fetch = extract_resources.fetch::<TimeState>();
         let time_state = &*time_state_fetch;
 
         let mut static_visibility_node_set_fetch =
-            resources.get_mut::<StaticVisibilityNodeSet>().unwrap();
+            extract_resources.fetch_mut::<StaticVisibilityNodeSet>();
         let static_visibility_node_set = &mut *static_visibility_node_set_fetch;
 
         let mut dynamic_visibility_node_set_fetch =
-            resources.get_mut::<DynamicVisibilityNodeSet>().unwrap();
+            extract_resources.fetch_mut::<DynamicVisibilityNodeSet>();
         let dynamic_visibility_node_set = &mut *dynamic_visibility_node_set_fetch;
 
-        let render_options = resources.get::<RenderOptions>().unwrap().clone();
+        let render_options = extract_resources.fetch::<RenderOptions>().clone();
 
-        let mut asset_manager_fetch = resources.get_mut::<AssetManager>().unwrap();
+        let mut asset_manager_fetch = extract_resources.fetch_mut::<AssetManager>();
         let asset_manager = &mut *asset_manager_fetch;
 
         let render_registry = asset_manager.resource_manager().render_registry().clone();
@@ -352,12 +338,6 @@ impl GameRenderer {
         );
 
         //
-        // Determine shadowmap views
-        //
-        let (shadow_map_lookup, shadow_map_render_views) =
-            GameRenderer::calculate_shadow_map_views(&render_view_set, world);
-
-        //
         // Visibility
         //
         let main_view_static_visibility_result =
@@ -374,6 +354,40 @@ impl GameRenderer {
             "main view dynamic node count: {}",
             main_view_dynamic_visibility_result.handles.len()
         );
+
+        //
+        // Build the frame packet - this takes the views and visibility results and creates a
+        // structure that's used during the extract/prepare/write phases
+        //
+        let frame_packet_builder = {
+            let mut render_node_reservations = RenderNodeReservations::default();
+
+            for plugin in &game_renderer_inner.plugins {
+                plugin
+                    .add_render_node_reservations(&mut render_node_reservations, extract_resources);
+            }
+
+            let mut mesh_render_nodes = extract_resources.fetch_mut::<MeshRenderNodeSet>();
+            mesh_render_nodes.update();
+            render_node_reservations.add_reservation(&*mesh_render_nodes);
+
+            FramePacketBuilder::new(&render_node_reservations)
+        };
+
+        // After these jobs end, user calls functions to start jobs that extract data
+        frame_packet_builder.add_view(
+            &main_view,
+            &[
+                main_view_static_visibility_result,
+                main_view_dynamic_visibility_result,
+            ],
+        );
+
+        //
+        // Determine shadowmap views
+        //
+        let (shadow_map_lookup, shadow_map_render_views) =
+            GameRenderer::calculate_shadow_map_views(&render_view_set, extract_resources);
 
         struct RenderViewVisibility {
             render_view: RenderView,
@@ -463,31 +477,6 @@ impl GameRenderer {
             }
         }
 
-        //
-        // Build the frame packet - this takes the views and visibility results and creates a
-        // structure that's used during the extract/prepare/write phases
-        //
-        let frame_packet_builder = {
-            let mut sprite_render_nodes = resources.get_mut::<SpriteRenderNodeSet>().unwrap();
-            sprite_render_nodes.update();
-            let mut mesh_render_nodes = resources.get_mut::<MeshRenderNodeSet>().unwrap();
-            mesh_render_nodes.update();
-            let mut all_render_nodes = AllRenderNodes::default();
-            all_render_nodes.add_render_nodes(&*sprite_render_nodes);
-            all_render_nodes.add_render_nodes(&*mesh_render_nodes);
-
-            FramePacketBuilder::new(&all_render_nodes)
-        };
-
-        // After these jobs end, user calls functions to start jobs that extract data
-        frame_packet_builder.add_view(
-            &main_view,
-            &[
-                main_view_static_visibility_result,
-                main_view_dynamic_visibility_result,
-            ],
-        );
-
         for shadow_map_visibility_result in shadow_map_visibility_results {
             match shadow_map_visibility_result {
                 ShadowMapVisibility::Single(view) => {
@@ -552,25 +541,14 @@ impl GameRenderer {
             //TODO: Is it possible to know up front what extract jobs aren't necessary based on
             // render phases?
 
-            // Sprites
-            extract_job_set.add_job(create_sprite_extract_job());
-
             // Meshes
             extract_job_set.add_job(create_mesh_extract_job());
-
-            // #[cfg(feature = "use-imgui")]
-            // {
-            //     use crate::features::imgui::create_imgui_extract_job;
-            //     extract_job_set.add_job(create_imgui_extract_job());
-            // }
 
             extract_job_set
         };
 
         render_resources.insert(swapchain_surface_info.clone());
         unsafe {
-            render_resources.insert(LegionWorld::new(world));
-            render_resources.insert(LegionResources::new(resources));
             render_resources.insert(AssetManagerRenderResource::new(asset_manager));
         }
 
@@ -578,7 +556,8 @@ impl GameRenderer {
         let prepare_job_set = {
             profiling::scope!("renderer extract");
 
-            let extract_context = RenderJobExtractContext::new(&render_resources);
+            let extract_context =
+                RenderJobExtractContext::new(&extract_resources, &render_resources);
 
             let mut extract_views = Vec::default();
             extract_views.push(&main_view);
@@ -598,8 +577,6 @@ impl GameRenderer {
             extract_job_set.extract(&extract_context, &frame_packet, &extract_views)
         };
 
-        render_resources.remove::<LegionWorld>();
-        render_resources.remove::<LegionResources>();
         render_resources.remove::<AssetManagerRenderResource>();
 
         //TODO: This is now possible to run on the render thread
@@ -694,8 +671,12 @@ impl GameRenderer {
     #[profiling::function]
     fn calculate_shadow_map_views(
         render_view_set: &RenderViewSet,
-        world: &World,
+        extract_resources: &ExtractResources,
     ) -> (FnvHashMap<LightId, usize>, Vec<ShadowMapRenderView>) {
+        use legion::*;
+        let world_fetch = extract_resources.fetch::<World>();
+        let world = &*world_fetch;
+
         let mut shadow_map_render_views = Vec::default();
         let mut shadow_map_lookup = FnvHashMap::default();
 

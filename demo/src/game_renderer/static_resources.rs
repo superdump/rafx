@@ -6,7 +6,6 @@ use rafx::assets::{ImageAsset, MaterialAsset};
 
 #[derive(Clone)]
 pub struct GameRendererStaticResources {
-    pub sprite_material: Handle<MaterialAsset>,
     pub bloom_extract_material: Handle<MaterialAsset>,
     pub bloom_blur_material: Handle<MaterialAsset>,
     pub bloom_combine_material: Handle<MaterialAsset>,
@@ -20,12 +19,6 @@ impl GameRendererStaticResources {
         asset_resource: &mut AssetResource,
         asset_manager: &mut AssetManager,
     ) -> RafxResult<Self> {
-        //
-        // Sprite resources
-        //
-        let sprite_material =
-            asset_resource.load_asset_path::<MaterialAsset, _>("materials/sprite.material");
-
         //
         // Bloom extract resources
         //
@@ -62,12 +55,6 @@ impl GameRendererStaticResources {
             .load_asset_path::<ComputePipelineAsset, _>("compute_pipelines/compute_test.compute");
 
         asset_manager.wait_for_asset_to_load(
-            &sprite_material,
-            asset_resource,
-            "sprite_material",
-        )?;
-
-        asset_manager.wait_for_asset_to_load(
             &bloom_extract_material,
             asset_resource,
             "bloom extract material",
@@ -96,7 +83,6 @@ impl GameRendererStaticResources {
         asset_manager.wait_for_asset_to_load(&compute_test, asset_resource, "compute pipeline")?;
 
         Ok(GameRendererStaticResources {
-            sprite_material,
             bloom_extract_material,
             bloom_blur_material,
             bloom_combine_material,

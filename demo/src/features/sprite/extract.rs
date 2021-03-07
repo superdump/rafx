@@ -1,11 +1,8 @@
+use crate::components::{PositionComponent, SpriteComponent};
+use crate::features::sprite::plugin::SpriteStaticResources;
 use crate::features::sprite::prepare::SpritePrepareJob;
 use crate::features::sprite::{
     ExtractedSpriteData, SpriteRenderFeature, SpriteRenderNode, SpriteRenderNodeSet,
-};
-use crate::legion_support::{LegionResources, LegionWorld};
-use crate::{
-    components::{PositionComponent, SpriteComponent},
-    game_renderer::GameRendererStaticResources,
 };
 use legion::*;
 use rafx::assets::AssetManagerRenderResource;
@@ -31,17 +28,17 @@ impl ExtractJob for SpriteExtractJob {
         _views: &[&RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Sprite Extract");
-        let legion_world = extract_context.render_resources.fetch::<LegionWorld>();
-        let world = &**legion_world;
-
-        let legion_resources = extract_context.render_resources.fetch::<LegionResources>();
+        let legion_world = extract_context.extract_resources.fetch::<World>();
+        let world = &*legion_world;
 
         let asset_manager = extract_context
             .render_resources
             .fetch::<AssetManagerRenderResource>();
 
         // Update the mesh render nodes. This could be done earlier as part of a system
-        let mut sprite_render_nodes = legion_resources.get_mut::<SpriteRenderNodeSet>().unwrap();
+        let mut sprite_render_nodes = extract_context
+            .extract_resources
+            .fetch_mut::<SpriteRenderNodeSet>();
 
         let mut query = <(Read<PositionComponent>, Read<SpriteComponent>)>::query();
         for (position_component, sprite_component) in query.iter(world) {
@@ -84,8 +81,8 @@ impl ExtractJob for SpriteExtractJob {
 
         let static_resources = extract_context
             .render_resources
-            .fetch::<GameRendererStaticResources>();
-        // For now just grab pass 0
+            .fetch::<SpriteStaticResources>();
+
         let sprite_material = asset_manager
             .get_material_pass_by_index(&static_resources.sprite_material, 0)
             .unwrap();

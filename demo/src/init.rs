@@ -1,6 +1,6 @@
 use crate::features::debug3d::{Debug3DRendererPlugin, DebugDraw3DResource};
 use crate::features::mesh::MeshRenderNodeSet;
-use crate::features::sprite::SpriteRenderNodeSet;
+use crate::features::sprite::{SpriteRenderNodeSet, SpriteRendererPlugin};
 use crate::features::text::{TextRendererPlugin, TextResource};
 use crate::game_renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
 use legion::Resources;
@@ -56,7 +56,8 @@ pub fn rendering_init(
     let mut renderer_builder = RendererBuilder::default();
     renderer_builder = renderer_builder
         .add_plugin(Box::new(Debug3DRendererPlugin::default()))
-        .add_plugin(Box::new(TextRendererPlugin::default()));
+        .add_plugin(Box::new(TextRendererPlugin::default()))
+        .add_plugin(Box::new(SpriteRendererPlugin::default()));
 
     #[cfg(feature = "use-imgui")]
     {

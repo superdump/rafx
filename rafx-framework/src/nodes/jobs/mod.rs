@@ -14,16 +14,19 @@ use rafx_base::memory::force_to_static_lifetime;
 
 pub type ExtractResources<'a> = rafx_base::resource_ref_map::ResourceRefMap<'a>;
 
-pub struct RenderJobExtractContext {
-    pub render_resources: &'static RenderResources,
+pub struct RenderJobExtractContext<'a> {
+    pub extract_resources: &'a ExtractResources<'a>,
+    pub render_resources: &'a RenderResources,
 }
 
-impl RenderJobExtractContext {
-    pub fn new<'a>(render_resources: &'a RenderResources) -> Self {
-        unsafe {
-            RenderJobExtractContext {
-                render_resources: force_to_static_lifetime(render_resources),
-            }
+impl<'a> RenderJobExtractContext<'a> {
+    pub fn new(
+        extract_resources: &'a ExtractResources<'a>,
+        render_resources: &'a RenderResources,
+    ) -> Self {
+        RenderJobExtractContext {
+            extract_resources,
+            render_resources,
         }
     }
 }

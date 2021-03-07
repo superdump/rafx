@@ -6,7 +6,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use structopt::StructOpt;
 
-use rafx::api::RafxResult;
+use rafx::api::{RafxResult, RafxSwapchainHelper};
 use rafx::assets::AssetManager;
 
 use crate::daemon::AssetDaemonArgs;
@@ -22,7 +22,6 @@ pub mod daemon;
 mod features;
 mod game_renderer;
 mod init;
-mod legion_support;
 mod phases;
 mod scenes;
 mod time;
@@ -292,15 +291,51 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
 
             let (window_width, window_height) = sdl2_systems.window.vulkan_drawable_size();
 
-            let extract_resources = ExtractResources::default();
+            let mut extract_resources = ExtractResources::default();
+
+            macro_rules! add_to_extract_resources {
+                ($ty: ident) => {
+                    #[allow(non_snake_case)]
+                    let mut $ty = resources.get_mut::<$ty>().unwrap();
+                    extract_resources.insert(&mut *$ty);
+                };
+                ($ty: path, $name: ident) => {
+                    let mut $name = resources.get_mut::<$ty>().unwrap();
+                    extract_resources.insert(&mut *$name);
+                };
+            }
+
+            add_to_extract_resources!(RafxSwapchainHelper);
+            add_to_extract_resources!(AssetManager);
+            add_to_extract_resources!(TimeState);
+            add_to_extract_resources!(RenderOptions);
+            add_to_extract_resources!(
+                rafx::visibility::DynamicVisibilityNodeSet,
+                dynamic_visibility_node_set
+            );
+            add_to_extract_resources!(
+                rafx::visibility::StaticVisibilityNodeSet,
+                static_visibility_node_set
+            );
+            add_to_extract_resources!(
+                crate::features::sprite::SpriteRenderNodeSet,
+                sprite_render_node_set
+            );
+            add_to_extract_resources!(
+                crate::features::mesh::MeshRenderNodeSet,
+                mesh_render_node_set
+            );
+            add_to_extract_resources!(
+                crate::features::debug3d::DebugDraw3DResource,
+                debug_draw_3d_resource
+            );
+            add_to_extract_resources!(crate::features::text::TextResource, text_resource);
+            add_to_extract_resources!(crate::features::imgui::Sdl2ImguiManager, sdl2_imgui_manager);
+
+            extract_resources.insert(&mut world);
+
             game_renderer
-                .start_rendering_next_frame(
-                    extract_resources,
-                    &resources,
-                    &world,
-                    window_width,
-                    window_height,
-                )
+                .start_rendering_next_frame(&mut extract_resources, window_width, window_height)
                 .unwrap();
         }
 

@@ -1,7 +1,6 @@
 use crate::features::text::plugin::TextStaticResources;
 use crate::features::text::prepare::TextPrepareJobImpl;
 use crate::features::text::{ExtractedTextData, TextRenderFeature, TextResource};
-use crate::legion_support::LegionResources;
 use fnv::FnvHashMap;
 use rafx::assets::AssetManagerRenderResource;
 use rafx::nodes::{
@@ -25,12 +24,13 @@ impl ExtractJob for TextExtractJob {
         _views: &[&RenderView],
     ) -> Box<dyn PrepareJob> {
         profiling::scope!("Text Extract");
-        let legion_resources = extract_context.render_resources.fetch::<LegionResources>();
         let asset_manager = extract_context
             .render_resources
             .fetch::<AssetManagerRenderResource>();
 
-        let mut text_resource = legion_resources.get_mut::<TextResource>().unwrap();
+        let mut text_resource = extract_context
+            .extract_resources
+            .fetch_mut::<TextResource>();
 
         let text_material = &extract_context
             .render_resources

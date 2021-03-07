@@ -12,7 +12,7 @@ pub trait AssetTypeHandlerFactory {
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler>;
 }
 
-pub trait AssetTypeHandler: Sync {
+pub trait AssetTypeHandler: Sync + Send {
     /// Called every frame to process load queues
     fn process_load_requests(
         &mut self,
@@ -52,7 +52,7 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandlerFactory
 where
     AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
     AssetT: TypeUuid + 'static + Send + Clone + Sync,
-    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
+    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync + Send,
 {
     fn create(asset_resource: &mut AssetResource) -> Box<dyn AssetTypeHandler> {
         let load_queues = LoadQueues::<AssetDataT, AssetT>::default();
@@ -74,7 +74,7 @@ impl<AssetDataT, AssetT, LoadHandlerT> AssetTypeHandler
 where
     AssetDataT: TypeUuid + for<'a> serde::Deserialize<'a> + 'static + Send + Clone,
     AssetT: TypeUuid + 'static + Send + Clone + Sync,
-    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync,
+    LoadHandlerT: DefaultAssetTypeLoadHandler<AssetDataT, AssetT> + 'static + Sync + Send,
 {
     fn process_load_requests(
         &mut self,
