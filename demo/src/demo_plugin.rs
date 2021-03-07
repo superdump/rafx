@@ -1,11 +1,19 @@
-use distill::loader::handle::Handle;
+use crate::phases::{
+    OpaqueRenderPhase, PostProcessRenderPhase, ShadowMapRenderPhase, TransparentRenderPhase,
+    UiRenderPhase,
+};
+use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::{AssetManager, ComputePipelineAsset};
-use rafx::assets::{ImageAsset, MaterialAsset};
+use rafx::assets::{AssetManager, ComputePipelineAsset, ImageAsset, MaterialAsset};
+use rafx::base::resource_map::ResourceMap;
+use rafx::distill::loader::handle::Handle;
+use rafx::nodes::{ExtractResources, RenderRegistryBuilder};
+use rafx::renderer::RendererPlugin;
 
-#[derive(Clone)]
-pub struct GameRendererStaticResources {
+// A plugin that add demo-specific configuration
+
+pub struct DemoStaticResources {
     pub bloom_extract_material: Handle<MaterialAsset>,
     pub bloom_blur_material: Handle<MaterialAsset>,
     pub bloom_combine_material: Handle<MaterialAsset>,
@@ -14,11 +22,29 @@ pub struct GameRendererStaticResources {
     pub compute_test: Handle<ComputePipelineAsset>,
 }
 
-impl GameRendererStaticResources {
-    pub fn new(
-        asset_resource: &mut AssetResource,
+pub struct DemoRendererPlugin;
+
+impl RendererPlugin for DemoRendererPlugin {
+    fn configure_render_registry(
+        &self,
+        render_registry_builder: RenderRegistryBuilder,
+    ) -> RenderRegistryBuilder {
+        render_registry_builder
+            .register_render_phase::<OpaqueRenderPhase>("Opaque")
+            .register_render_phase::<ShadowMapRenderPhase>("ShadowMap")
+            .register_render_phase::<TransparentRenderPhase>("Transparent")
+            .register_render_phase::<PostProcessRenderPhase>("PostProcess")
+            .register_render_phase::<UiRenderPhase>("Ui")
+    }
+
+    fn initialize_static_resources(
+        &self,
         asset_manager: &mut AssetManager,
-    ) -> RafxResult<Self> {
+        asset_resource: &mut AssetResource,
+        _extract_resources: &ExtractResources,
+        render_resources: &mut ResourceMap,
+        _upload: &mut RafxTransferUpload,
+    ) -> RafxResult<()> {
         //
         // Bloom extract resources
         //
@@ -82,13 +108,15 @@ impl GameRendererStaticResources {
 
         asset_manager.wait_for_asset_to_load(&compute_test, asset_resource, "compute pipeline")?;
 
-        Ok(GameRendererStaticResources {
+        render_resources.insert(DemoStaticResources {
             bloom_extract_material,
             bloom_blur_material,
             bloom_combine_material,
             skybox_material,
             skybox_texture,
             compute_test,
-        })
+        });
+
+        Ok(())
     }
 }

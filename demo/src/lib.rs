@@ -6,25 +6,30 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use structopt::StructOpt;
 
-use rafx::api::{RafxResult, RafxSwapchainHelper};
+use rafx::api::{RafxExtents2D, RafxResult, RafxSwapchainHelper};
 use rafx::assets::AssetManager;
 
-use crate::daemon::AssetDaemonArgs;
+use crate::daemon_args::AssetDaemonArgs;
 use crate::game_renderer::{AssetSource, GameRenderer};
 use crate::scenes::SceneManager;
 use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::nodes::ExtractResources;
+use rafx::renderer::ViewportsResource;
 
 mod assets;
 mod components;
-pub mod daemon;
+pub mod daemon_args;
 mod features;
 mod game_renderer;
 mod init;
 mod phases;
+mod render_graph_generator;
 mod scenes;
 mod time;
+
+mod demo_plugin;
+pub use demo_plugin::DemoRendererPlugin;
 
 #[derive(Clone)]
 pub struct RenderOptions {
@@ -137,6 +142,12 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
 
     'running: loop {
         profiling::scope!("Main Loop");
+
+        {
+            let mut viewports_resource = resources.get_mut::<ViewportsResource>().unwrap();
+            let (width, height) = sdl2_systems.window.vulkan_drawable_size();
+            viewports_resource.main_window_size = RafxExtents2D { width, height }
+        }
 
         {
             resources
@@ -289,8 +300,6 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
             profiling::scope!("Start Next Frame Render");
             let game_renderer = resources.get::<GameRenderer>().unwrap();
 
-            let (window_width, window_height) = sdl2_systems.window.vulkan_drawable_size();
-
             let mut extract_resources = ExtractResources::default();
 
             macro_rules! add_to_extract_resources {
@@ -306,6 +315,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
             }
 
             add_to_extract_resources!(RafxSwapchainHelper);
+            add_to_extract_resources!(ViewportsResource);
             add_to_extract_resources!(AssetManager);
             add_to_extract_resources!(TimeState);
             add_to_extract_resources!(RenderOptions);
@@ -335,7 +345,7 @@ pub fn run(args: &DemoArgs) -> RafxResult<()> {
             extract_resources.insert(&mut world);
 
             game_renderer
-                .start_rendering_next_frame(&mut extract_resources, window_width, window_height)
+                .start_rendering_next_frame(&mut extract_resources)
                 .unwrap();
         }
 

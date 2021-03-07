@@ -1,13 +1,18 @@
+use crate::assets::font::FontAssetTypeRendererPlugin;
+use crate::assets::gltf::GltfAssetTypeRendererPlugin;
 use crate::features::debug3d::{Debug3DRendererPlugin, DebugDraw3DResource};
 use crate::features::mesh::{MeshRenderNodeSet, MeshRendererPlugin};
 use crate::features::sprite::{SpriteRenderNodeSet, SpriteRendererPlugin};
 use crate::features::text::{TextRendererPlugin, TextResource};
 use crate::game_renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
+use crate::render_graph_generator::DemoRenderGraphGenerator;
+use crate::DemoRendererPlugin;
 use legion::Resources;
 use rafx::api::{RafxApi, RafxDeviceContext, RafxResult, RafxSwapchainHelper};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::nodes::{ExtractResources, RenderRegistry};
+use rafx::renderer::ViewportsResource;
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
 pub struct Sdl2Systems {
@@ -50,15 +55,19 @@ pub fn rendering_init(
     resources.insert(DynamicVisibilityNodeSet::default());
     resources.insert(DebugDraw3DResource::new());
     resources.insert(TextResource::new());
+    resources.insert(ViewportsResource::default());
 
     let rafx_api = rafx::api::RafxApi::new(sdl2_window, &Default::default())?;
 
     let mut renderer_builder = RendererBuilder::default();
     renderer_builder = renderer_builder
-        .add_plugin(Box::new(Debug3DRendererPlugin::default()))
-        .add_plugin(Box::new(TextRendererPlugin::default()))
-        .add_plugin(Box::new(SpriteRendererPlugin::default()))
-        .add_plugin(Box::new(MeshRendererPlugin::default()));
+        .add_plugin(Box::new(FontAssetTypeRendererPlugin))
+        .add_plugin(Box::new(GltfAssetTypeRendererPlugin))
+        .add_plugin(Box::new(Debug3DRendererPlugin))
+        .add_plugin(Box::new(TextRendererPlugin))
+        .add_plugin(Box::new(SpriteRendererPlugin))
+        .add_plugin(Box::new(MeshRendererPlugin))
+        .add_plugin(Box::new(DemoRendererPlugin));
 
     #[cfg(feature = "use-imgui")]
     {
@@ -78,7 +87,14 @@ pub fn rendering_init(
         #[cfg(feature = "use-imgui")]
         extract_resources.insert(&mut *imgui_manager);
 
-        renderer_builder.build(extract_resources, &rafx_api, asset_source)
+        let render_graph_generator = Box::new(DemoRenderGraphGenerator);
+
+        renderer_builder.build(
+            extract_resources,
+            &rafx_api,
+            asset_source,
+            render_graph_generator,
+        )
     }?;
 
     let (width, height) = sdl2_window.vulkan_drawable_size();

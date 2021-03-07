@@ -2644,14 +2644,14 @@ pub struct RenderGraphPlan {
     pub(super) intermediate_buffers: FnvHashMap<PhysicalBufferId, RenderGraphBufferSpecification>,
     pub(super) image_views: Vec<RenderGraphImageView>, // index by physical image view id
     pub(super) node_to_pass_index: FnvHashMap<RenderGraphNodeId, usize>,
-    pub(super) image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
+    pub(super) _image_usage_to_physical: FnvHashMap<RenderGraphImageUsageId, PhysicalImageId>,
     pub(super) image_usage_to_view: FnvHashMap<RenderGraphImageUsageId, PhysicalImageViewId>,
     pub(super) buffer_usage_to_physical: FnvHashMap<RenderGraphBufferUsageId, PhysicalBufferId>,
 
     // callbacks
     pub(super) visit_node_callbacks:
         FnvHashMap<RenderGraphNodeId, RenderGraphNodeVisitNodeCallback>,
-    pub(super) render_phase_dependencies:
+    pub(super) _render_phase_dependencies:
         FnvHashMap<RenderGraphNodeId, FnvHashSet<RenderPhaseIndex>>,
 }
 
@@ -2910,12 +2910,12 @@ impl RenderGraphPlan {
             intermediate_buffers,
             image_views: assign_physical_resources_result.image_views,
             node_to_pass_index,
-            image_usage_to_physical: assign_physical_resources_result.image_usage_to_physical,
+            _image_usage_to_physical: assign_physical_resources_result.image_usage_to_physical,
             image_usage_to_view: assign_physical_resources_result.image_usage_to_image_view,
             buffer_usage_to_physical: assign_physical_resources_result.buffer_usage_to_physical,
 
             visit_node_callbacks: graph.visit_node_callbacks,
-            render_phase_dependencies: graph.render_phase_dependencies,
+            _render_phase_dependencies: graph.render_phase_dependencies,
         }
     }
 }

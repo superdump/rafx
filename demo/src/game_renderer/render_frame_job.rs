@@ -1,5 +1,4 @@
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
-use crate::game_renderer::GameRenderer;
+use super::GameRenderer;
 use rafx::api::{RafxCommandBuffer, RafxDeviceContext, RafxQueue};
 use rafx::api::{RafxPresentableFrame, RafxResult};
 use rafx::framework::{DynCommandBuffer, RenderResources, ResourceContext};
@@ -7,6 +6,8 @@ use rafx::graph::PreparedRenderGraph;
 use rafx::nodes::{
     FramePacket, PrepareJobSet, RenderJobPrepareContext, RenderRegistry, RenderView,
 };
+use rafx::renderer::RendererPlugin;
+use std::sync::Arc;
 
 pub struct RenderFrameJobResult;
 
@@ -16,10 +17,11 @@ pub struct RenderFrameJob {
     pub prepared_render_graph: PreparedRenderGraph,
     pub resource_context: ResourceContext,
     pub frame_packet: FramePacket,
-    pub main_view: RenderView,
     pub render_registry: RenderRegistry,
     pub device_context: RafxDeviceContext,
     pub graphics_queue: RafxQueue,
+    pub plugins: Arc<Vec<Box<dyn RendererPlugin>>>,
+    pub render_views: Vec<RenderView>,
 }
 
 impl RenderFrameJob {
@@ -34,10 +36,11 @@ impl RenderFrameJob {
             self.prepared_render_graph,
             self.resource_context,
             self.frame_packet,
-            self.main_view,
             self.render_registry,
             render_resources,
             self.graphics_queue,
+            self.plugins,
+            self.render_views,
         );
 
         let t1 = std::time::Instant::now();
@@ -77,10 +80,11 @@ impl RenderFrameJob {
         prepared_render_graph: PreparedRenderGraph,
         resource_context: ResourceContext,
         frame_packet: FramePacket,
-        main_view: RenderView,
         render_registry: RenderRegistry,
         render_resources: &RenderResources,
         graphics_queue: RafxQueue,
+        _plugins: Arc<Vec<Box<dyn RendererPlugin>>>,
+        render_views: Vec<RenderView>,
     ) -> RafxResult<Vec<DynCommandBuffer>> {
         let t0 = std::time::Instant::now();
 
@@ -90,19 +94,13 @@ impl RenderFrameJob {
         let prepared_render_data = {
             profiling::scope!("Renderer Prepare");
 
-            let mut prepare_views = Vec::default();
-            prepare_views.push(main_view);
-
-            let shadow_map_resource = render_resources.fetch::<ShadowMapResource>();
-            shadow_map_resource.append_render_views(&mut prepare_views);
-
             let prepare_context =
                 RenderJobPrepareContext::new(resource_context.clone(), &render_resources);
 
             prepare_job_set.prepare(
                 &prepare_context,
                 &frame_packet,
-                &prepare_views,
+                &render_views,
                 &render_registry,
             )
         };

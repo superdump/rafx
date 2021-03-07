@@ -1,6 +1,5 @@
 use crate::assets::font::FontAsset;
 use crate::features::text::{FontAtlasCache, TextRenderFeature};
-use crate::game_renderer::RendererPlugin;
 use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
@@ -9,14 +8,14 @@ use rafx::base::resource_map::ResourceMap;
 use rafx::distill::loader::handle::Handle;
 use rafx::framework::RenderResources;
 use rafx::nodes::{ExtractJob, ExtractResources, RenderRegistryBuilder};
+use rafx::renderer::RendererPlugin;
 
 pub struct TextStaticResources {
     pub text_material: Handle<MaterialAsset>,
     pub default_font: Handle<FontAsset>,
 }
 
-#[derive(Default)]
-pub struct TextRendererPlugin {}
+pub struct TextRendererPlugin;
 
 impl RendererPlugin for TextRendererPlugin {
     fn configure_render_registry(
@@ -27,7 +26,7 @@ impl RendererPlugin for TextRendererPlugin {
     }
 
     fn initialize_static_resources(
-        &mut self,
+        &self,
         asset_manager: &mut AssetManager,
         asset_resource: &mut AssetResource,
         _extract_resources: &ExtractResources,

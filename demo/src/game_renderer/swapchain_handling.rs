@@ -1,5 +1,5 @@
-use crate::game_renderer::swapchain_resources::SwapchainResources;
-use crate::game_renderer::GameRenderer;
+use super::swapchain_resources::SwapchainResources;
+use super::GameRenderer;
 use rafx::api::raw_window_handle::HasRawWindowHandle;
 use rafx::api::{
     RafxDeviceContext, RafxExtents2D, RafxPresentableFrame, RafxResult, RafxSwapchain,
@@ -34,8 +34,8 @@ impl<'a> SwapchainHandler<'a> {
             )?;
 
             let mut lifetime_listener = SwapchainHandler {
-                asset_manager: &mut *asset_manager,
-                game_renderer: &mut *game_renderer,
+                asset_manager,
+                game_renderer,
             };
 
             rafx::api::RafxSwapchainHelper::new(
@@ -93,8 +93,7 @@ impl<'a> RafxSwapchainEventListener for SwapchainHandler<'a> {
         swapchain: &RafxSwapchain,
     ) -> RafxResult<()> {
         let mut guard = self.game_renderer.inner.lock().unwrap();
-        let mut game_renderer = &mut *guard;
-        let asset_manager = &mut self.asset_manager;
+        let game_renderer = &mut *guard;
 
         //
         // Metadata about the swapchain
@@ -116,15 +115,14 @@ impl<'a> RafxSwapchainEventListener for SwapchainHandler<'a> {
         // Construct resources that are tied to the swapchain or swapchain metadata.
         // (i.e. renderpasses, descriptor sets that refer to swapchain images)
         //
-        let swapchain_resources = SwapchainResources::new(
-            device_context,
-            swapchain,
-            game_renderer,
-            asset_manager.resource_manager_mut(),
-            swapchain_surface_info,
-        )?;
+        let swapchain_resources = SwapchainResources::new(device_context, swapchain_surface_info)?;
 
-        game_renderer.swapchain_resources = Some(swapchain_resources);
+        let mut render_resources = game_renderer
+            .render_thread
+            .render_resources()
+            .lock()
+            .unwrap();
+        render_resources.insert(swapchain_resources);
 
         log::debug!("game renderer swapchain_created finished");
 
@@ -142,9 +140,12 @@ impl<'a> RafxSwapchainEventListener for SwapchainHandler<'a> {
 
         log::debug!("game renderer swapchain destroyed");
 
-        // This will clear game_renderer.swapchain_resources and drop SwapchainResources at end of fn
-        let swapchain_resources = game_renderer.swapchain_resources.take().unwrap();
-        std::mem::drop(swapchain_resources);
+        let mut render_resources = game_renderer
+            .render_thread
+            .render_resources()
+            .lock()
+            .unwrap();
+        render_resources.remove::<SwapchainResources>();
 
         //TODO: Explicitly remove the images instead of just dropping them. This prevents anything
         // from accidentally using them after they've been freed

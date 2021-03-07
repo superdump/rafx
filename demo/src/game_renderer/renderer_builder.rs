@@ -1,18 +1,10 @@
-use crate::assets::font::FontAssetType;
-use crate::assets::gltf::MeshAssetType;
-use crate::daemon;
-use crate::daemon::AssetDaemonOpt;
-use crate::features::mesh::MeshRenderFeature;
-use crate::features::sprite::SpriteRenderFeature;
-use crate::game_renderer::{GameRenderer, RendererPlugin};
-use crate::phases::{
-    OpaqueRenderPhase, PostProcessRenderPhase, ShadowMapRenderPhase, TransparentRenderPhase,
-    UiRenderPhase,
-};
+use super::daemon::AssetDaemonOpt;
+use super::{daemon, GameRenderer};
 use rafx::api::{RafxApi, RafxQueueType, RafxResult};
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::nodes::ExtractResources;
+use rafx::renderer::{RenderGraphGenerator, RendererPlugin};
 
 pub enum AssetSource {
     Packfile(std::path::PathBuf),
@@ -47,6 +39,7 @@ impl RendererBuilder {
         extract_resources: ExtractResources,
         rafx_api: &RafxApi,
         asset_source: AssetSource,
+        render_graph_generator: Box<dyn RenderGraphGenerator>,
     ) -> RafxResult<RendererBuilderResult> {
         let mut asset_resource = match asset_source {
             AssetSource::Packfile(packfile) => {
@@ -71,11 +64,8 @@ impl RendererBuilder {
                         asset_daemon = plugin.configure_asset_daemon(asset_daemon);
                     }
 
-                    let asset_daemon = asset_daemon
-                        .with_importer("basis", rafx::assets::BasisImageImporter)
-                        .with_importer("gltf", crate::assets::gltf::GltfImporter)
-                        .with_importer("glb", crate::assets::gltf::GltfImporter)
-                        .with_importer("ttf", crate::assets::font::FontImporter);
+                    let asset_daemon =
+                        asset_daemon.with_importer("basis", rafx::assets::BasisImageImporter);
 
                     // Spawn the daemon in a background thread.
                     std::thread::spawn(move || {
@@ -94,15 +84,6 @@ impl RendererBuilder {
         for plugin in &self.plugins {
             render_registry_builder = plugin.configure_render_registry(render_registry_builder);
         }
-
-        render_registry_builder = render_registry_builder
-            .register_feature::<SpriteRenderFeature>()
-            .register_feature::<MeshRenderFeature>()
-            .register_render_phase::<OpaqueRenderPhase>("Opaque")
-            .register_render_phase::<ShadowMapRenderPhase>("ShadowMap")
-            .register_render_phase::<TransparentRenderPhase>("Transparent")
-            .register_render_phase::<PostProcessRenderPhase>("PostProcess")
-            .register_render_phase::<UiRenderPhase>("Ui");
 
         let render_registry = render_registry_builder.build();
 
@@ -125,8 +106,9 @@ impl RendererBuilder {
 
         asset_manager.register_default_asset_types(&mut asset_resource);
 
-        asset_manager.register_asset_type::<MeshAssetType>(&mut asset_resource);
-        asset_manager.register_asset_type::<FontAssetType>(&mut asset_resource);
+        for plugin in &self.plugins {
+            plugin.register_asset_types(&mut asset_manager, &mut asset_resource);
+        }
 
         let renderer = GameRenderer::new(
             extract_resources,
@@ -135,6 +117,7 @@ impl RendererBuilder {
             &graphics_queue,
             &transfer_queue,
             self.plugins,
+            render_graph_generator,
         );
 
         match renderer {

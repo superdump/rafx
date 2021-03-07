@@ -1,5 +1,4 @@
 use crate::features::sprite::{SpriteRenderFeature, SpriteRenderNodeSet};
-use crate::game_renderer::RendererPlugin;
 use rafx::api::extra::upload::RafxTransferUpload;
 use rafx::api::RafxResult;
 use rafx::assets::distill_impl::AssetResource;
@@ -8,13 +7,13 @@ use rafx::base::resource_map::ResourceMap;
 use rafx::distill::loader::handle::Handle;
 use rafx::framework::RenderResources;
 use rafx::nodes::{ExtractJob, ExtractResources, RenderNodeReservations, RenderRegistryBuilder};
+use rafx::renderer::RendererPlugin;
 
 pub struct SpriteStaticResources {
     pub sprite_material: Handle<MaterialAsset>,
 }
 
-#[derive(Default)]
-pub struct SpriteRendererPlugin {}
+pub struct SpriteRendererPlugin;
 
 impl RendererPlugin for SpriteRendererPlugin {
     fn configure_render_registry(
@@ -25,7 +24,7 @@ impl RendererPlugin for SpriteRendererPlugin {
     }
 
     fn initialize_static_resources(
-        &mut self,
+        &self,
         asset_manager: &mut AssetManager,
         asset_resource: &mut AssetResource,
         _extract_resources: &ExtractResources,

@@ -1,5 +1,5 @@
-use crate::game_renderer::render_frame_job::RenderFrameJobResult;
-use crate::game_renderer::RenderFrameJob;
+use super::render_frame_job::RenderFrameJobResult;
+use super::RenderFrameJob;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use rafx::api::RafxPresentableFrame;
 use rafx::framework::RenderResources;

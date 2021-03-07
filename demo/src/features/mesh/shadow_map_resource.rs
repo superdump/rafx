@@ -5,6 +5,7 @@ use crate::features::mesh::{LightId, ShadowMapRenderView};
 use crate::phases::ShadowMapRenderPhase;
 use arrayvec::ArrayVec;
 use fnv::FnvHashMap;
+use legion::*;
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::graph::{PreparedRenderGraph, RenderGraphImageUsageId};
 use rafx::nodes::{
@@ -238,7 +239,6 @@ fn calculate_shadow_map_views(
     render_view_set: &RenderViewSet,
     extract_resources: &ExtractResources,
 ) -> (FnvHashMap<LightId, usize>, Vec<ShadowMapRenderView>) {
-    use legion::*;
     let world_fetch = extract_resources.fetch::<World>();
     let world = &*world_fetch;
 

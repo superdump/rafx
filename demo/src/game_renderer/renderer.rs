@@ -1,6 +1,3 @@
-use crate::phases::TransparentRenderPhase;
-use crate::phases::{OpaqueRenderPhase, UiRenderPhase};
-use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSpace};
 use rafx::assets::{AssetManager, GpuImageData};
@@ -8,21 +5,20 @@ use rafx::framework::{DynResourceAllocatorSet, RenderResources};
 use rafx::framework::{ImageViewResource, ResourceArc};
 use rafx::nodes::{
     ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
-    RenderNodeReservations, RenderPhaseMaskBuilder, RenderView, RenderViewDepthRange,
-    RenderViewSet,
+    RenderNodeReservations, RenderViewSet,
 };
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 use std::sync::{Arc, Mutex};
 
 use super::*;
 
-use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use rafx::api::extra::upload::{RafxTransferUpload, RafxUploadError};
 use rafx::api::{
     RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult,
     RafxSwapchainHelper,
 };
 use rafx::assets::image_upload::ImageUploadParams;
+use rafx::renderer::{RenderGraphGenerator, RendererPlugin, ViewportsResource};
 
 #[derive(Clone)]
 pub struct InvalidResources {
@@ -31,16 +27,9 @@ pub struct InvalidResources {
 }
 
 pub struct GameRendererInner {
-    pub(super) invalid_resources: InvalidResources,
-
-    // Everything that is loaded all the time
-    pub(super) static_resources: GameRendererStaticResources,
-
-    // Everything that requires being created after the swapchain inits
-    pub(super) swapchain_resources: Option<SwapchainResources>,
-
+    pub(super) render_graph_generator: Box<dyn RenderGraphGenerator>,
     pub(super) render_thread: RenderThread,
-    pub(super) plugins: Vec<Box<dyn RendererPlugin>>,
+    pub(super) plugins: Arc<Vec<Box<dyn RendererPlugin>>>,
 }
 
 #[derive(Clone)]
@@ -57,8 +46,10 @@ impl GameRenderer {
         asset_manager: &mut AssetManager,
         graphics_queue: &RafxQueue,
         transfer_queue: &RafxQueue,
-        mut plugins: Vec<Box<dyn RendererPlugin>>,
+        plugins: Vec<Box<dyn RendererPlugin>>,
+        render_graph_generator: Box<dyn RenderGraphGenerator>,
     ) -> RafxResult<Self> {
+        let plugins = Arc::new(plugins);
         let device_context = graphics_queue.device_context();
 
         let dyn_resource_allocator = asset_manager.create_dyn_resource_allocator_set();
@@ -92,10 +83,13 @@ impl GameRenderer {
         )
         .map_err(|x| Into::<RafxError>::into(x))?;
 
-        let static_resources = GameRendererStaticResources::new(asset_resource, asset_manager)?;
+        let invalid_resources = InvalidResources {
+            invalid_image,
+            invalid_cube_map_image,
+        };
 
         let mut render_resources = RenderResources::default();
-        for plugin in &mut plugins {
+        for plugin in &*plugins {
             plugin.initialize_static_resources(
                 asset_manager,
                 asset_resource,
@@ -105,20 +99,16 @@ impl GameRenderer {
             )?;
         }
 
+        render_resources.insert(invalid_resources.clone());
+
         upload.block_until_upload_complete()?;
 
         let render_thread = RenderThread::start(render_resources);
 
         let renderer = GameRendererInner {
-            invalid_resources: InvalidResources {
-                invalid_image,
-                invalid_cube_map_image,
-            },
-            static_resources,
-            swapchain_resources: None,
-
             plugins,
             render_thread,
+            render_graph_generator,
         };
 
         Ok(GameRenderer {
@@ -156,8 +146,6 @@ impl GameRenderer {
     pub fn start_rendering_next_frame(
         &self,
         extract_resources: &mut ExtractResources,
-        window_width: u32,
-        window_height: u32,
     ) -> RafxResult<()> {
         //
         // Block until the previous frame completes being submitted to GPU
@@ -165,14 +153,15 @@ impl GameRenderer {
         let t0 = std::time::Instant::now();
 
         let presentable_frame = {
+            let viewports_resource = extract_resources.fetch::<ViewportsResource>();
             let mut swapchain_helper = extract_resources.fetch_mut::<RafxSwapchainHelper>();
             let mut asset_manager = extract_resources.fetch_mut::<AssetManager>();
             SwapchainHandler::acquire_next_image(
                 &mut *swapchain_helper,
                 &mut *asset_manager,
                 self,
-                window_width,
-                window_height,
+                viewports_resource.main_window_size.width,
+                viewports_resource.main_window_size.height,
             )
         }?;
 
@@ -188,13 +177,7 @@ impl GameRenderer {
             (t1 - t0).as_secs_f32() * 1000.0
         );
 
-        Self::create_and_start_render_job(
-            self,
-            extract_resources,
-            window_width,
-            window_height,
-            presentable_frame,
-        );
+        Self::create_and_start_render_job(self, extract_resources, presentable_frame);
 
         Ok(())
     }
@@ -202,17 +185,10 @@ impl GameRenderer {
     fn create_and_start_render_job(
         game_renderer: &GameRenderer,
         extract_resources: &mut ExtractResources,
-        window_width: u32,
-        window_height: u32,
         presentable_frame: RafxPresentableFrame,
     ) {
-        let result = Self::try_create_render_job(
-            &game_renderer,
-            extract_resources,
-            window_width,
-            window_height,
-            &presentable_frame,
-        );
+        let result =
+            Self::try_create_render_job(&game_renderer, extract_resources, &presentable_frame);
 
         let mut guard = game_renderer.inner.lock().unwrap();
         let game_renderer_inner = &mut *guard;
@@ -230,8 +206,6 @@ impl GameRenderer {
     fn try_create_render_job(
         game_renderer: &GameRenderer,
         extract_resources: &mut ExtractResources,
-        window_width: u32,
-        window_height: u32,
         presentable_frame: &RafxPresentableFrame,
     ) -> RafxResult<RenderFrameJob> {
         //
@@ -266,15 +240,9 @@ impl GameRenderer {
             .lock()
             .unwrap();
 
-        let static_resources = &game_renderer_inner.static_resources;
-        render_resources.insert(static_resources.clone());
-        render_resources.insert(game_renderer_inner.invalid_resources.clone());
-
         //
         // Swapchain Status
         //
-        let swapchain_resources = game_renderer_inner.swapchain_resources.as_mut().unwrap();
-
         let swapchain_image = {
             // Temporary hack to jam a swapchain image into the existing resource lookups.. may want
             // to reconsider this later since the ResourceArc can be held past the lifetime of the
@@ -288,7 +256,10 @@ impl GameRenderer {
                 .get_or_create_image_view(&swapchain_image, None)?
         };
 
-        let swapchain_surface_info = swapchain_resources.swapchain_surface_info.clone();
+        let swapchain_surface_info = render_resources
+            .fetch::<SwapchainResources>()
+            .swapchain_surface_info
+            .clone();
 
         //
         // Build the frame packet - this takes the views and visibility results and creates a
@@ -296,7 +267,7 @@ impl GameRenderer {
         //
         let frame_packet_builder = {
             let mut render_node_reservations = RenderNodeReservations::default();
-            for plugin in &game_renderer_inner.plugins {
+            for plugin in &*game_renderer_inner.plugins {
                 plugin
                     .add_render_node_reservations(&mut render_node_reservations, extract_resources);
             }
@@ -309,11 +280,21 @@ impl GameRenderer {
         //
         // Determine Camera Location
         //
-        let main_view = GameRenderer::calculate_main_view(
-            &render_view_set,
-            window_width,
-            window_height,
-            extract_resources,
+        let viewports_resource = extract_resources.fetch::<ViewportsResource>();
+        let view_meta = viewports_resource
+            .main_view_meta
+            .clone()
+            .unwrap_or_default();
+        let main_window_size = viewports_resource.main_window_size;
+
+        let main_view = render_view_set.create_view(
+            view_meta.eye_position,
+            view_meta.view,
+            view_meta.proj,
+            (main_window_size.width, main_window_size.height),
+            view_meta.depth_range,
+            view_meta.render_phase_mask,
+            view_meta.debug_name,
         );
 
         //
@@ -343,14 +324,18 @@ impl GameRenderer {
             ],
         );
 
-        {
-            let mut shadow_map_resource = render_resources.fetch_mut::<ShadowMapResource>();
-            shadow_map_resource.recalculate_shadow_map_views(
-                &render_view_set,
+        let mut render_views = Vec::default();
+        render_views.push(main_view.clone());
+
+        for plugin in &*game_renderer_inner.plugins {
+            plugin.add_render_views(
                 extract_resources,
+                render_resources,
+                &render_view_set,
                 &frame_packet_builder,
                 static_visibility_node_set,
                 dynamic_visibility_node_set,
+                &mut render_views,
             );
         }
 
@@ -365,7 +350,7 @@ impl GameRenderer {
         // Extract Jobs
         //
         let mut extract_jobs = Vec::default();
-        for plugin in &game_renderer_inner.plugins {
+        for plugin in &*game_renderer_inner.plugins {
             plugin.add_extract_jobs(&extract_resources, render_resources, &mut extract_jobs);
         }
 
@@ -385,94 +370,39 @@ impl GameRenderer {
             let extract_context =
                 RenderJobExtractContext::new(&extract_resources, &render_resources);
 
-            let mut extract_views = Vec::default();
-            extract_views.push(main_view.clone());
-
-            let shadow_map_resource = render_resources.fetch::<ShadowMapResource>();
-            shadow_map_resource.append_render_views(&mut extract_views);
-
-            extract_job_set.extract(&extract_context, &frame_packet, &extract_views)
+            extract_job_set.extract(&extract_context, &frame_packet, &render_views)
         };
 
         render_resources.remove::<AssetManagerRenderResource>();
 
         //TODO: This is now possible to run on the render thread
-        let render_graph = render_graph::build_render_graph(
-            &device_context,
-            &resource_context,
-            asset_manager,
-            swapchain_image,
-            main_view.clone(),
-            swapchain_resources,
-            static_resources,
-            extract_resources,
-            render_resources,
-        )?;
+        let prepared_render_graph = game_renderer_inner
+            .render_graph_generator
+            .generate_render_graph(
+                asset_manager,
+                swapchain_image,
+                main_view.clone(),
+                extract_resources,
+                render_resources,
+            )?;
 
         let game_renderer = game_renderer.clone();
         let graphics_queue = game_renderer.graphics_queue.clone();
+        let plugins = game_renderer_inner.plugins.clone();
 
         let prepared_frame = RenderFrameJob {
             game_renderer,
             prepare_job_set,
-            prepared_render_graph: render_graph.prepared_render_graph,
+            prepared_render_graph,
             resource_context,
             frame_packet,
-            main_view,
             render_registry,
             device_context,
             graphics_queue,
+            plugins,
+            render_views,
         };
 
         Ok(prepared_frame)
-    }
-
-    #[profiling::function]
-    fn calculate_main_view(
-        render_view_set: &RenderViewSet,
-        window_width: u32,
-        window_height: u32,
-        extract_resources: &ExtractResources,
-    ) -> RenderView {
-        let time_state_fetch = extract_resources.fetch::<TimeState>();
-        let time_state = &*time_state_fetch;
-
-        let main_camera_render_phase_mask = RenderPhaseMaskBuilder::default()
-            .add_render_phase::<OpaqueRenderPhase>()
-            .add_render_phase::<TransparentRenderPhase>()
-            .add_render_phase::<UiRenderPhase>()
-            .build();
-
-        const CAMERA_XY_DISTANCE: f32 = 12.0;
-        const CAMERA_Z: f32 = 6.0;
-        const CAMERA_ROTATE_SPEED: f32 = -0.10;
-        const CAMERA_LOOP_OFFSET: f32 = -0.3;
-        let loop_time = time_state.total_time().as_secs_f32();
-        let eye = glam::Vec3::new(
-            CAMERA_XY_DISTANCE * f32::cos(CAMERA_ROTATE_SPEED * loop_time + CAMERA_LOOP_OFFSET),
-            CAMERA_XY_DISTANCE * f32::sin(CAMERA_ROTATE_SPEED * loop_time + CAMERA_LOOP_OFFSET),
-            CAMERA_Z,
-        );
-
-        let aspect_ratio = window_width as f32 / window_height as f32;
-
-        let view = glam::Mat4::look_at_rh(eye, glam::Vec3::zero(), glam::Vec3::new(0.0, 0.0, 1.0));
-
-        let near_plane = 0.01;
-        let proj = glam::Mat4::perspective_infinite_reverse_rh(
-            std::f32::consts::FRAC_PI_4,
-            aspect_ratio,
-            near_plane,
-        );
-
-        render_view_set.create_view(
-            eye,
-            view,
-            proj,
-            (window_width, window_height),
-            RenderViewDepthRange::new_infinite_reverse(near_plane),
-            main_camera_render_phase_mask,
-            "main".to_string(),
-        )
     }
 }

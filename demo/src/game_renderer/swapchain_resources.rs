@@ -1,7 +1,5 @@
-use crate::game_renderer::GameRendererInner;
-use rafx::api::{RafxDeviceContext, RafxFormat, RafxResourceType, RafxResult, RafxSwapchain};
+use rafx::api::{RafxDeviceContext, RafxFormat, RafxResourceType, RafxResult};
 use rafx::framework::graph::SwapchainSurfaceInfo;
-use rafx::framework::ResourceManager;
 
 pub struct SwapchainResources {
     // The images presented by the swapchain
@@ -18,9 +16,6 @@ pub struct SwapchainResources {
 impl SwapchainResources {
     pub fn new(
         device_context: &RafxDeviceContext,
-        _swapchain: &RafxSwapchain,
-        _game_renderer: &mut GameRendererInner,
-        _resource_manager: &mut ResourceManager,
         swapchain_surface_info: SwapchainSurfaceInfo,
     ) -> RafxResult<SwapchainResources> {
         log::debug!("creating swapchain resources");
