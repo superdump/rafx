@@ -17,11 +17,11 @@ use opaque_pass::OpaquePass;
 mod bloom_extract_pass;
 use crate::demo_plugin::DemoStaticResources;
 use crate::features::mesh::shadow_map_resource::ShadowMapResource;
-use crate::game_renderer::SwapchainResources;
 use crate::RenderOptions;
 use bloom_extract_pass::BloomExtractPass;
 use rafx::assets::AssetManager;
 use rafx::renderer::RenderGraphGenerator;
+use rafx::renderer::SwapchainResources;
 
 mod bloom_blur_pass;
 

@@ -1,6 +1,6 @@
-use rafx::assets::distill_impl::AssetResource;
-use rafx::distill::loader::storage::DefaultIndirectionResolver;
-use rafx::distill::loader::{Loader, PackfileReader, RpcIO};
+use rafx_assets::distill::loader::storage::DefaultIndirectionResolver;
+use rafx_assets::distill::loader::{Loader, PackfileReader, RpcIO};
+use rafx_assets::distill_impl::AssetResource;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 

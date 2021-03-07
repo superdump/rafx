@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::game_renderer::daemon::AssetDaemonOpt;
+use rafx::renderer::daemon::AssetDaemonOpt;
 use structopt::StructOpt;
 
 /// Parameters to the asset daemon.

@@ -1,24 +1,24 @@
-use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSpace};
-use rafx::assets::{AssetManager, GpuImageData};
-use rafx::framework::{DynResourceAllocatorSet, RenderResources};
-use rafx::framework::{ImageViewResource, ResourceArc};
-use rafx::nodes::{
+use rafx_assets::distill_impl::AssetResource;
+use rafx_assets::{image_upload, AssetManagerRenderResource, GpuImageDataColorSpace};
+use rafx_assets::{AssetManager, GpuImageData};
+use rafx_framework::nodes::{
     ExtractJobSet, ExtractResources, FramePacketBuilder, RenderJobExtractContext,
     RenderNodeReservations, RenderViewSet,
 };
-use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
+use rafx_framework::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
+use rafx_framework::{DynResourceAllocatorSet, RenderResources};
+use rafx_framework::{ImageViewResource, ResourceArc};
 use std::sync::{Arc, Mutex};
 
 use super::*;
 
-use rafx::api::extra::upload::{RafxTransferUpload, RafxUploadError};
-use rafx::api::{
+use super::{RenderGraphGenerator, RendererPlugin, ViewportsResource};
+use rafx_api::extra::upload::{RafxTransferUpload, RafxUploadError};
+use rafx_api::{
     RafxDeviceContext, RafxError, RafxPresentableFrame, RafxQueue, RafxResourceType, RafxResult,
     RafxSwapchainHelper,
 };
-use rafx::assets::image_upload::ImageUploadParams;
-use rafx::renderer::{RenderGraphGenerator, RendererPlugin, ViewportsResource};
+use rafx_assets::image_upload::ImageUploadParams;
 
 #[derive(Clone)]
 pub struct InvalidResources {

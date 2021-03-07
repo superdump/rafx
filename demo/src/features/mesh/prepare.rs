@@ -1,4 +1,7 @@
 use super::MeshCommandWriter;
+use crate::components::{
+    DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
+};
 use crate::features::mesh::shadow_map_resource::ShadowMapResource;
 use crate::features::mesh::{
     ExtractedDirectionalLight, ExtractedFrameNodeMeshData, ExtractedPointLight, ExtractedSpotLight,
@@ -6,12 +9,6 @@ use crate::features::mesh::{
     PreparedSubmitNodeMeshData, ShadowMapRenderView,
 };
 use crate::phases::{OpaqueRenderPhase, ShadowMapRenderPhase};
-use crate::{
-    components::{
-        DirectionalLightComponent, PointLightComponent, PositionComponent, SpotLightComponent,
-    },
-    game_renderer::InvalidResources,
-};
 use fnv::{FnvHashMap, FnvHashSet};
 use rafx::framework::MaterialPass;
 use rafx::framework::{
@@ -21,6 +18,7 @@ use rafx::nodes::{
     FeatureCommandWriter, FeatureSubmitNodes, FramePacket, PerViewNode, PrepareJob, RenderFeature,
     RenderFeatureIndex, RenderJobPrepareContext, RenderView, RenderViewIndex, ViewSubmitNodes,
 };
+use rafx::renderer::InvalidResources;
 
 pub struct PreparedDirectionalLight<'a> {
     light: &'a DirectionalLightComponent,

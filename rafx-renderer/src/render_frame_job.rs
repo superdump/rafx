@@ -1,12 +1,12 @@
 use super::GameRenderer;
-use rafx::api::{RafxCommandBuffer, RafxDeviceContext, RafxQueue};
-use rafx::api::{RafxPresentableFrame, RafxResult};
-use rafx::framework::{DynCommandBuffer, RenderResources, ResourceContext};
-use rafx::graph::PreparedRenderGraph;
-use rafx::nodes::{
+use super::RendererPlugin;
+use rafx_api::{RafxCommandBuffer, RafxDeviceContext, RafxQueue};
+use rafx_api::{RafxPresentableFrame, RafxResult};
+use rafx_framework::graph::PreparedRenderGraph;
+use rafx_framework::nodes::{
     FramePacket, PrepareJobSet, RenderJobPrepareContext, RenderRegistry, RenderView,
 };
-use rafx::renderer::RendererPlugin;
+use rafx_framework::{DynCommandBuffer, RenderResources, ResourceContext};
 use std::sync::Arc;
 
 pub struct RenderFrameJobResult;

@@ -4,7 +4,6 @@ use crate::features::debug3d::{Debug3DRendererPlugin, DebugDraw3DResource};
 use crate::features::mesh::{MeshRenderNodeSet, MeshRendererPlugin};
 use crate::features::sprite::{SpriteRenderNodeSet, SpriteRendererPlugin};
 use crate::features::text::{TextRendererPlugin, TextResource};
-use crate::game_renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
 use crate::render_graph_generator::DemoRenderGraphGenerator;
 use crate::DemoRendererPlugin;
 use legion::Resources;
@@ -13,6 +12,7 @@ use rafx::assets::distill_impl::AssetResource;
 use rafx::assets::AssetManager;
 use rafx::nodes::{ExtractResources, RenderRegistry};
 use rafx::renderer::ViewportsResource;
+use rafx::renderer::{AssetSource, GameRenderer, RendererBuilder, SwapchainHandler};
 use rafx::visibility::{DynamicVisibilityNodeSet, StaticVisibilityNodeSet};
 
 pub struct Sdl2Systems {

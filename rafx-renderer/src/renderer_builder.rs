@@ -1,10 +1,10 @@
 use super::daemon::AssetDaemonOpt;
 use super::{daemon, GameRenderer};
-use rafx::api::{RafxApi, RafxQueueType, RafxResult};
-use rafx::assets::distill_impl::AssetResource;
-use rafx::assets::AssetManager;
-use rafx::nodes::ExtractResources;
-use rafx::renderer::{RenderGraphGenerator, RendererPlugin};
+use super::{RenderGraphGenerator, RendererPlugin};
+use rafx_api::{RafxApi, RafxQueueType, RafxResult};
+use rafx_assets::distill_impl::AssetResource;
+use rafx_assets::{AssetManager, UploadQueueConfig};
+use rafx_framework::nodes::{ExtractResources, RenderRegistryBuilder};
 
 pub enum AssetSource {
     Packfile(std::path::PathBuf),
@@ -55,7 +55,7 @@ impl RendererBuilder {
                 if !external_daemon {
                     log::info!("Hosting local daemon at {:?}", daemon_args.address);
 
-                    let mut asset_daemon = rafx::assets::distill_impl::default_daemon()
+                    let mut asset_daemon = rafx_assets::distill_impl::default_daemon()
                         .with_db_path(daemon_args.db_dir)
                         .with_address(daemon_args.address)
                         .with_asset_dirs(daemon_args.asset_dirs);
@@ -63,9 +63,6 @@ impl RendererBuilder {
                     for plugin in &self.plugins {
                         asset_daemon = plugin.configure_asset_daemon(asset_daemon);
                     }
-
-                    let asset_daemon =
-                        asset_daemon.with_importer("basis", rafx::assets::BasisImageImporter);
 
                     // Spawn the daemon in a background thread.
                     std::thread::spawn(move || {
@@ -80,7 +77,7 @@ impl RendererBuilder {
             }
         };
 
-        let mut render_registry_builder = rafx::nodes::RenderRegistryBuilder::default();
+        let mut render_registry_builder = RenderRegistryBuilder::default();
         for plugin in &self.plugins {
             render_registry_builder = plugin.configure_render_registry(render_registry_builder);
         }
@@ -92,10 +89,10 @@ impl RendererBuilder {
         let graphics_queue = device_context.create_queue(RafxQueueType::Graphics)?;
         let transfer_queue = device_context.create_queue(RafxQueueType::Transfer)?;
 
-        let mut asset_manager = rafx::assets::AssetManager::new(
+        let mut asset_manager = AssetManager::new(
             &device_context,
             &render_registry,
-            rafx::assets::UploadQueueConfig {
+            UploadQueueConfig {
                 max_concurrent_uploads: 4,
                 max_new_uploads_in_single_frame: 4,
                 max_bytes_per_upload: 64 * 1024 * 1024,

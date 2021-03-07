@@ -10,18 +10,17 @@ use rafx::api::{RafxExtents2D, RafxResult, RafxSwapchainHelper};
 use rafx::assets::AssetManager;
 
 use crate::daemon_args::AssetDaemonArgs;
-use crate::game_renderer::{AssetSource, GameRenderer};
 use crate::scenes::SceneManager;
 use crate::time::TimeState;
 use rafx::assets::distill_impl::AssetResource;
 use rafx::nodes::ExtractResources;
 use rafx::renderer::ViewportsResource;
+use rafx::renderer::{AssetSource, GameRenderer};
 
 mod assets;
 mod components;
 pub mod daemon_args;
 mod features;
-mod game_renderer;
 mod init;
 mod phases;
 mod render_graph_generator;

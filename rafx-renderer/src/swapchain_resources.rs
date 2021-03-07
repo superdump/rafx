@@ -1,5 +1,5 @@
-use rafx::api::{RafxDeviceContext, RafxFormat, RafxResourceType, RafxResult};
-use rafx::framework::graph::SwapchainSurfaceInfo;
+use rafx_api::{RafxDeviceContext, RafxFormat, RafxResourceType, RafxResult};
+use rafx_framework::graph::SwapchainSurfaceInfo;
 
 pub struct SwapchainResources {
     // The images presented by the swapchain
@@ -25,14 +25,14 @@ impl SwapchainResources {
 
         let default_color_format_hdr = device_context
             .find_supported_format(
-                &rafx::api::recommended_formats::COLOR_FORMATS_HDR,
+                &rafx_api::recommended_formats::COLOR_FORMATS_HDR,
                 RafxResourceType::RENDER_TARGET_COLOR,
             )
             .ok_or_else(|| "Could not find a supported hdr color format")?;
 
         let default_depth_format = device_context
             .find_supported_format(
-                &rafx::api::recommended_formats::DEPTH_FORMATS,
+                &rafx_api::recommended_formats::DEPTH_FORMATS,
                 RafxResourceType::RENDER_TARGET_DEPTH_STENCIL,
             )
             .ok_or_else(|| "Could not find a supported depth format")?;

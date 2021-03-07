@@ -58,25 +58,29 @@ renderer = ["rafx-renderer", "assets"]
 profile-with-puffin = [
     "rafx-framework/profile-with-puffin",
     "rafx-assets/profile-with-puffin",
-    "rafx-api/profile-with-puffin"
+    "rafx-api/profile-with-puffin",
+    "rafx-renderer/profile-with-puffin"
 ]
 
 profile-with-optick = [
     "rafx-framework/profile-with-optick",
     "rafx-assets/profile-with-optick",
-    "rafx-api/profile-with-optick"
+    "rafx-api/profile-with-optick",
+    "rafx-renderer/profile-with-optick"
 ]
 
 profile-with-superluminal = [
     "rafx-framework/profile-with-superluminal",
     "rafx-assets/profile-with-superluminal",
-    "rafx-api/profile-with-superluminal"
+    "rafx-api/profile-with-superluminal",
+    "rafx-renderer/profile-with-superluminal"
 ]
 
 profile-with-tracy = [
     "rafx-framework/profile-with-tracy",
     "rafx-assets/profile-with-tracy",
-    "rafx-api/profile-with-tracy"
+    "rafx-api/profile-with-tracy",
+    "rafx-renderer/profile-with-tracy"
 ]
 
 #

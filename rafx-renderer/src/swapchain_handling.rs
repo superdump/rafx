@@ -1,12 +1,12 @@
 use super::swapchain_resources::SwapchainResources;
 use super::GameRenderer;
-use rafx::api::raw_window_handle::HasRawWindowHandle;
-use rafx::api::{
+use rafx_api::raw_window_handle::HasRawWindowHandle;
+use rafx_api::{
     RafxDeviceContext, RafxExtents2D, RafxPresentableFrame, RafxResult, RafxSwapchain,
     RafxSwapchainDef, RafxSwapchainEventListener, RafxSwapchainHelper,
 };
-use rafx::assets::AssetManager;
-use rafx::framework::graph::SwapchainSurfaceInfo;
+use rafx_assets::AssetManager;
+use rafx_framework::graph::SwapchainSurfaceInfo;
 
 pub struct SwapchainHandler<'a> {
     pub asset_manager: &'a mut AssetManager,
@@ -38,11 +38,7 @@ impl<'a> SwapchainHandler<'a> {
                 game_renderer,
             };
 
-            rafx::api::RafxSwapchainHelper::new(
-                &device_context,
-                swapchain,
-                Some(&mut lifetime_listener),
-            )?
+            RafxSwapchainHelper::new(&device_context, swapchain, Some(&mut lifetime_listener))?
         };
 
         Ok(swapchain_helper)
