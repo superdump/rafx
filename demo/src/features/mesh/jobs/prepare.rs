@@ -12,7 +12,7 @@ use rafx::framework::{
     DescriptorSetAllocatorRef, MaterialPassResource, ResourceArc, ResourceContext,
 };
 
-use glam::Mat4;
+use glam::{Mat3, Mat4};
 use rafx::renderer::InvalidResources;
 use shaders::depth_vert::PerObjectDataUniform as ShadowPerObjectShaderParam;
 use shaders::depth_vert::PerViewDataUniform as ShadowPerViewShaderParam;
@@ -264,9 +264,41 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
         });
 
         let model = world_transform.to_cols_array_2d();
+        let inv_trans_model3 = {
+            let model3 = Mat3::from_cols_array_2d(&[
+                [model[0][0], model[0][1], model[0][2]],
+                [model[1][0], model[1][1], model[1][2]],
+                [model[2][0], model[2][1], model[2][2]],
+            ]);
+            let inv_trans_model3 = model3.inverse().transpose().to_cols_array_2d();
+            [
+                [
+                    inv_trans_model3[0][0],
+                    inv_trans_model3[0][1],
+                    inv_trans_model3[0][2],
+                    0.0,
+                ],
+                [
+                    inv_trans_model3[1][0],
+                    inv_trans_model3[1][1],
+                    inv_trans_model3[1][2],
+                    0.0,
+                ],
+                [
+                    inv_trans_model3[2][0],
+                    inv_trans_model3[2][1],
+                    inv_trans_model3[2][2],
+                    0.0,
+                ],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        };
         let descriptor_set_allocator = &mut job_context.descriptor_set_allocator;
         let depth_descriptor_set = {
-            let per_object_data = ShadowPerObjectShaderParam { model };
+            let per_object_data = ShadowPerObjectShaderParam {
+                model,
+                inv_trans_model3,
+            };
 
             let per_instance_descriptor_set_layout = &self
                 .depth_material_pass
@@ -655,7 +687,22 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
 
             per_view_data.view = view.view_matrix().to_cols_array_2d();
             per_view_data.view_proj = view.view_proj().to_cols_array_2d();
-
+            per_view_data.inv_view3 = {
+                let view_temp = view.view_matrix().to_cols_array_2d();
+                let inv_view3 = Mat3::from_cols_array_2d(&[
+                    [view_temp[0][0], view_temp[0][1], view_temp[0][2]],
+                    [view_temp[1][0], view_temp[1][1], view_temp[1][2]],
+                    [view_temp[2][0], view_temp[2][1], view_temp[2][2]],
+                ])
+                .inverse()
+                .to_cols_array_2d();
+                [
+                    [inv_view3[0][0], inv_view3[0][1], inv_view3[0][2], 0.0],
+                    [inv_view3[1][0], inv_view3[1][1], inv_view3[1][2], 0.0],
+                    [inv_view3[2][0], inv_view3[2][1], inv_view3[2][2], 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            };
             let per_instance_descriptor_set_layout = &self
                 .depth_material_pass
                 .as_ref()
