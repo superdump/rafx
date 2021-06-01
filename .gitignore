@@ -1,6 +1,7 @@
 /target
 /assets-unused
 Cargo.lock
+.cargo
 .idea
 .assets_db
 .DS_store
