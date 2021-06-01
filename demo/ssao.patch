@@ -1,0 +1,638 @@
+diff --git a/demo/assets/materials/depth.material b/demo/assets/materials/depth.material
+index 03190f82..9e840567 100644
+--- a/demo/assets/materials/depth.material
++++ b/demo/assets/materials/depth.material
+@@ -12,7 +12,11 @@
+                     shader_module: "../shaders/depth.vert.cookedshaderpackage",
+                     entry_name: "main"
+                 ),
+-                // No fragment shader required
++                (
++                    stage: Fragment,
++                    shader_module: "../shaders/depth.frag.cookedshaderpackage",
++                    entry_name: "main"
++                ),
+             ],
+         )
+     ]
+diff --git a/demo/assets/shaders/depth.vert.cookedshaderpackage b/demo/assets/shaders/depth.vert.cookedshaderpackage
+index 4c53d93b..c361b77c 100644
+Binary files a/demo/assets/shaders/depth.vert.cookedshaderpackage and b/demo/assets/shaders/depth.vert.cookedshaderpackage differ
+diff --git a/demo/shaders/generated_msl/depth.vert.metal b/demo/shaders/generated_msl/depth.vert.metal
+index e9e1a893..5d27cf81 100644
+--- a/demo/shaders/generated_msl/depth.vert.metal
++++ b/demo/shaders/generated_msl/depth.vert.metal
+@@ -7,11 +7,24 @@ struct PerViewData
+ {
+     float4x4 view;
+     float4x4 view_proj;
++    float4x4 inv_view3;
+ };
+ 
+ struct PerObjectData
+ {
+     float4x4 model;
++    float4x4 inv_trans_model3;
++};
++
++struct MaterialData
++{
++    float normal_texture_scale;
++    uint has_normal_texture;
++};
++
++struct MaterialDataUbo
++{
++    MaterialData data;
+ };
+ 
+ struct spvDescriptorSetBuffer0
+@@ -19,6 +32,11 @@ struct spvDescriptorSetBuffer0
+     constant PerViewData* per_view_data [[id(0)]];
+ };
+ 
++struct spvDescriptorSetBuffer1
++{
++    constant MaterialDataUbo* per_material_data [[id(0)]];
++};
++
+ struct spvDescriptorSetBuffer2
+ {
+     constant PerObjectData* per_object_data [[id(0)]];
+@@ -26,19 +44,23 @@ struct spvDescriptorSetBuffer2
+ 
+ struct main0_out
+ {
++    float3 out_normal_vs [[user(locn0)]];
+     float4 gl_Position [[position]];
+ };
+ 
+ struct main0_in
+ {
+     float3 in_pos [[attribute(0)]];
++    float3 in_normal [[attribute(1)]];
+ };
+ 
+-vertex main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant spvDescriptorSetBuffer2& spvDescriptorSet2 [[buffer(2)]])
++vertex main0_out main0(main0_in in [[stage_in]], constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant spvDescriptorSetBuffer1& spvDescriptorSet1 [[buffer(1)]], constant spvDescriptorSetBuffer2& spvDescriptorSet2 [[buffer(2)]])
+ {
++    constexpr sampler smp(filter::linear, mip_filter::linear, address::repeat, compare_func::never, max_anisotropy(16));
+     main0_out out = {};
+-    float4x4 model_view_proj = (*spvDescriptorSet0.per_view_data).view_proj * (*spvDescriptorSet2.per_object_data).model;
+-    out.gl_Position = model_view_proj * float4(in.in_pos, 1.0);
++    float3 normal_vs = normalize((float3x3((*spvDescriptorSet0.per_view_data).inv_view3[0].xyz, (*spvDescriptorSet0.per_view_data).inv_view3[1].xyz, (*spvDescriptorSet0.per_view_data).inv_view3[2].xyz) * float3x3((*spvDescriptorSet2.per_object_data).inv_trans_model3[0].xyz, (*spvDescriptorSet2.per_object_data).inv_trans_model3[1].xyz, (*spvDescriptorSet2.per_object_data).inv_trans_model3[2].xyz)) * in.in_normal);
++    out.out_normal_vs = (normal_vs * 0.5) + float3(0.5);
++    out.gl_Position = ((*spvDescriptorSet0.per_view_data).view_proj * (*spvDescriptorSet2.per_object_data).model) * float4(in.in_pos, 1.0);
+     return out;
+ }
+ 
+diff --git a/demo/shaders/glsl/depth.glsl b/demo/shaders/glsl/depth.glsl
+deleted file mode 100644
+index 7e0585d9..00000000
+--- a/demo/shaders/glsl/depth.glsl
++++ /dev/null
+@@ -1,12 +0,0 @@
+-// @[export]
+-// @[internal_buffer]
+-layout (set = 0, binding = 0) uniform PerViewData {
+-    mat4 view;
+-    mat4 view_proj;
+-} per_view_data;
+-
+-// @[export]
+-// @[internal_buffer]
+-layout(set = 2, binding = 0) uniform PerObjectData {
+-    mat4 model;
+-} per_object_data;
+\ No newline at end of file
+diff --git a/demo/shaders/glsl/depth.vert b/demo/shaders/glsl/depth.vert
+index 4a9aaa46..ccb7f1fc 100644
+--- a/demo/shaders/glsl/depth.vert
++++ b/demo/shaders/glsl/depth.vert
+@@ -2,12 +2,47 @@
+ #extension GL_ARB_separate_shader_objects : enable
+ #extension GL_ARB_shading_language_420pack : enable
+ 
+-#include "depth.glsl"
++#include "depth_uniform.glsl"
+ 
+ // @[semantic("POSITION")]
+ layout (location = 0) in vec3 in_pos;
++// @[semantic("NORMAL")]
++layout (location = 1) in vec3 in_normal;
++
++#ifdef PBR_TEXTURES
++// @[semantic("TEXCOORDS")]
++layout (location = 2) in vec2 in_uv;
++// @[semantic("TANGENT")]
++layout (location = 3) in vec4 in_tangent;
++#endif
++
++layout (location = 0) out vec3 out_normal_vs;
++
++#ifdef PBR_TEXTURES
++layout (location = 1) out vec2 out_uv;
++layout (location = 2) out vec4 out_tangent_vs;
++layout (location = 3) out vec3 out_bitangent_vs;
++#endif
+ 
+ void main() {
+-    mat4 model_view_proj = per_view_data.view_proj * per_object_data.model;
+-    gl_Position = model_view_proj * vec4(in_pos, 1.0);
++    // For non-uniform scaling, the model matrix must be inverse-transposed which has the effect of
++    // applying inverse scaling while retaining the correct rotation
++    // The normals must be re-normalised after applying the inverse-transpose because this can affect
++    // the length of the normal
++    // The normals need to rotate inverse to the view rotation
++    // Using mat3 is important else the translation in the model matrix can have other unintended effects
++    vec3 normal_vs = normalize(mat3(per_view_data.inv_view3) * mat3(per_object_data.inv_trans_model3) * in_normal);
++    out_normal_vs = normal_vs * 0.5 + 0.5;
++
++#ifdef PBR_TEXTURES
++    out_uv = in_uv;
++
++    mat3 model_view = mat3(per_view_data.view) * mat3(per_object_data.model);
++    vec4 tangent_vs = vec4(normalize(model_view * in_tangent.xyz), in_tangent.w);
++    out_tangent_vs = tangent_vs;
++
++    out_bitangent_vs = cross(normal_vs, tangent_vs.xyz) * tangent_vs.w;
++#endif
++
++    gl_Position = per_view_data.view_proj * per_object_data.model * vec4(in_pos, 1.0);
+ }
+diff --git a/demo/shaders/src/depth_vert.rs b/demo/shaders/src/depth_vert.rs
+index b232b9d9..16f49100 100644
+--- a/demo/shaders/src/depth_vert.rs
++++ b/demo/shaders/src/depth_vert.rs
+@@ -13,39 +13,83 @@ use rafx_framework::{
+ #[derive(Copy, Clone, Debug)]
+ #[repr(C)]
+ pub struct PerObjectDataStd140 {
+-    pub model: [[f32; 4]; 4], // +0 (size: 64)
+-} // 64 bytes
++    pub model: [[f32; 4]; 4],            // +0 (size: 64)
++    pub inv_trans_model3: [[f32; 4]; 4], // +64 (size: 64)
++} // 128 bytes
+ 
+ impl Default for PerObjectDataStd140 {
+     fn default() -> Self {
+         PerObjectDataStd140 {
+             model: <[[f32; 4]; 4]>::default(),
++            inv_trans_model3: <[[f32; 4]; 4]>::default(),
+         }
+     }
+ }
+ 
+ pub type PerObjectDataUniform = PerObjectDataStd140;
+ 
++#[derive(Copy, Clone, Debug)]
++#[repr(C)]
++pub struct MaterialDataStd140 {
++    pub normal_texture_scale: f32, // +0 (size: 4)
++    pub has_normal_texture: u32,   // +4 (size: 4)
++    pub _padding0: [u8; 8],        // +8 (size: 8)
++} // 16 bytes
++
++impl Default for MaterialDataStd140 {
++    fn default() -> Self {
++        MaterialDataStd140 {
++            normal_texture_scale: <f32>::default(),
++            has_normal_texture: <u32>::default(),
++            _padding0: [u8::default(); 8],
++        }
++    }
++}
++
++pub type MaterialDataUniform = MaterialDataStd140;
++
+ #[derive(Copy, Clone, Debug)]
+ #[repr(C)]
+ pub struct PerViewDataStd140 {
+     pub view: [[f32; 4]; 4],      // +0 (size: 64)
+     pub view_proj: [[f32; 4]; 4], // +64 (size: 64)
+-} // 128 bytes
++    pub inv_view3: [[f32; 4]; 4], // +128 (size: 64)
++} // 192 bytes
+ 
+ impl Default for PerViewDataStd140 {
+     fn default() -> Self {
+         PerViewDataStd140 {
+             view: <[[f32; 4]; 4]>::default(),
+             view_proj: <[[f32; 4]; 4]>::default(),
++            inv_view3: <[[f32; 4]; 4]>::default(),
+         }
+     }
+ }
+ 
+ pub type PerViewDataUniform = PerViewDataStd140;
+ 
++#[derive(Copy, Clone, Debug)]
++#[repr(C)]
++pub struct MaterialDataUboStd140 {
++    pub data: MaterialDataStd140, // +0 (size: 16)
++} // 16 bytes
++
++impl Default for MaterialDataUboStd140 {
++    fn default() -> Self {
++        MaterialDataUboStd140 {
++            data: <MaterialDataStd140>::default(),
++        }
++    }
++}
++
++pub type MaterialDataUboUniform = MaterialDataUboStd140;
++
+ pub const PER_VIEW_DATA_DESCRIPTOR_SET_INDEX: usize = 0;
+ pub const PER_VIEW_DATA_DESCRIPTOR_BINDING_INDEX: usize = 0;
++pub const SMP_DESCRIPTOR_SET_INDEX: usize = 0;
++pub const SMP_DESCRIPTOR_BINDING_INDEX: usize = 1;
++pub const PER_MATERIAL_DATA_DESCRIPTOR_SET_INDEX: usize = 1;
++pub const PER_MATERIAL_DATA_DESCRIPTOR_BINDING_INDEX: usize = 0;
+ pub const PER_OBJECT_DATA_DESCRIPTOR_SET_INDEX: usize = 2;
+ pub const PER_OBJECT_DATA_DESCRIPTOR_BINDING_INDEX: usize = 0;
+ 
+@@ -124,6 +168,83 @@ impl DescriptorSet0 {
+     }
+ }
+ 
++pub struct DescriptorSet1Args<'a> {
++    pub per_material_data: &'a MaterialDataUboUniform,
++}
++
++impl<'a> DescriptorSetInitializer<'a> for DescriptorSet1Args<'a> {
++    type Output = DescriptorSet1;
++
++    fn create_dyn_descriptor_set(
++        descriptor_set: DynDescriptorSet,
++        args: Self,
++    ) -> Self::Output {
++        let mut descriptor = DescriptorSet1(descriptor_set);
++        descriptor.set_args(args);
++        descriptor
++    }
++
++    fn create_descriptor_set(
++        descriptor_set_allocator: &mut DescriptorSetAllocator,
++        descriptor_set: DynDescriptorSet,
++        args: Self,
++    ) -> RafxResult<DescriptorSetArc> {
++        let mut descriptor = Self::create_dyn_descriptor_set(descriptor_set, args);
++        descriptor.0.flush(descriptor_set_allocator)?;
++        Ok(descriptor.0.descriptor_set().clone())
++    }
++}
++
++impl<'a> DescriptorSetWriter<'a> for DescriptorSet1Args<'a> {
++    fn write_to(
++        descriptor_set: &mut DescriptorSetWriterContext,
++        args: Self,
++    ) {
++        descriptor_set.set_buffer_data(
++            PER_MATERIAL_DATA_DESCRIPTOR_BINDING_INDEX as u32,
++            args.per_material_data,
++        );
++    }
++}
++
++pub struct DescriptorSet1(pub DynDescriptorSet);
++
++impl DescriptorSet1 {
++    pub fn set_args_static(
++        descriptor_set: &mut DynDescriptorSet,
++        args: DescriptorSet1Args,
++    ) {
++        descriptor_set.set_buffer_data(
++            PER_MATERIAL_DATA_DESCRIPTOR_BINDING_INDEX as u32,
++            args.per_material_data,
++        );
++    }
++
++    pub fn set_args(
++        &mut self,
++        args: DescriptorSet1Args,
++    ) {
++        self.set_per_material_data(args.per_material_data);
++    }
++
++    pub fn set_per_material_data(
++        &mut self,
++        per_material_data: &MaterialDataUboUniform,
++    ) {
++        self.0.set_buffer_data(
++            PER_MATERIAL_DATA_DESCRIPTOR_BINDING_INDEX as u32,
++            per_material_data,
++        );
++    }
++
++    pub fn flush(
++        &mut self,
++        descriptor_set_allocator: &mut DescriptorSetAllocator,
++    ) -> RafxResult<()> {
++        self.0.flush(descriptor_set_allocator)
++    }
++}
++
+ pub struct DescriptorSet2Args<'a> {
+     pub per_object_data: &'a PerObjectDataUniform,
+ }
+@@ -207,20 +328,57 @@ mod test {
+ 
+     #[test]
+     fn test_struct_per_object_data_std140() {
+-        assert_eq!(std::mem::size_of::<PerObjectDataStd140>(), 64);
++        assert_eq!(std::mem::size_of::<PerObjectDataStd140>(), 128);
+         assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
+         assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
+         assert_eq!(memoffset::offset_of!(PerObjectDataStd140, model), 0);
++        assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
++        assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
++        assert_eq!(
++            memoffset::offset_of!(PerObjectDataStd140, inv_trans_model3),
++            64
++        );
++    }
++
++    #[test]
++    fn test_struct_material_data_std140() {
++        assert_eq!(std::mem::size_of::<MaterialDataStd140>(), 16);
++        assert_eq!(std::mem::size_of::<f32>(), 4);
++        assert_eq!(std::mem::align_of::<f32>(), 4);
++        assert_eq!(
++            memoffset::offset_of!(MaterialDataStd140, normal_texture_scale),
++            0
++        );
++        assert_eq!(std::mem::size_of::<u32>(), 4);
++        assert_eq!(std::mem::align_of::<u32>(), 4);
++        assert_eq!(
++            memoffset::offset_of!(MaterialDataStd140, has_normal_texture),
++            4
++        );
++        assert_eq!(std::mem::size_of::<[u8; 8]>(), 8);
++        assert_eq!(std::mem::align_of::<[u8; 8]>(), 1);
++        assert_eq!(memoffset::offset_of!(MaterialDataStd140, _padding0), 8);
+     }
+ 
+     #[test]
+     fn test_struct_per_view_data_std140() {
+-        assert_eq!(std::mem::size_of::<PerViewDataStd140>(), 128);
++        assert_eq!(std::mem::size_of::<PerViewDataStd140>(), 192);
+         assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
+         assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
+         assert_eq!(memoffset::offset_of!(PerViewDataStd140, view), 0);
+         assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
+         assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
+         assert_eq!(memoffset::offset_of!(PerViewDataStd140, view_proj), 64);
++        assert_eq!(std::mem::size_of::<[[f32; 4]; 4]>(), 64);
++        assert_eq!(std::mem::align_of::<[[f32; 4]; 4]>(), 4);
++        assert_eq!(memoffset::offset_of!(PerViewDataStd140, inv_view3), 128);
++    }
++
++    #[test]
++    fn test_struct_material_data_ubo_std140() {
++        assert_eq!(std::mem::size_of::<MaterialDataUboStd140>(), 16);
++        assert_eq!(std::mem::size_of::<MaterialDataStd140>(), 16);
++        assert_eq!(std::mem::align_of::<MaterialDataStd140>(), 4);
++        assert_eq!(memoffset::offset_of!(MaterialDataUboStd140, data), 0);
+     }
+ }
+diff --git a/demo/shaders/src/lib.rs b/demo/shaders/src/lib.rs
+index 588397b2..7489ee21 100644
+--- a/demo/shaders/src/lib.rs
++++ b/demo/shaders/src/lib.rs
+@@ -6,6 +6,7 @@ pub mod bloom_extract_frag;
+ pub mod compute_test_comp;
+ pub mod debug_frag;
+ pub mod debug_vert;
++pub mod depth_frag;
+ pub mod depth_vert;
+ pub mod egui_frag;
+ pub mod egui_vert;
+@@ -22,6 +23,7 @@ pub mod skybox_frag;
+ pub mod skybox_vert;
+ pub mod sprite_frag;
+ pub mod sprite_vert;
++pub mod ssao_frag;
+ pub mod text_frag;
+ pub mod text_vert;
+ pub mod tile_layer_frag;
+diff --git a/demo/src/features/mesh/internal/frame_packet.rs b/demo/src/features/mesh/internal/frame_packet.rs
+index 3017050b..df51fa3f 100644
+--- a/demo/src/features/mesh/internal/frame_packet.rs
++++ b/demo/src/features/mesh/internal/frame_packet.rs
+@@ -18,6 +18,7 @@ pub type MeshRenderObjectStaticData = MeshRenderObject;
+ 
+ pub struct MeshPerFrameData {
+     pub depth_material_pass: Option<ResourceArc<MaterialPassResource>>,
++    pub ssao_material_pass: Option<ResourceArc<MaterialPassResource>>,
+ }
+ 
+ pub struct MeshRenderObjectInstanceData {
+diff --git a/demo/src/features/mesh/jobs/extract.rs b/demo/src/features/mesh/jobs/extract.rs
+index 8bd13a94..0ecf0947 100644
+--- a/demo/src/features/mesh/jobs/extract.rs
++++ b/demo/src/features/mesh/jobs/extract.rs
+@@ -14,6 +14,7 @@ pub struct MeshExtractJob<'extract> {
+     world: ResourceRefBorrow<'extract, World>,
+     asset_manager: ReadBorrow<'extract, AssetManagerRenderResource>,
+     depth_material: Handle<MaterialAsset>,
++    ssao_material: Handle<MaterialAsset>,
+     render_objects: MeshRenderObjectSet,
+ }
+ 
+@@ -22,6 +23,7 @@ impl<'extract> MeshExtractJob<'extract> {
+         extract_context: &RenderJobExtractContext<'extract>,
+         frame_packet: Box<MeshFramePacket>,
+         depth_material: Handle<MaterialAsset>,
++        ssao_material: Handle<MaterialAsset>,
+         render_objects: MeshRenderObjectSet,
+     ) -> Arc<dyn RenderFeatureExtractJob<'extract> + 'extract> {
+         Arc::new(ExtractJob::new(
+@@ -31,6 +33,7 @@ impl<'extract> MeshExtractJob<'extract> {
+                     .render_resources
+                     .fetch::<AssetManagerRenderResource>(),
+                 depth_material,
++                ssao_material,
+                 render_objects,
+             },
+             frame_packet,
+@@ -53,6 +56,12 @@ impl<'extract> ExtractJobEntryPoints<'extract> for MeshExtractJob<'extract> {
+                     .unwrap()
+                     .get_single_material_pass()
+                     .ok(),
++                ssao_material_pass: self
++                    .asset_manager
++                    .committed_asset(&self.ssao_material)
++                    .unwrap()
++                    .get_single_material_pass()
++                    .ok(),
+             });
+     }
+ 
+diff --git a/demo/src/features/mesh/jobs/prepare.rs b/demo/src/features/mesh/jobs/prepare.rs
+index e4eb7a52..642ce29b 100644
+--- a/demo/src/features/mesh/jobs/prepare.rs
++++ b/demo/src/features/mesh/jobs/prepare.rs
+@@ -12,7 +12,7 @@ use rafx::framework::{
+     DescriptorSetAllocatorRef, MaterialPassResource, ResourceArc, ResourceContext,
+ };
+ 
+-use glam::Mat4;
++use glam::{Mat3, Mat4};
+ use rafx::renderer::InvalidResources;
+ use shaders::depth_vert::PerObjectDataUniform as ShadowPerObjectShaderParam;
+ use shaders::depth_vert::PerViewDataUniform as ShadowPerViewShaderParam;
+@@ -48,6 +48,7 @@ pub struct MeshPrepareJob<'prepare> {
+     requires_textured_descriptor_sets: bool,
+     requires_untextured_descriptor_sets: bool,
+     depth_material_pass: Option<ResourceArc<MaterialPassResource>>,
++    ssao_material_pass: Option<ResourceArc<MaterialPassResource>>,
+     shadow_map_data: ReadBorrow<'prepare, ShadowMapResource>,
+     invalid_resources: ReadBorrow<'prepare, InvalidResources>,
+     mesh_part_descriptor_sets: Arc<AtomicOnceCellStack<MeshPartDescriptorSetPair>>,
+@@ -111,6 +112,13 @@ impl<'prepare> MeshPrepareJob<'prepare> {
+                         .depth_material_pass
+                         .clone()
+                 },
++                ssao_material_pass: {
++                    frame_packet
++                        .per_frame_data()
++                        .get()
++                        .ssao_material_pass
++                        .clone()
++                },
+                 shadow_map_data: {
+                     prepare_context
+                         .render_resources
+@@ -264,9 +272,23 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
+         });
+ 
+         let model = world_transform.to_cols_array_2d();
++        let inv_trans_model3 = {
++            let model3 = Mat3::from_cols_array_2d(&[
++                [model[0][0], model[0][1], model[0][2]],
++                [model[1][0], model[1][1], model[1][2]],
++                [model[2][0], model[2][1], model[2][2]],
++            ]);
++            let inv_trans_model3 = model3.inverse().transpose().to_cols_array_2d();
++            [
++                [inv_trans_model3[0][0], inv_trans_model3[0][1], inv_trans_model3[0][2], 0.0],
++                [inv_trans_model3[1][0], inv_trans_model3[1][1], inv_trans_model3[1][2], 0.0],
++                [inv_trans_model3[2][0], inv_trans_model3[2][1], inv_trans_model3[2][2], 0.0],
++                [0.0, 0.0, 0.0, 1.0],
++            ]
++        };
+         let descriptor_set_allocator = &mut job_context.descriptor_set_allocator;
+         let depth_descriptor_set = {
+-            let per_object_data = ShadowPerObjectShaderParam { model };
++            let per_object_data = ShadowPerObjectShaderParam { model, inv_trans_model3 };
+ 
+             let per_instance_descriptor_set_layout = &self
+                 .depth_material_pass
+@@ -274,6 +296,7 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
+                 .unwrap()
+                 .get_raw()
+                 .descriptor_set_layouts[PER_INSTANCE_DESCRIPTOR_SET_INDEX as usize];
++            // FIXME: What does SSAO pass need?
+ 
+             descriptor_set_allocator
+                 .create_descriptor_set_with_writer(
+@@ -655,6 +678,20 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
+ 
+             per_view_data.view = view.view_matrix().to_cols_array_2d();
+             per_view_data.view_proj = view.view_proj().to_cols_array_2d();
++            per_view_data.inv_view3 = {
++                let view_temp = view.view_matrix().to_cols_array_2d();
++                let inv_view3 = Mat3::from_cols_array_2d(&[
++                    [view_temp[0][0], view_temp[0][1], view_temp[0][2]],
++                    [view_temp[1][0], view_temp[1][1], view_temp[1][2]],
++                    [view_temp[2][0], view_temp[2][1], view_temp[2][2]],
++                ]).inverse().to_cols_array_2d();
++                [
++                    [inv_view3[0][0], inv_view3[0][1], inv_view3[0][2], 0.0],
++                    [inv_view3[1][0], inv_view3[1][1], inv_view3[1][2], 0.0],
++                    [inv_view3[2][0], inv_view3[2][1], inv_view3[2][2], 0.0],
++                    [0.0, 0.0, 0.0, 1.0],
++                ]
++            };
+ 
+             let per_instance_descriptor_set_layout = &self
+                 .depth_material_pass
+@@ -662,6 +699,7 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
+                 .unwrap()
+                 .get_raw()
+                 .descriptor_set_layouts[PER_VIEW_DESCRIPTOR_SET_INDEX as usize];
++            // FIXME: What per view stuff does SSAO need?
+ 
+             descriptor_set_allocator
+                 .create_descriptor_set(
+diff --git a/demo/src/features/mesh/jobs/write.rs b/demo/src/features/mesh/jobs/write.rs
+index 43953f1b..7af98fab 100644
+--- a/demo/src/features/mesh/jobs/write.rs
++++ b/demo/src/features/mesh/jobs/write.rs
+@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
+ 
+ pub struct MeshWriteJob<'write> {
+     depth_material_pass: Option<ResourceArc<MaterialPassResource>>,
++    ssao_material_pass: Option<ResourceArc<MaterialPassResource>>,
+     mesh_part_descriptor_sets: Arc<AtomicOnceCellStack<MeshPartDescriptorSetPair>>,
+     depth_prepass_index: RenderPhaseIndex,
+     shadow_map_index: RenderPhaseIndex,
+@@ -66,6 +67,13 @@ impl<'write> MeshWriteJob<'write> {
+                     .depth_material_pass
+                     .clone()
+             },
++            ssao_material_pass: {
++                frame_packet
++                    .per_frame_data()
++                    .get()
++                    .ssao_material_pass
++                    .clone()
++            },
+             mesh_part_descriptor_sets: {
+                 submit_packet
+                     .per_frame_submit_data()
+diff --git a/demo/src/features/mesh/plugin.rs b/demo/src/features/mesh/plugin.rs
+index 9cd9421a..6bd5f957 100644
+--- a/demo/src/features/mesh/plugin.rs
++++ b/demo/src/features/mesh/plugin.rs
+@@ -10,6 +10,7 @@ use rafx::assets::MaterialAsset;
+ 
+ pub struct MeshStaticResources {
+     pub depth_material: Handle<MaterialAsset>,
++    pub ssao_material: Handle<MaterialAsset>,
+ }
+ 
+ pub struct MeshRendererPlugin {
+@@ -83,10 +84,13 @@ impl RenderFeaturePlugin for MeshRendererPlugin {
+     ) -> RafxResult<()> {
+         let depth_material =
+             asset_resource.load_asset_path::<MaterialAsset, _>("materials/depth.material");
++        let ssao_material =
++            asset_resource.load_asset_path::<MaterialAsset, _>("materials/ssao.material");
+ 
+         asset_manager.wait_for_asset_to_load(&depth_material, asset_resource, "depth")?;
++        asset_manager.wait_for_asset_to_load(&ssao_material, asset_resource, "ssao")?;
+ 
+-        render_resources.insert(MeshStaticResources { depth_material });
++        render_resources.insert(MeshStaticResources { depth_material, ssao_material });
+ 
+         render_resources.insert(ShadowMapResource::default());
+ 
+@@ -126,11 +130,17 @@ impl RenderFeaturePlugin for MeshRendererPlugin {
+             .fetch::<MeshStaticResources>()
+             .depth_material
+             .clone();
++        let ssao_material = extract_context
++            .render_resources
++            .fetch::<MeshStaticResources>()
++            .ssao_material
++            .clone();
+ 
+         MeshExtractJob::new(
+             extract_context,
+             frame_packet.into_concrete(),
+             depth_material,
++            ssao_material,
+             self.render_objects.clone(),
+         )
+     }
