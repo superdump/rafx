@@ -10,6 +10,7 @@ use rafx::assets::MaterialAsset;
 
 pub struct MeshStaticResources {
     pub depth_material: Handle<MaterialAsset>,
+    pub ssao_material: Handle<MaterialAsset>,
 }
 
 pub struct MeshRendererPlugin {
@@ -86,7 +87,15 @@ impl RenderFeaturePlugin for MeshRendererPlugin {
 
         asset_manager.wait_for_asset_to_load(&depth_material, asset_resource, "depth")?;
 
-        render_resources.insert(MeshStaticResources { depth_material });
+        let ssao_material =
+            asset_resource.load_asset_path::<MaterialAsset, _>("materials/ssao.material");
+
+        asset_manager.wait_for_asset_to_load(&ssao_material, asset_resource, "ssao")?;
+
+        render_resources.insert(MeshStaticResources {
+            depth_material,
+            ssao_material,
+        });
 
         render_resources.insert(ShadowMapResource::default());
 
@@ -126,11 +135,17 @@ impl RenderFeaturePlugin for MeshRendererPlugin {
             .fetch::<MeshStaticResources>()
             .depth_material
             .clone();
+        let ssao_material = extract_context
+            .render_resources
+            .fetch::<MeshStaticResources>()
+            .ssao_material
+            .clone();
 
         MeshExtractJob::new(
             extract_context,
             frame_packet.into_concrete(),
             depth_material,
+            ssao_material,
             self.render_objects.clone(),
         )
     }

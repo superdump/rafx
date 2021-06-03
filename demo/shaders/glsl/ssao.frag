@@ -4,6 +4,7 @@
 #include "ssao_textures.glsl"
 #include "ssao_uniform.glsl"
 
+// @[semantic("TEXCOORDS")]
 layout(location = 0) in vec2 in_uv;
 
 layout(location = 0) out float out_ao;
@@ -15,13 +16,13 @@ float rand(vec2 co) {
 void main() {
     // tile noise texture over screen, based on screen dimensions divided by noise size
     const ivec2 frame_size = textureSize(sampler2D(normal_texture, clamp_sampler), 0);
-    const ivec2 noise_size = textureSize(sampler2D(noise_texture, repeat_sampler), 0);
-    const vec2 noise_scale = vec2(frame_size) / vec2(noise_size);
+    // const ivec2 noise_size = textureSize(sampler2D(noise_texture, repeat_sampler), 0);
+    // const vec2 noise_scale = vec2(frame_size) / vec2(noise_size);
 
     // Calculate the fragment position from the depth texture
     float frag_depth_ndc = texture(sampler2D(depth_texture, clamp_sampler), in_uv).x;
-    if (frag_depth_ndc == 1.0) {
-        out_ao = 1.0;
+    if (frag_depth_ndc == 0.0) {
+        out_ao = 0.5;
         return;
     }
     // in_uv.x is [0,1] from left to right. * 2 - 1 remaps to [-1, 1] left to right which is NDC
@@ -29,7 +30,8 @@ void main() {
     vec4 frag_vs = per_view_data.inv_proj * vec4(in_uv.x * 2.0 - 1.0, 1.0 - 2.0 * in_uv.y, frag_depth_ndc, 1.0);
     frag_vs.xyz /= frag_vs.w;
     vec3 normal_vs = (texture(sampler2D(normal_texture, clamp_sampler), in_uv).xyz - 0.5) * 2.0;
-    vec3 random_vec = texture(sampler2D(noise_texture, repeat_sampler), in_uv * noise_scale).xyz;
+    // vec3 random_vec = texture(sampler2D(noise_texture, repeat_sampler), in_uv * noise_scale).xyz;
+    vec3 random_vec = normalize(vec3(rand(in_uv), rand(in_uv + 1.0), 0.0));
 
     vec3 tangent_vs = normalize(random_vec - normal_vs * dot(random_vec, normal_vs));
     vec3 bitangent_vs = cross(normal_vs, tangent_vs);

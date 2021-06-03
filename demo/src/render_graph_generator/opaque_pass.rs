@@ -15,6 +15,7 @@ pub(super) struct OpaquePass {
 pub(super) fn opaque_pass(
     context: &mut RenderGraphContext,
     depth_prepass: RenderGraphImageUsageId,
+    ambient_occlusion: RenderGraphImageUsageId,
     shadow_map_passes: &[ShadowMapImageResources],
 ) -> OpaquePass {
     let node = context
@@ -33,6 +34,16 @@ pub(super) fn opaque_pass(
         Default::default(),
     );
     context.graph.set_image_name(color, "color");
+
+    let _sample_image = context.graph.sample_image(
+        node,
+        ambient_occlusion,
+        Default::default(),
+        Default::default(),
+    );
+    context
+        .graph
+        .set_image_name(ambient_occlusion, "ambient_occlusion");
 
     let mut shadow_maps = Vec::with_capacity(shadow_map_passes.len());
 

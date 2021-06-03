@@ -48,6 +48,7 @@ pub struct MeshPrepareJob<'prepare> {
     requires_textured_descriptor_sets: bool,
     requires_untextured_descriptor_sets: bool,
     depth_material_pass: Option<ResourceArc<MaterialPassResource>>,
+    ssao_material_pass: Option<ResourceArc<MaterialPassResource>>,
     shadow_map_data: ReadBorrow<'prepare, ShadowMapResource>,
     invalid_resources: ReadBorrow<'prepare, InvalidResources>,
     mesh_part_descriptor_sets: Arc<AtomicOnceCellStack<MeshPartDescriptorSetPair>>,
@@ -109,6 +110,13 @@ impl<'prepare> MeshPrepareJob<'prepare> {
                         .per_frame_data()
                         .get()
                         .depth_material_pass
+                        .clone()
+                },
+                ssao_material_pass: {
+                    frame_packet
+                        .per_frame_data()
+                        .get()
+                        .ssao_material_pass
                         .clone()
                 },
                 shadow_map_data: {
@@ -720,12 +728,36 @@ impl<'prepare> PrepareJobEntryPoints<'prepare> for MeshPrepareJob<'prepare> {
                 .ok()
         };
 
+        let ssao_descriptor_set = {
+            let mut per_view_data = shaders::ssao_frag::PerViewDataStd140::default();
+
+            let proj = view.projection_matrix();
+            per_view_data.proj = proj.to_cols_array_2d();
+            per_view_data.inv_proj = proj.inverse().to_cols_array_2d();
+            let per_instance_descriptor_set_layout = &self
+                .ssao_material_pass
+                .as_ref()
+                .unwrap()
+                .get_raw()
+                .descriptor_set_layouts[PER_VIEW_DESCRIPTOR_SET_INDEX as usize];
+
+            descriptor_set_allocator
+                .create_descriptor_set(
+                    per_instance_descriptor_set_layout,
+                    shaders::ssao_frag::DescriptorSet0Args {
+                        per_view_data: &per_view_data,
+                    },
+                )
+                .ok()
+        };
+
         context
             .view_submit_packet()
             .per_view_submit_data()
             .set(MeshPerViewSubmitData {
                 opaque_descriptor_set,
                 depth_descriptor_set,
+                ssao_descriptor_set,
             });
     }
 

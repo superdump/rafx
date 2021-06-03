@@ -14,6 +14,7 @@ pub struct MeshExtractJob<'extract> {
     world: ResourceRefBorrow<'extract, World>,
     asset_manager: ReadBorrow<'extract, AssetManagerRenderResource>,
     depth_material: Handle<MaterialAsset>,
+    ssao_material: Handle<MaterialAsset>,
     render_objects: MeshRenderObjectSet,
 }
 
@@ -22,6 +23,7 @@ impl<'extract> MeshExtractJob<'extract> {
         extract_context: &RenderJobExtractContext<'extract>,
         frame_packet: Box<MeshFramePacket>,
         depth_material: Handle<MaterialAsset>,
+        ssao_material: Handle<MaterialAsset>,
         render_objects: MeshRenderObjectSet,
     ) -> Arc<dyn RenderFeatureExtractJob<'extract> + 'extract> {
         Arc::new(ExtractJob::new(
@@ -31,6 +33,7 @@ impl<'extract> MeshExtractJob<'extract> {
                     .render_resources
                     .fetch::<AssetManagerRenderResource>(),
                 depth_material,
+                ssao_material,
                 render_objects,
             },
             frame_packet,
@@ -50,6 +53,12 @@ impl<'extract> ExtractJobEntryPoints<'extract> for MeshExtractJob<'extract> {
                 depth_material_pass: self
                     .asset_manager
                     .committed_asset(&self.depth_material)
+                    .unwrap()
+                    .get_single_material_pass()
+                    .ok(),
+                ssao_material_pass: self
+                    .asset_manager
+                    .committed_asset(&self.ssao_material)
                     .unwrap()
                     .get_single_material_pass()
                     .ok(),

@@ -16,6 +16,8 @@ use opaque_pass::OpaquePass;
 
 mod depth_prepass;
 
+mod ssao_pass;
+
 mod bloom_extract_pass;
 use crate::demo_plugin::DemoStaticResources;
 use crate::features::mesh::ShadowMapResource;
@@ -119,10 +121,22 @@ impl RenderGraphGenerator for DemoRenderGraphGenerator {
 
         let depth_prepass = depth_prepass::depth_prepass(&mut graph_context);
 
+        let ssao_material_pass = asset_manager
+            .committed_asset(&static_resources.ssao_material)
+            .unwrap()
+            .get_single_material_pass()
+            .unwrap();
+        let ssao_pass =
+            ssao_pass::ssao_pass(&mut graph_context, &depth_prepass, ssao_material_pass);
+
         let shadow_maps = shadow_map_pass::shadow_map_passes(&mut graph_context);
 
-        let opaque_pass =
-            opaque_pass::opaque_pass(&mut graph_context, depth_prepass.depth, &shadow_maps);
+        let opaque_pass = opaque_pass::opaque_pass(
+            &mut graph_context,
+            depth_prepass.depth,
+            ssao_pass.ambient_occlusion,
+            &shadow_maps,
+        );
 
         {
             let compute_test_pipeline = asset_manager

@@ -18,6 +18,7 @@ pub type MeshRenderObjectStaticData = MeshRenderObject;
 
 pub struct MeshPerFrameData {
     pub depth_material_pass: Option<ResourceArc<MaterialPassResource>>,
+    pub ssao_material_pass: Option<ResourceArc<MaterialPassResource>>,
 }
 
 pub struct MeshRenderObjectInstanceData {
@@ -115,6 +116,7 @@ pub type MeshViewSubmitPacket = ViewSubmitPacket<MeshRenderFeatureTypes>;
 pub struct MeshPerViewSubmitData {
     pub opaque_descriptor_set: Option<DescriptorSetArc>,
     pub depth_descriptor_set: Option<DescriptorSetArc>,
+    pub ssao_descriptor_set: Option<DescriptorSetArc>,
 }
 
 pub struct MeshDrawCall {

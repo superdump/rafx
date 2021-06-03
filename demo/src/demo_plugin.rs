@@ -18,6 +18,7 @@ pub struct DemoStaticResources {
     pub bloom_blur_material: Handle<MaterialAsset>,
     pub bloom_combine_material: Handle<MaterialAsset>,
     pub compute_test: Handle<ComputePipelineAsset>,
+    pub ssao_material: Handle<MaterialAsset>,
 }
 
 pub struct DemoRendererPlugin;
@@ -72,6 +73,12 @@ impl RendererAssetPlugin for DemoRendererPlugin {
         let compute_test = asset_resource
             .load_asset_path::<ComputePipelineAsset, _>("compute_pipelines/compute_test.compute");
 
+        //
+        // SSAO resources
+        //
+        let ssao_material =
+            asset_resource.load_asset_path::<MaterialAsset, _>("materials/ssao.material");
+
         asset_manager.wait_for_asset_to_load(
             &bloom_extract_material,
             asset_resource,
@@ -92,11 +99,14 @@ impl RendererAssetPlugin for DemoRendererPlugin {
 
         asset_manager.wait_for_asset_to_load(&compute_test, asset_resource, "compute pipeline")?;
 
+        asset_manager.wait_for_asset_to_load(&ssao_material, asset_resource, "ssao material")?;
+
         render_resources.insert(DemoStaticResources {
             bloom_extract_material,
             bloom_blur_material,
             bloom_combine_material,
             compute_test,
+            ssao_material,
         });
 
         Ok(())

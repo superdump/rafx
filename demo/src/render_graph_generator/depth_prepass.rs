@@ -4,7 +4,6 @@ use rafx::api::RafxColorClearValue;
 use rafx::api::RafxDepthStencilClearValue;
 use rafx::api::RafxFormat;
 use rafx::api::RafxResourceType;
-use rafx::api::RafxSampleCount;
 use rafx::graph::*;
 use rafx::render_features::RenderJobCommandBufferContext;
 
@@ -28,6 +27,8 @@ pub(super) fn depth_prepass(context: &mut RenderGraphContext) -> DepthPrepass {
         RenderGraphImageConstraint {
             samples: Some(context.graph_config.samples),
             format: Some(context.graph_config.depth_format),
+            resource_type: RafxResourceType::TEXTURE
+                | RafxResourceType::RENDER_TARGET_DEPTH_STENCIL,
             ..Default::default()
         },
         Default::default(),
@@ -39,7 +40,7 @@ pub(super) fn depth_prepass(context: &mut RenderGraphContext) -> DepthPrepass {
         0, // color attachment index
         Some(RafxColorClearValue([0.0, 0.0, 1.0, 1.0])),
         RenderGraphImageConstraint {
-            samples: Some(RafxSampleCount::SampleCount1),
+            samples: Some(context.graph_config.samples),
             format: Some(RafxFormat::R8G8B8A8_UNORM),
             resource_type: RafxResourceType::TEXTURE | RafxResourceType::RENDER_TARGET_COLOR,
             extents: Some(RenderGraphImageExtents::MatchSurface),
